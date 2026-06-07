@@ -12,6 +12,10 @@ This is an inspirational demo. It does not reverse engineer the closed Codex Mac
 - Realtime API over WebRTC for live voice.
 - `codex app-server` bridge for Codex agent conversations, events, approvals, apps, models, and auth state.
 - Voice-first dock with no typed composer in the primary workflow.
+- Collapsible workspace folders with nested agent conversations.
+- Open agent conversations as separate center windows with independent content.
+- Optional transcript view for voice conversations; hidden by default.
+- Settings, Usage, and Account details as dedicated system screens.
 - Screen sharing and image attachment as context surfaces.
 - Spending and rate-limit panels with live data when the right API keys are present, and demo fallback data otherwise.
 - Review pane with Codex-style diff cards for demo clarity.

@@ -1,7 +1,10 @@
 import {
+  AudioLines,
   Bot,
+  Captions,
   Check,
   ChevronDown,
+  ChevronRight,
   Circle,
   CircleDollarSign,
   Folder,
@@ -17,6 +20,7 @@ import {
   Sparkles,
   Square,
   Terminal,
+  Trash2,
   UserRound,
   Wand2,
   X,
@@ -38,6 +42,17 @@ type Workspace = {
   name?: string
   path?: string
   status?: string
+}
+
+type AgentConversation = {
+  id: string
+  title: string
+  age: string
+  status: 'draft' | 'ready' | 'running' | 'review'
+  prompt: string
+  response: string
+  traces: string[]
+  transcript: { speaker: 'user' | 'codex'; text: string }[]
 }
 
 type EventRecord = {
@@ -70,6 +85,10 @@ type DiffLine = {
   text: string
 }
 
+type SystemScreen = 'settings' | 'usage' | 'account'
+
+const initialWorkspacePath = '/home/sergiopesch/codex-realtime-linux'
+
 const api = async <T,>(path: string, init?: RequestInit): Promise<T> => {
   const response = await fetch(path, init)
   if (!response.ok) {
@@ -80,15 +99,91 @@ const api = async <T,>(path: string, init?: RequestInit): Promise<T> => {
 }
 
 const fallbackWorkspaces: Workspace[] = [
-  { id: 'codex-realtime-linux', name: 'codex-realtime-linux', path: '/home/sergiopesch/codex-realtime-linux' },
+  { id: 'codex-realtime-linux', name: 'codex-realtime-linux', path: initialWorkspacePath },
 ]
 
-const agentConversationTemplates = [
-  { title: 'Realtime Linux MVP', age: 'now' },
-  { title: 'Connect voice harness', age: '1h' },
-  { title: 'Review spending widgets', age: '2h' },
-  { title: 'Browser-use checkpoint', age: '7h' },
-]
+const slug = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '')
+
+const conversationCopy: Record<string, Omit<AgentConversation, 'id' | 'age' | 'status'>> = {
+  'Realtime Linux MVP': {
+    title: 'Realtime Linux MVP',
+    prompt: 'Build a voice-first Codex desktop demo for Linux. No text composer.',
+    response:
+      'I’ll coordinate the Codex execution layer from live speech, keep the review pane visible, and treat screen or image context as explicit inputs.',
+    traces: ['Mapped workspace-first navigation', 'Kept voice as the primary command path', 'Separated review from realtime direction'],
+    transcript: [
+      { speaker: 'user', text: 'I want this to feel like Codex, but the main action is talking.' },
+      { speaker: 'codex', text: 'I’ll keep the center surface voice-led and make transcript optional.' },
+    ],
+  },
+  'Connect voice harness': {
+    title: 'Connect voice harness',
+    prompt: 'Wire realtime speech to Codex task creation, steering, and interruption.',
+    response:
+      'The voice layer starts Codex tasks, sends steering instructions, and can interrupt a running build without switching into a text composer.',
+    traces: ['Realtime data channel receives tool calls', 'Codex app-server starts task turns', 'Interrupt stays available in the voice dock'],
+    transcript: [
+      { speaker: 'user', text: 'Start a task, but let me interrupt if the product direction changes.' },
+      { speaker: 'codex', text: 'I’ll keep the build running behind the voice conversation and expose interrupt in the dock.' },
+    ],
+  },
+  'Review spending widgets': {
+    title: 'Review spending widgets',
+    prompt: 'Show usage and cost clearly without making it the primary task surface.',
+    response:
+      'Usage belongs in the review/system context: visible when needed, but secondary to the realtime collaboration loop.',
+    traces: ['Usage appears in right pane', 'System Usage screen has details', 'Voice dock remains persistent'],
+    transcript: [
+      { speaker: 'user', text: 'I need to know what I’m spending while building.' },
+      { speaker: 'codex', text: 'I’ll keep spend visible and make deeper usage a system screen.' },
+    ],
+  },
+  'Browser-use checkpoint': {
+    title: 'Browser-use checkpoint',
+    prompt: 'Reserve a browser/computer-use viewport for Codex QA and visual context.',
+    response:
+      'The browser panel stays inspectable while the voice conversation continues. Screen context can be attached explicitly from the dock.',
+    traces: ['Computer-use viewport reserved', 'Screen context is explicit', 'Browser QA remains a background agent lane'],
+    transcript: [
+      { speaker: 'user', text: 'I want the agent to see what I’m seeing and keep building.' },
+      { speaker: 'codex', text: 'Share screen from the voice dock, then steer the agent conversationally.' },
+    ],
+  },
+}
+
+const makeConversation = (
+  workspacePath: string,
+  title: string,
+  age: string,
+  status: AgentConversation['status'] = 'ready',
+): AgentConversation => {
+  const copy = conversationCopy[title] ?? {
+    title,
+    prompt: 'Describe the next build step out loud.',
+    response: 'This agent conversation is ready for realtime voice direction.',
+    traces: ['Workspace selected', 'Voice direction pending', 'Codex execution ready'],
+    transcript: [
+      { speaker: 'user' as const, text: 'Create a new agent conversation for this workspace.' },
+      { speaker: 'codex' as const, text: 'Ready. Start voice and describe the build goal.' },
+    ],
+  }
+
+  return {
+    ...copy,
+    id: `${workspacePath}::${slug(title)}`,
+    age,
+    status,
+  }
+}
+
+const defaultConversationsForWorkspace = (workspacePath: string, index: number) =>
+  ['Realtime Linux MVP', 'Connect voice harness', ...(index === 0 ? ['Review spending widgets', 'Browser-use checkpoint'] : [])].map(
+    (title, titleIndex) => makeConversation(workspacePath, title, titleIndex === 0 ? 'now' : `${titleIndex}h`, titleIndex === 2 ? 'review' : 'ready'),
+  )
 
 const diffFiles: { path: string; plus: number; minus: number; lines: DiffLine[] }[] = [
   {
@@ -156,14 +251,21 @@ function DiffCard({
 function App() {
   const [status, setStatus] = useState<Status | null>(null)
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
+  const [conversationsByWorkspace, setConversationsByWorkspace] = useState<Record<string, AgentConversation[]>>({
+    [initialWorkspacePath]: defaultConversationsForWorkspace(initialWorkspacePath, 0),
+  })
+  const [collapsedWorkspaces, setCollapsedWorkspaces] = useState<string[]>([])
+  const [selectedWorkspace, setSelectedWorkspace] = useState(initialWorkspacePath)
+  const [selectedConversationId, setSelectedConversationId] = useState(`${initialWorkspacePath}::realtime-linux-mvp`)
+  const [openConversationIds, setOpenConversationIds] = useState([`${initialWorkspacePath}::realtime-linux-mvp`])
+  const [activeSystemScreen, setActiveSystemScreen] = useState<SystemScreen | null>(null)
+  const [transcriptOpen, setTranscriptOpen] = useState(false)
   const [spend, setSpend] = useState<SpendResponse | null>(null)
   const [rateLimits, setRateLimits] = useState<RateLimitResponse | null>(null)
   const [events, setEvents] = useState<EventRecord[]>([])
   const [voiceState, setVoiceState] = useState<'idle' | 'connecting' | 'live'>('idle')
   const [screenShared, setScreenShared] = useState(false)
   const [attachedImageName, setAttachedImageName] = useState<string | null>(null)
-  const [selectedWorkspace, setSelectedWorkspace] = useState('/home/sergiopesch/codex-realtime-linux')
-  const [selectedThreadTitle, setSelectedThreadTitle] = useState('Realtime Linux MVP')
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
   const [buildState, setBuildState] = useState<'idle' | 'starting' | 'running'>('idle')
   const [notice, setNotice] = useState<string | null>(null)
@@ -192,17 +294,17 @@ function App() {
       : spendBuckets.reduce((total, bucket) => total + bucket.value, 0)
 
   const usagePercent = rateLimits?.rateLimits?.primary?.usedPercent ?? 0
-  const latestEvents = events.slice(0, 5)
-  const sidebarWorkspaces = (workspaces.length > 0 ? workspaces : fallbackWorkspaces).slice(0, 5).map((workspace, index) => {
+  const workspaceRoots = (workspaces.length > 0 ? workspaces : fallbackWorkspaces).slice(0, 5).map((workspace, index) => {
     const workspacePath = workspace.path ?? workspace.id
-    const baseConversations = agentConversationTemplates.slice(0, index === 0 ? 4 : 2)
-    const conversations =
-      selectedThreadTitle === 'New agent conversation' && selectedWorkspace === workspacePath
-        ? [{ title: 'New agent conversation', age: 'draft' }, ...baseConversations]
-        : baseConversations
-
+    const conversations = conversationsByWorkspace[workspacePath] ?? defaultConversationsForWorkspace(workspacePath, index)
     return { workspace, workspacePath, conversations }
   })
+  const allConversations = workspaceRoots.flatMap(({ conversations }) => conversations)
+  const activeConversation = allConversations.find((conversation) => conversation.id === selectedConversationId) ?? allConversations[0]
+  const openConversations = openConversationIds
+    .map((id) => allConversations.find((conversation) => conversation.id === id))
+    .filter((conversation): conversation is AgentConversation => Boolean(conversation))
+  const latestEvents = events.slice(0, 5)
   const visibleDiffFiles = diffFiles.filter((file) => visibleDiffPaths.includes(file.path))
   const reviewTotals = visibleDiffFiles.reduce(
     (total, file) => ({ plus: total.plus + file.plus, minus: total.minus + file.minus }),
@@ -211,7 +313,7 @@ function App() {
   const reviewFileLabel = `${visibleDiffFiles.length} ${visibleDiffFiles.length === 1 ? 'file' : 'files'} changed`
   const voiceReady = status?.realtime ?? false
   const selectedWorkspaceName =
-    workspaces.find((workspace) => workspace.path === selectedWorkspace)?.name ?? 'codex-realtime-linux'
+    workspaceRoots.find(({ workspacePath }) => workspacePath === selectedWorkspace)?.workspace.name ?? 'codex-realtime-linux'
 
   const appendEvent = (method: string, params?: Record<string, unknown>) => {
     setEvents((current) => [
@@ -225,6 +327,58 @@ function App() {
     setLastError(null)
   }
 
+  const openConversationWindow = (workspacePath: string, conversationId: string) => {
+    setSelectedWorkspace(workspacePath)
+    setSelectedConversationId(conversationId)
+    setActiveSystemScreen(null)
+    setOpenConversationIds((current) => (current.includes(conversationId) ? current : [...current, conversationId]).slice(-5))
+  }
+
+  const createConversation = () => {
+    const workspacePath = selectedWorkspace || workspaceRoots[0]?.workspacePath || initialWorkspacePath
+    const existing = conversationsByWorkspace[workspacePath] ?? defaultConversationsForWorkspace(workspacePath, 0)
+    const title = `Voice build ${existing.length + 1}`
+    const conversation = makeConversation(workspacePath, title, 'draft', 'draft')
+
+    setConversationsByWorkspace((current) => ({
+      ...current,
+      [workspacePath]: [conversation, ...(current[workspacePath] ?? existing)],
+    }))
+    openConversationWindow(workspacePath, conversation.id)
+    showNotice(`${title} opened as a new agent conversation window. Start voice to describe the build goal.`)
+  }
+
+  const deleteConversation = (workspacePath: string, conversationId: string) => {
+    const current = conversationsByWorkspace[workspacePath] ?? defaultConversationsForWorkspace(workspacePath, 0)
+    const next = current.filter((conversation) => conversation.id !== conversationId)
+    const fallback = next[0]
+
+    setConversationsByWorkspace((state) => ({ ...state, [workspacePath]: next }))
+    setOpenConversationIds((state) => state.filter((id) => id !== conversationId))
+
+    if (selectedConversationId === conversationId) {
+      if (fallback) {
+        openConversationWindow(workspacePath, fallback.id)
+      } else {
+        setActiveSystemScreen('settings')
+      }
+    }
+
+    showNotice('Agent conversation deleted from this workspace.')
+  }
+
+  const toggleWorkspace = (workspacePath: string) => {
+    setSelectedWorkspace(workspacePath)
+    setCollapsedWorkspaces((current) =>
+      current.includes(workspacePath) ? current.filter((item) => item !== workspacePath) : [...current, workspacePath],
+    )
+  }
+
+  const openSystemScreen = (screen: SystemScreen) => {
+    setActiveSystemScreen(screen)
+    showNotice(`${screen === 'settings' ? 'Settings' : screen === 'usage' ? 'Usage' : 'Account details'} opened.`)
+  }
+
   useEffect(() => {
     const load = async () => {
       try {
@@ -233,10 +387,24 @@ function App() {
           api<{ data: Workspace[] }>('/api/workspaces'),
           api<SpendResponse>('/api/spend'),
         ])
+        const roots = (workspaceData.data.length > 0 ? workspaceData.data : fallbackWorkspaces).slice(0, 5)
+        const firstPath = roots[0]?.path ?? roots[0]?.id ?? initialWorkspacePath
+        const firstConversation = defaultConversationsForWorkspace(firstPath, 0)[0]
+
         setStatus(statusData)
         setWorkspaces(workspaceData.data)
         setSpend(spendData)
-        setSelectedWorkspace((current) => workspaceData.data[0]?.path ?? current)
+        setConversationsByWorkspace((current) => {
+          const next = { ...current }
+          roots.forEach((workspace, index) => {
+            const workspacePath = workspace.path ?? workspace.id
+            if (!next[workspacePath]) next[workspacePath] = defaultConversationsForWorkspace(workspacePath, index)
+          })
+          return next
+        })
+        setSelectedWorkspace(firstPath)
+        setSelectedConversationId(firstConversation.id)
+        setOpenConversationIds([firstConversation.id])
       } catch (error) {
         setLastError(error instanceof Error ? error.message : 'Failed to load app state')
       }
@@ -415,8 +583,7 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           cwd: selectedWorkspace,
-          goal:
-            'Act as the Codex execution layer for a realtime voice-first Linux app. Inspect the workspace, propose the next implementation step, and wait before making broad product changes.',
+          goal: activeConversation?.prompt ?? 'Act as the Codex execution layer for a realtime voice-first Linux app.',
         }),
       })
       setActiveThreadId(result.thread.id)
@@ -439,7 +606,7 @@ function App() {
       })
       setBuildState('idle')
       appendEvent('codex/task-interrupted', { threadId: activeThreadId })
-      showNotice('Codex task interrupted. Start voice to redirect the next step.')
+      showNotice('Codex task interrupted. Continue by voice to redirect the next step.')
     } catch (error) {
       setLastError(error instanceof Error ? error.message : 'Interrupt failed')
     }
@@ -463,6 +630,69 @@ function App() {
     showNotice('All visible review items marked accepted.')
   }
 
+  const renderSystemScreen = () => {
+    if (activeSystemScreen === 'settings') {
+      return (
+        <section className="system-screen">
+          <header>
+            <Settings size={18} />
+            <div>
+              <h2>Settings</h2>
+              <p>Voice, model, approvals, and workspace permissions.</p>
+            </div>
+          </header>
+          <div className="system-grid">
+            <div><span>Voice model</span><strong>{status?.realtimeModel ?? 'gpt-realtime-2'}</strong></div>
+            <div><span>Codex model</span><strong>{status?.codexModel ?? 'gpt-5.4'}</strong></div>
+            <div><span>Transcript</span><strong>{transcriptOpen ? 'visible' : 'hidden by default'}</strong></div>
+            <div><span>Approvals</span><strong>review before action</strong></div>
+          </div>
+        </section>
+      )
+    }
+
+    if (activeSystemScreen === 'usage') {
+      return (
+        <section className="system-screen">
+          <header>
+            <CircleDollarSign size={18} />
+            <div>
+              <h2>Usage</h2>
+              <p>Live spend when admin scope is configured, demo data otherwise.</p>
+            </div>
+          </header>
+          <div className="usage-system-total">${totalSpend.toFixed(2)}</div>
+          <div className="spend-list system-spend-list">
+            {spendBuckets.map((bucket) => (
+              <div key={bucket.label}>
+                <span>{bucket.label}</span>
+                <strong>${bucket.value.toFixed(2)}</strong>
+              </div>
+            ))}
+          </div>
+        </section>
+      )
+    }
+
+    return (
+      <section className="system-screen">
+        <header>
+          <UserRound size={18} />
+          <div>
+            <h2>Account details</h2>
+            <p>Local demo auth and Codex account readiness.</p>
+          </div>
+        </header>
+        <div className="system-grid">
+          <div><span>Realtime API</span><strong>{status?.realtime ? 'configured' : 'needs key'}</strong></div>
+          <div><span>Codex auth</span><strong>{status?.codexApiKey ? 'API key' : 'local account'}</strong></div>
+          <div><span>Admin API</span><strong>{status?.adminApi ? 'configured' : 'not configured'}</strong></div>
+          <div><span>Mode</span><strong>{status?.codexAuthPreference ?? 'demo'}</strong></div>
+        </div>
+      </section>
+    )
+  }
+
   return (
     <main className={reviewOpen ? 'codex-shell' : 'codex-shell review-collapsed'}>
       <aside className="thread-sidebar">
@@ -480,14 +710,7 @@ function App() {
         </div>
 
         <nav className="sidebar-nav" aria-label="Primary">
-          <button
-            type="button"
-            onClick={() => {
-              setSelectedThreadTitle('New agent conversation')
-              if (!selectedWorkspace && sidebarWorkspaces[0]) setSelectedWorkspace(sidebarWorkspaces[0].workspacePath)
-              showNotice('New agent conversation staged. Start voice to describe the work.')
-            }}
-          >
+          <button type="button" onClick={createConversation}>
             <Plus size={16} />
             New agent conversation
           </button>
@@ -501,60 +724,75 @@ function App() {
           </button>
         </nav>
 
-        <section className="sidebar-section">
+        <section className="sidebar-section workspace-list-section">
           <h2>Workspaces</h2>
           <div className="workspace-tree">
-            {sidebarWorkspaces.map(({ workspace, workspacePath, conversations }) => (
-              <div className="workspace-folder" key={workspace.id}>
-                <button
-                  type="button"
-                  className={selectedWorkspace === workspacePath ? 'workspace-folder-row active' : 'workspace-folder-row'}
-                  onClick={() => {
-                    setSelectedWorkspace(workspacePath)
-                    showNotice(`${workspace.name ?? workspace.id} selected. Speak to start or steer an agent conversation.`)
-                  }}
-                >
-                  <Folder size={14} />
-                  <span>{workspace.name ?? workspace.id}</span>
-                </button>
-                <div className="agent-thread-list">
-                  {conversations.map((thread) => (
-                    <button
-                      type="button"
-                      className={
-                        selectedWorkspace === workspacePath && selectedThreadTitle === thread.title
-                          ? 'agent-thread-row active'
-                          : 'agent-thread-row'
-                      }
-                      key={`${workspace.id}-${thread.title}`}
-                      onClick={() => {
-                        setSelectedWorkspace(workspacePath)
-                        setSelectedThreadTitle(thread.title)
-                        showNotice(`${thread.title} selected inside ${workspace.name ?? workspace.id}.`)
-                      }}
-                    >
-                      <Bot size={13} />
-                      <span>{thread.title}</span>
-                      <small>{thread.age}</small>
-                    </button>
-                  ))}
+            {workspaceRoots.map(({ workspace, workspacePath, conversations }) => {
+              const collapsed = collapsedWorkspaces.includes(workspacePath)
+              return (
+                <div className="workspace-folder" key={workspace.id}>
+                  <button
+                    type="button"
+                    className={selectedWorkspace === workspacePath ? 'workspace-folder-row active' : 'workspace-folder-row'}
+                    onClick={() => toggleWorkspace(workspacePath)}
+                  >
+                    {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                    <Folder size={14} />
+                    <span>{workspace.name ?? workspace.id}</span>
+                  </button>
+                  {!collapsed && (
+                    <div className="agent-thread-list">
+                      {conversations.length === 0 ? (
+                        <div className="empty-workspace">No agent conversations</div>
+                      ) : (
+                        conversations.map((conversation) => (
+                          <div
+                            className={
+                              selectedConversationId === conversation.id && !activeSystemScreen
+                                ? 'agent-thread-row active'
+                                : 'agent-thread-row'
+                            }
+                            key={conversation.id}
+                          >
+                            <button
+                              type="button"
+                              className="agent-thread-open"
+                              onClick={() => openConversationWindow(workspacePath, conversation.id)}
+                            >
+                              <Bot size={13} />
+                              <span>{conversation.title}</span>
+                              <small>{conversation.age}</small>
+                            </button>
+                            <button
+                              type="button"
+                              className="agent-thread-delete"
+                              aria-label={`Delete ${conversation.title}`}
+                              onClick={() => deleteConversation(workspacePath, conversation.id)}
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </section>
 
         <section className="sidebar-section account-section">
           <h2>System</h2>
-          <button type="button" className="utility-row" onClick={() => showNotice('Settings: voice, model, approvals, and workspace permissions.')}>
+          <button type="button" className={activeSystemScreen === 'settings' ? 'utility-row active' : 'utility-row'} onClick={() => openSystemScreen('settings')}>
             <Settings size={14} />
             <span>Settings</span>
           </button>
-          <button type="button" className="utility-row" onClick={() => showNotice(`Usage: $${totalSpend.toFixed(2)} shown from ${spend?.source ?? 'demo data'}.`)}>
+          <button type="button" className={activeSystemScreen === 'usage' ? 'utility-row active' : 'utility-row'} onClick={() => openSystemScreen('usage')}>
             <CircleDollarSign size={14} />
             <span>Usage</span>
           </button>
-          <button type="button" className="utility-row" onClick={() => showNotice(status?.codexApiKey ? 'Account: Codex API-key mode is configured.' : 'Account: configure API keys in .env.')}>
+          <button type="button" className={activeSystemScreen === 'account' ? 'utility-row active' : 'utility-row'} onClick={() => openSystemScreen('account')}>
             <UserRound size={14} />
             <span>Account details</span>
           </button>
@@ -564,10 +802,10 @@ function App() {
       <section className="conversation-pane">
         <header className="pane-titlebar">
           <div>
-            <h1>Realtime Linux Codex</h1>
+            <h1>{activeSystemScreen ? 'System' : activeConversation?.title ?? 'Realtime Linux Codex'}</h1>
             <span>
               <Folder size={14} />
-              {selectedWorkspaceName}
+              {activeSystemScreen ? activeSystemScreen : selectedWorkspaceName}
             </span>
           </div>
           <div className="title-actions">
@@ -579,83 +817,134 @@ function App() {
             <button type="button" onClick={() => showNotice(`Active workspace: ${selectedWorkspace}`)}>
               Open
             </button>
-            <button type="button" onClick={startDemoBuild} disabled={buildState === 'starting'}>
+            <button type="button" onClick={startDemoBuild} disabled={buildState === 'starting' || Boolean(activeSystemScreen)}>
               <Play size={14} />
               {buildState === 'starting' ? 'Starting' : buildState === 'running' ? 'Running' : 'Build'}
             </button>
           </div>
         </header>
 
-        <div className="conversation-scroll">
-          <div className="user-bubble">
-            Build a voice-first Codex desktop demo for Linux. No text composer: I want to talk, share my screen,
-            attach images, see spend, workspaces, and review what agents are changing.
+        {!activeSystemScreen && (
+          <div className="window-tabs" aria-label="Open agent conversation windows">
+            {openConversations.map((conversation) => (
+              <button
+                type="button"
+                className={selectedConversationId === conversation.id ? 'window-tab active' : 'window-tab'}
+                key={conversation.id}
+                onClick={() => {
+                  setSelectedConversationId(conversation.id)
+                  setActiveSystemScreen(null)
+                }}
+              >
+                <span>{conversation.title}</span>
+                <X
+                  size={12}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    setOpenConversationIds((current) => current.filter((id) => id !== conversation.id))
+                  }}
+                />
+              </button>
+            ))}
           </div>
+        )}
 
-          <article className="assistant-turn">
-            <p>
-              I’ll run this like a lead developer for a small team of Codex agents: voice handles direction,
-              Codex handles scoped work, and the review pane keeps every change inspectable before it lands.
-            </p>
-
-            <div className="thought-line">
-              <strong>Thought</strong>
-              <span>7s</span>
-            </div>
-            <div className="trace-item">
-              <span>Mapped desktop layout from screenshot</span>
-              <Check size={14} />
-            </div>
-            <div className="trace-item">
-              <span>Kept Codex app-server harness behind voice tools</span>
-              <Check size={14} />
-            </div>
-            <div className="trace-item">
-              <span>Removed typed composer from the primary workflow</span>
-              <Check size={14} />
-            </div>
-
-            <p>
-              The MVP surface is now a three-pane command center: workspaces with nested agent conversations on
-              the left, realtime voice collaboration in the center, and diff/review plus usage context on the right.
-            </p>
-          </article>
-
-          <section className="runtime-strip" aria-label="Runtime state">
-            <div>
-              <Radio size={16} />
-              <span>Realtime</span>
-              <strong>{status?.realtime ? 'ready' : 'needs key'}</strong>
-            </div>
-            <div>
-              <Bot size={16} />
-              <span>Codex</span>
-              <strong>{status?.codexApiKey ? 'api key' : status?.codexModel ?? 'local'}</strong>
-            </div>
-            <div>
-              <CircleDollarSign size={16} />
-              <span>Spend</span>
-              <strong>${totalSpend.toFixed(2)}</strong>
-            </div>
-          </section>
-
-          <section className="activity-block">
-            <header>
-              <Terminal size={16} />
-              <span>Agent activity</span>
-            </header>
-            {latestEvents.length === 0 ? (
-              <div className="empty-state">Waiting for voice, image, screen, or Codex events.</div>
-            ) : (
-              latestEvents.map((event, index) => (
-                <div className="event-row" key={`${event.method}-${event.receivedAt}-${index}`}>
-                  <Circle size={8} fill="currentColor" />
-                  <span>{event.method ?? 'event'}</span>
-                  <small>{event.receivedAt ? new Date(event.receivedAt).toLocaleTimeString() : 'now'}</small>
+        <div className="conversation-scroll">
+          {activeSystemScreen ? (
+            renderSystemScreen()
+          ) : activeConversation ? (
+            <section className="conversation-window">
+              <div className="voice-hero" aria-label="Realtime voice conversation">
+                <div className={voiceState === 'live' ? 'realtime-orb live' : 'realtime-orb'}>
+                  <span />
+                  <AudioLines size={44} />
                 </div>
-              ))
-            )}
-          </section>
+                <div>
+                  <p>{voiceState === 'live' ? 'Listening to this agent conversation' : 'Realtime voice conversation'}</p>
+                  <strong>{activeConversation.title}</strong>
+                  <small>
+                    {screenShared
+                      ? 'Screen context attached'
+                      : attachedImageName
+                        ? `Image attached: ${attachedImageName}`
+                        : 'Speak to create, steer, interrupt, and review Codex work'}
+                  </small>
+                </div>
+              </div>
+
+              <div className="user-bubble">{activeConversation.prompt}</div>
+
+              <article className="assistant-turn">
+                <p>{activeConversation.response}</p>
+                <div className="thought-line">
+                  <strong>Agent work</strong>
+                  <span>{activeConversation.status}</span>
+                </div>
+                {activeConversation.traces.map((trace) => (
+                  <div className="trace-item" key={trace}>
+                    <span>{trace}</span>
+                    <Check size={14} />
+                  </div>
+                ))}
+              </article>
+
+              {transcriptOpen && (
+                <section className="transcript-panel" aria-label="Voice transcript">
+                  <header>
+                    <Captions size={15} />
+                    <span>Transcript</span>
+                  </header>
+                  {activeConversation.transcript.map((line, index) => (
+                    <div className={line.speaker === 'user' ? 'transcript-line user' : 'transcript-line'} key={`${line.speaker}-${index}`}>
+                      <strong>{line.speaker === 'user' ? 'You' : 'Codex'}</strong>
+                      <span>{line.text}</span>
+                    </div>
+                  ))}
+                </section>
+              )}
+
+              <section className="runtime-strip" aria-label="Runtime state">
+                <div>
+                  <Radio size={16} />
+                  <span>Realtime</span>
+                  <strong>{status?.realtime ? 'ready' : 'needs key'}</strong>
+                </div>
+                <div>
+                  <Bot size={16} />
+                  <span>Codex</span>
+                  <strong>{status?.codexApiKey ? 'api key' : status?.codexModel ?? 'local'}</strong>
+                </div>
+                <div>
+                  <CircleDollarSign size={16} />
+                  <span>Spend</span>
+                  <strong>${totalSpend.toFixed(2)}</strong>
+                </div>
+              </section>
+
+              <section className="activity-block">
+                <header>
+                  <Terminal size={16} />
+                  <span>Agent activity</span>
+                </header>
+                {latestEvents.length === 0 ? (
+                  <div className="empty-state">Waiting for voice, image, screen, or Codex events.</div>
+                ) : (
+                  latestEvents.map((event, index) => (
+                    <div className="event-row" key={`${event.method}-${event.receivedAt}-${index}`}>
+                      <Circle size={8} fill="currentColor" />
+                      <span>{event.method ?? 'event'}</span>
+                      <small>{event.receivedAt ? new Date(event.receivedAt).toLocaleTimeString() : 'now'}</small>
+                    </div>
+                  ))
+                )}
+              </section>
+            </section>
+          ) : (
+            <section className="system-screen">
+              <h2>No agent conversation selected</h2>
+              <p>Create a new agent conversation from the workspace sidebar and start voice.</p>
+            </section>
+          )}
         </div>
 
         {lastError && <div className="error-strip">{lastError}</div>}
@@ -664,7 +953,7 @@ function App() {
         <section className="voice-dock" aria-label="Voice-first command dock">
           <div className="voice-status">
             <div className={voiceState === 'live' ? 'voice-pulse live' : 'voice-pulse'}>
-              <Mic size={20} />
+              <AudioLines size={22} />
             </div>
             <div>
               <span>
@@ -674,16 +963,13 @@ function App() {
                     ? 'Opening realtime audio session'
                     : 'Ready for voice direction'}
               </span>
-              <small>
-                {screenShared
-                  ? 'Screen attached'
-                  : attachedImageName
-                    ? `Image attached: ${attachedImageName}`
-                    : status?.realtimeModel ?? 'gpt-realtime-2'}
-              </small>
+              <small>{activeSystemScreen ? 'System screen open; voice dock stays available' : activeConversation?.title ?? status?.realtimeModel}</small>
             </div>
           </div>
           <div className="voice-controls">
+            <button type="button" onClick={() => setTranscriptOpen((current) => !current)} aria-label="Toggle transcript">
+              <Captions size={18} />
+            </button>
             <button type="button" onClick={shareScreen} aria-label="Share screen">
               <MonitorUp size={18} />
             </button>
@@ -716,71 +1002,71 @@ function App() {
       </section>
 
       {reviewOpen && (
-      <aside className="review-pane">
-        <header className="review-header">
-          <div>
-            <strong>{reviewFileLabel}</strong>
-            <span>+{reviewTotals.plus} -{reviewTotals.minus}</span>
-          </div>
-          <div>
-            <button type="button" aria-label="Close review" onClick={() => setReviewOpen(false)}>
-              <X size={14} />
-            </button>
-            <button type="button" aria-label="Accept review" onClick={acceptAllReview} disabled={visibleDiffFiles.length === 0}>
-              <Check size={14} />
-            </button>
-          </div>
-        </header>
+        <aside className="review-pane">
+          <header className="review-header">
+            <div>
+              <strong>{reviewFileLabel}</strong>
+              <span>+{reviewTotals.plus} -{reviewTotals.minus}</span>
+            </div>
+            <div>
+              <button type="button" aria-label="Close review" onClick={() => setReviewOpen(false)}>
+                <X size={14} />
+              </button>
+              <button type="button" aria-label="Accept review" onClick={acceptAllReview} disabled={visibleDiffFiles.length === 0}>
+                <Check size={14} />
+              </button>
+            </div>
+          </header>
 
-        <div className="review-scroll">
-          {visibleDiffFiles.length === 0 ? (
-            <section className="review-empty">
-              <Check size={18} />
-              <span>No files left in review.</span>
+          <div className="review-scroll">
+            {visibleDiffFiles.length === 0 ? (
+              <section className="review-empty">
+                <Check size={18} />
+                <span>No files left in review.</span>
+              </section>
+            ) : (
+              visibleDiffFiles.map((file) => (
+                <DiffCard
+                  accepted={acceptedDiffPaths.includes(file.path)}
+                  file={file}
+                  key={file.path}
+                  onAccept={() => acceptDiff(file.path)}
+                  onDismiss={() => dismissDiff(file.path)}
+                />
+              ))
+            )}
+
+            <section className="usage-card">
+              <header>
+                <span>Usage and spend</span>
+                <ChevronDown size={15} />
+              </header>
+              <div className="spend-total">${totalSpend.toFixed(2)}</div>
+              <div className="meter">
+                <span style={{ width: `${Math.max(4, usagePercent)}%` }} />
+              </div>
+              <div className="spend-list">
+                {spendBuckets.slice(0, 3).map((bucket) => (
+                  <div key={bucket.label}>
+                    <span>{bucket.label}</span>
+                    <strong>${bucket.value.toFixed(2)}</strong>
+                  </div>
+                ))}
+              </div>
             </section>
-          ) : (
-            visibleDiffFiles.map((file) => (
-              <DiffCard
-                accepted={acceptedDiffPaths.includes(file.path)}
-                file={file}
-                key={file.path}
-                onAccept={() => acceptDiff(file.path)}
-                onDismiss={() => dismissDiff(file.path)}
-              />
-            ))
-          )}
 
-          <section className="usage-card">
-            <header>
-              <span>Usage and spend</span>
-              <ChevronDown size={15} />
-            </header>
-            <div className="spend-total">${totalSpend.toFixed(2)}</div>
-            <div className="meter">
-              <span style={{ width: `${Math.max(4, usagePercent)}%` }} />
-            </div>
-            <div className="spend-list">
-              {spendBuckets.slice(0, 3).map((bucket) => (
-                <div key={bucket.label}>
-                  <span>{bucket.label}</span>
-                  <strong>${bucket.value.toFixed(2)}</strong>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section className="browser-card">
-            <header>
-              <MonitorUp size={15} />
-              <span>Computer-use viewport</span>
-            </header>
-            <div className="browser-preview">
-              <Sparkles size={24} />
-              <span>{screenShared ? 'Screen is available to the voice layer' : 'Ready for browser and app context'}</span>
-            </div>
-          </section>
-        </div>
-      </aside>
+            <section className="browser-card">
+              <header>
+                <MonitorUp size={15} />
+                <span>Computer-use viewport</span>
+              </header>
+              <div className="browser-preview">
+                <Sparkles size={24} />
+                <span>{screenShared ? 'Screen is available to the voice layer' : 'Ready for browser and app context'}</span>
+              </div>
+            </section>
+          </div>
+        </aside>
       )}
     </main>
   )
