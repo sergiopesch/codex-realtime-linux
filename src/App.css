@@ -72,7 +72,9 @@ button:disabled {
 .window-bar button:hover,
 .sidebar-nav button:hover,
 .thread-row:hover,
-.workspace-row:hover,
+.workspace-folder-row:hover,
+.agent-thread-row:hover,
+.utility-row:hover,
 .title-actions button:hover,
 .review-header button:hover,
 .diff-card-header button:hover,
@@ -106,7 +108,9 @@ button:disabled {
 
 .sidebar-nav button,
 .thread-row,
-.workspace-row {
+.workspace-folder-row,
+.agent-thread-row,
+.utility-row {
   display: flex;
   align-items: center;
   min-height: 30px;
@@ -155,7 +159,9 @@ button:disabled {
 
 .thread-group-name,
 .thread-title,
-.workspace-row span {
+.workspace-folder-row span,
+.agent-thread-row span,
+.utility-row span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -182,21 +188,67 @@ button:disabled {
   font-size: 12px;
 }
 
-.workspace-section {
-  margin-top: auto;
+.workspace-tree {
+  display: grid;
+  gap: 6px;
 }
 
-.workspace-row {
+.workspace-folder {
+  display: grid;
+  gap: 2px;
+}
+
+.workspace-folder-row,
+.utility-row {
   width: 100%;
   gap: 8px;
   padding: 0 8px;
   color: #c7c9d7;
   font-size: 12px;
+  text-align: left;
 }
 
-.workspace-row.active {
+.workspace-folder-row.active,
+.utility-row.active {
   background: rgba(255, 255, 255, 0.1);
   color: #ffffff;
+}
+
+.agent-thread-list {
+  display: grid;
+  gap: 1px;
+  margin: 0 0 2px 20px;
+  padding-left: 8px;
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.agent-thread-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 7px;
+  width: 100%;
+  padding: 0 8px;
+  color: #d9dbe6;
+  font-size: 12px;
+  text-align: left;
+}
+
+.agent-thread-row svg {
+  color: #aeb1c2;
+}
+
+.agent-thread-row small {
+  color: #8f92a1;
+  font-size: 11px;
+}
+
+.agent-thread-row.active {
+  background: rgba(255, 255, 255, 0.13);
+  color: #ffffff;
+}
+
+.account-section {
+  margin-top: auto;
 }
 
 .conversation-pane {

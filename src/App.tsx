@@ -4,7 +4,6 @@ import {
   ChevronDown,
   Circle,
   CircleDollarSign,
-  Code2,
   Folder,
   ImagePlus,
   Mic,
@@ -14,9 +13,11 @@ import {
   Plus,
   Radio,
   Search,
+  Settings,
   Sparkles,
   Square,
   Terminal,
+  UserRound,
   Wand2,
   X,
 } from 'lucide-react'
@@ -78,12 +79,15 @@ const api = async <T,>(path: string, init?: RequestInit): Promise<T> => {
   return response.json()
 }
 
-const defaultThreads = [
-  { group: 'Codex', title: 'Realtime Linux MVP', age: 'now' },
-  { group: 'Codex', title: 'Connect voice harness', age: '1h' },
-  { group: 'ChatGPT', title: 'Review spending widgets', age: '2h' },
-  { group: 'Sora', title: 'Capture product demo', age: '5h' },
-  { group: 'Atlas', title: 'Browser-use checkpoint', age: '7h' },
+const fallbackWorkspaces: Workspace[] = [
+  { id: 'codex-realtime-linux', name: 'codex-realtime-linux', path: '/home/sergiopesch/codex-realtime-linux' },
+]
+
+const agentConversationTemplates = [
+  { title: 'Realtime Linux MVP', age: 'now' },
+  { title: 'Connect voice harness', age: '1h' },
+  { title: 'Review spending widgets', age: '2h' },
+  { title: 'Browser-use checkpoint', age: '7h' },
 ]
 
 const diffFiles: { path: string; plus: number; minus: number; lines: DiffLine[] }[] = [
@@ -189,10 +193,16 @@ function App() {
 
   const usagePercent = rateLimits?.rateLimits?.primary?.usedPercent ?? 0
   const latestEvents = events.slice(0, 5)
-  const sidebarThreads =
-    selectedThreadTitle === 'New voice thread'
-      ? [{ group: 'Codex', title: 'New voice thread', age: 'draft' }, ...defaultThreads]
-      : defaultThreads
+  const sidebarWorkspaces = (workspaces.length > 0 ? workspaces : fallbackWorkspaces).slice(0, 5).map((workspace, index) => {
+    const workspacePath = workspace.path ?? workspace.id
+    const baseConversations = agentConversationTemplates.slice(0, index === 0 ? 4 : 2)
+    const conversations =
+      selectedThreadTitle === 'New agent conversation' && selectedWorkspace === workspacePath
+        ? [{ title: 'New agent conversation', age: 'draft' }, ...baseConversations]
+        : baseConversations
+
+    return { workspace, workspacePath, conversations }
+  })
   const visibleDiffFiles = diffFiles.filter((file) => visibleDiffPaths.includes(file.path))
   const reviewTotals = visibleDiffFiles.reduce(
     (total, file) => ({ plus: total.plus + file.plus, minus: total.minus + file.minus }),
@@ -460,7 +470,11 @@ function App() {
           <span className="dot red" />
           <span className="dot yellow" />
           <span className="dot green" />
-          <button type="button" aria-label="Search threads" onClick={() => showNotice('Say “find the thread about review” to search by voice.')}>
+          <button
+            type="button"
+            aria-label="Search agent conversations"
+            onClick={() => showNotice('Say “find the review conversation” to search by voice.')}
+          >
             <Search size={15} />
           </button>
         </div>
@@ -469,12 +483,13 @@ function App() {
           <button
             type="button"
             onClick={() => {
-              setSelectedThreadTitle('New voice thread')
-              showNotice('New voice thread staged. Start voice to describe the work.')
+              setSelectedThreadTitle('New agent conversation')
+              if (!selectedWorkspace && sidebarWorkspaces[0]) setSelectedWorkspace(sidebarWorkspaces[0].workspacePath)
+              showNotice('New agent conversation staged. Start voice to describe the work.')
             }}
           >
             <Plus size={16} />
-            New thread
+            New agent conversation
           </button>
           <button type="button" onClick={() => showNotice('Automations will run recurring Codex tasks; this MVP keeps them in the roadmap.')}>
             <Wand2 size={16} />
@@ -487,45 +502,62 @@ function App() {
         </nav>
 
         <section className="sidebar-section">
-          <h2>Threads</h2>
-          <div className="thread-groups">
-            {sidebarThreads.map((thread) => (
-              <button
-                type="button"
-                className={selectedThreadTitle === thread.title ? 'thread-row active' : 'thread-row'}
-                key={`${thread.group}-${thread.title}`}
-                onClick={() => {
-                  setSelectedThreadTitle(thread.title)
-                  showNotice(`${thread.title} selected.`)
-                }}
-              >
-                <span className="thread-group-name">
+          <h2>Workspaces</h2>
+          <div className="workspace-tree">
+            {sidebarWorkspaces.map(({ workspace, workspacePath, conversations }) => (
+              <div className="workspace-folder" key={workspace.id}>
+                <button
+                  type="button"
+                  className={selectedWorkspace === workspacePath ? 'workspace-folder-row active' : 'workspace-folder-row'}
+                  onClick={() => {
+                    setSelectedWorkspace(workspacePath)
+                    showNotice(`${workspace.name ?? workspace.id} selected. Speak to start or steer an agent conversation.`)
+                  }}
+                >
                   <Folder size={14} />
-                  {thread.group}
-                </span>
-                <span className="thread-title">{thread.title}</span>
-                <small>{thread.age}</small>
-              </button>
+                  <span>{workspace.name ?? workspace.id}</span>
+                </button>
+                <div className="agent-thread-list">
+                  {conversations.map((thread) => (
+                    <button
+                      type="button"
+                      className={
+                        selectedWorkspace === workspacePath && selectedThreadTitle === thread.title
+                          ? 'agent-thread-row active'
+                          : 'agent-thread-row'
+                      }
+                      key={`${workspace.id}-${thread.title}`}
+                      onClick={() => {
+                        setSelectedWorkspace(workspacePath)
+                        setSelectedThreadTitle(thread.title)
+                        showNotice(`${thread.title} selected inside ${workspace.name ?? workspace.id}.`)
+                      }}
+                    >
+                      <Bot size={13} />
+                      <span>{thread.title}</span>
+                      <small>{thread.age}</small>
+                    </button>
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         </section>
 
-        <section className="sidebar-section workspace-section">
-          <h2>Workspaces</h2>
-          {workspaces.slice(0, 5).map((workspace) => (
-            <button
-              className={selectedWorkspace === workspace.path ? 'workspace-row active' : 'workspace-row'}
-              key={workspace.id}
-              type="button"
-              onClick={() => {
-                setSelectedWorkspace(workspace.path ?? selectedWorkspace)
-                showNotice(`${workspace.name ?? workspace.id} selected as the active Codex workspace.`)
-              }}
-            >
-              <Code2 size={14} />
-              <span>{workspace.name ?? workspace.id}</span>
-            </button>
-          ))}
+        <section className="sidebar-section account-section">
+          <h2>System</h2>
+          <button type="button" className="utility-row" onClick={() => showNotice('Settings: voice, model, approvals, and workspace permissions.')}>
+            <Settings size={14} />
+            <span>Settings</span>
+          </button>
+          <button type="button" className="utility-row" onClick={() => showNotice(`Usage: $${totalSpend.toFixed(2)} shown from ${spend?.source ?? 'demo data'}.`)}>
+            <CircleDollarSign size={14} />
+            <span>Usage</span>
+          </button>
+          <button type="button" className="utility-row" onClick={() => showNotice(status?.codexApiKey ? 'Account: Codex API-key mode is configured.' : 'Account: configure API keys in .env.')}>
+            <UserRound size={14} />
+            <span>Account details</span>
+          </button>
         </section>
       </aside>
 
@@ -584,8 +616,8 @@ function App() {
             </div>
 
             <p>
-              The MVP surface is now a three-pane command center: threads and workspaces on the left, realtime
-              voice collaboration in the center, and diff/review plus usage context on the right.
+              The MVP surface is now a three-pane command center: workspaces with nested agent conversations on
+              the left, realtime voice collaboration in the center, and diff/review plus usage context on the right.
             </p>
           </article>
 
