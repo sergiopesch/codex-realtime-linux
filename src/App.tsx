@@ -17,12 +17,10 @@ import {
   Radio,
   Search,
   Settings,
-  Sparkles,
   Square,
   Terminal,
   Trash2,
   UserRound,
-  Wand2,
   X,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -48,7 +46,7 @@ type AgentConversation = {
   id: string
   title: string
   age: string
-  status: 'draft' | 'ready' | 'running' | 'review'
+  status: 'draft' | 'ready' | 'running'
   prompt: string
   response: string
   traces: string[]
@@ -68,21 +66,6 @@ type SpendResponse = {
     currency?: string
     buckets?: { label: string; value: number }[]
   }
-}
-
-type RateLimitResponse = {
-  rateLimits?: {
-    primary?: {
-      usedPercent?: number
-      windowDurationMins?: number
-      resetsAt?: number
-    }
-  }
-}
-
-type DiffLine = {
-  kind: 'add' | 'remove' | 'plain'
-  text: string
 }
 
 type SystemScreen = 'settings' | 'usage' | 'account'
@@ -117,8 +100,8 @@ const conversationCopy: Record<string, Omit<AgentConversation, 'id' | 'age' | 's
     title: 'Realtime Linux MVP',
     prompt: 'Build a voice-first Codex desktop demo for Linux. No text composer.',
     response:
-      'I’ll coordinate the Codex execution layer from live speech, keep the review pane visible, and treat screen or image context as explicit inputs.',
-    traces: ['Mapped workspace-first navigation', 'Kept voice as the primary command path', 'Separated review from realtime direction'],
+      'Coordinate the Codex execution layer from live speech, keep every thread steerable, and treat screen or image context as explicit input.',
+    traces: ['Workspace selected', 'Voice direction is primary', 'Codex agents ready behind the session'],
     transcript: [
       { speaker: 'user', text: 'I want this to feel like Codex, but the main action is talking.' },
       { speaker: 'codex', text: 'I’ll keep the center surface voice-led and make transcript optional.' },
@@ -139,7 +122,7 @@ const conversationCopy: Record<string, Omit<AgentConversation, 'id' | 'age' | 's
     title: 'Review spending widgets',
     prompt: 'Show usage and cost clearly without making it the primary task surface.',
     response:
-      'Usage belongs in the review/system context: visible when needed, but secondary to the realtime collaboration loop.',
+      'Usage belongs in the system context: visible when needed, but secondary to the realtime collaboration loop.',
     traces: ['Usage appears in right pane', 'System Usage screen has details', 'Voice dock remains persistent'],
     transcript: [
       { speaker: 'user', text: 'I need to know what I’m spending while building.' },
@@ -186,71 +169,8 @@ const makeConversation = (
 
 const defaultConversationsForWorkspace = (workspacePath: string, index: number) =>
   ['Realtime Linux MVP', 'Connect voice harness', ...(index === 0 ? ['Review spending widgets', 'Browser-use checkpoint'] : [])].map(
-    (title, titleIndex) => makeConversation(workspacePath, title, titleIndex === 0 ? 'now' : `${titleIndex}h`, titleIndex === 2 ? 'review' : 'ready'),
+    (title, titleIndex) => makeConversation(workspacePath, title, titleIndex === 0 ? 'now' : `${titleIndex}h`, 'ready'),
   )
-
-const diffFiles: { path: string; plus: number; minus: number; lines: DiffLine[] }[] = [
-  {
-    path: 'src/App.tsx',
-    plus: 3,
-    minus: 2,
-    lines: [
-      { kind: 'remove', text: 'const composer = <TextInput />' },
-      { kind: 'remove', text: 'placeholder="Ask Codex anything"' },
-      { kind: 'add', text: 'const voiceDock = <RealtimeVoiceDock />' },
-      { kind: 'add', text: 'mode="voice-first"' },
-      { kind: 'add', text: 'onInterrupt={steerCodexAgents}' },
-    ],
-  },
-  {
-    path: 'electron/main.cjs',
-    plus: 2,
-    minus: 1,
-    lines: [
-      { kind: 'plain', text: 'const { app, BrowserWindow } = require("electron")' },
-      { kind: 'remove', text: 'loadURL("http://localhost:5173")' },
-      { kind: 'add', text: 'loadURL(process.env.VITE_DEV_SERVER_URL)' },
-      { kind: 'add', text: 'backgroundColor: "#050505"' },
-    ],
-  },
-]
-
-function DiffCard({
-  file,
-  accepted,
-  onAccept,
-  onDismiss,
-}: {
-  file: (typeof diffFiles)[number]
-  accepted: boolean
-  onAccept: () => void
-  onDismiss: () => void
-}) {
-  return (
-    <article className={accepted ? 'diff-card accepted' : 'diff-card'}>
-      <header className="diff-card-header">
-        <span>{file.path}</span>
-        <div>
-          {accepted && <small>accepted</small>}
-          <button type="button" aria-label={`Dismiss ${file.path}`} onClick={onDismiss}>
-            <X size={13} />
-          </button>
-          <button type="button" aria-label={`Accept ${file.path}`} onClick={onAccept}>
-            <Check size={13} />
-          </button>
-        </div>
-      </header>
-      <pre className="diff-lines">
-        {file.lines.map((line, index) => (
-          <code className={`diff-line ${line.kind}`} key={`${file.path}-${index}`}>
-            {line.kind === 'add' ? '+ ' : line.kind === 'remove' ? '- ' : '  '}
-            {line.text}
-          </code>
-        ))}
-      </pre>
-    </article>
-  )
-}
 
 function App() {
   const [status, setStatus] = useState<Status | null>(null)
@@ -266,7 +186,6 @@ function App() {
   const [activeSystemScreen, setActiveSystemScreen] = useState<SystemScreen | null>(null)
   const [transcriptOpen, setTranscriptOpen] = useState(false)
   const [spend, setSpend] = useState<SpendResponse | null>(null)
-  const [rateLimits, setRateLimits] = useState<RateLimitResponse | null>(null)
   const [events, setEvents] = useState<EventRecord[]>([])
   const [voiceState, setVoiceState] = useState<'idle' | 'connecting' | 'live'>('idle')
   const [screenShared, setScreenShared] = useState(false)
@@ -274,9 +193,6 @@ function App() {
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
   const [buildState, setBuildState] = useState<'idle' | 'starting' | 'running'>('idle')
   const [notice, setNotice] = useState<string | null>(null)
-  const [reviewOpen, setReviewOpen] = useState(true)
-  const [visibleDiffPaths, setVisibleDiffPaths] = useState(() => diffFiles.map((file) => file.path))
-  const [acceptedDiffPaths, setAcceptedDiffPaths] = useState<string[]>([])
   const [lastError, setLastError] = useState<string | null>(null)
   const peerRef = useRef<RTCPeerConnection | null>(null)
   const dataChannelRef = useRef<RTCDataChannel | null>(null)
@@ -299,7 +215,6 @@ function App() {
       ? spend.data.total
       : spendBuckets.reduce((total, bucket) => total + bucket.value, 0)
 
-  const usagePercent = rateLimits?.rateLimits?.primary?.usedPercent ?? 0
   const workspaceSource = useMemo(() => {
     const discovered = workspaces.length > 0 ? workspaces : fallbackWorkspaces
     const seen = new Set<string>()
@@ -330,12 +245,6 @@ function App() {
     .map((id) => allConversations.find((conversation) => conversation.id === id))
     .filter((conversation): conversation is AgentConversation => Boolean(conversation))
   const latestEvents = events.slice(0, 5)
-  const visibleDiffFiles = diffFiles.filter((file) => visibleDiffPaths.includes(file.path))
-  const reviewTotals = visibleDiffFiles.reduce(
-    (total, file) => ({ plus: total.plus + file.plus, minus: total.minus + file.minus }),
-    { plus: 0, minus: 0 },
-  )
-  const reviewFileLabel = `${visibleDiffFiles.length} ${visibleDiffFiles.length === 1 ? 'file' : 'files'} changed`
   const voiceReady = status?.realtime ?? false
   const selectedWorkspaceName =
     workspaceRoots.find(({ workspacePath }) => workspacePath === selectedWorkspace)?.workspace.name ?? 'codex-realtime-linux'
@@ -498,18 +407,6 @@ function App() {
     }
 
     load()
-  }, [])
-
-  useEffect(() => {
-    const loadRateLimits = async () => {
-      try {
-        setRateLimits(await api<RateLimitResponse>('/api/codex/rate-limits'))
-      } catch {
-        // Rate-limit data needs an initialized Codex account; keep the demo usable without it.
-      }
-    }
-
-    loadRateLimits()
   }, [])
 
   useEffect(() => {
@@ -699,24 +596,6 @@ function App() {
     }
   }
 
-  const acceptDiff = (path: string) => {
-    setAcceptedDiffPaths((current) => (current.includes(path) ? current : [...current, path]))
-    appendEvent('review/file-accepted', { path })
-    showNotice(`${path} marked accepted for this demo review.`)
-  }
-
-  const dismissDiff = (path: string) => {
-    setVisibleDiffPaths((current) => current.filter((item) => item !== path))
-    appendEvent('review/file-dismissed', { path })
-    showNotice(`${path} dismissed from the review pane.`)
-  }
-
-  const acceptAllReview = () => {
-    setAcceptedDiffPaths(visibleDiffFiles.map((file) => file.path))
-    appendEvent('review/all-accepted', { files: visibleDiffFiles.map((file) => file.path) })
-    showNotice('All visible review items marked accepted.')
-  }
-
   const renderSystemScreen = () => {
     if (activeSystemScreen === 'settings') {
       return (
@@ -732,7 +611,7 @@ function App() {
             <div><span>Voice model</span><strong>{status?.realtimeModel ?? 'gpt-realtime-2'}</strong></div>
             <div><span>Codex model</span><strong>{status?.codexModel ?? 'gpt-5.4'}</strong></div>
             <div><span>Transcript</span><strong>{transcriptOpen ? 'visible' : 'hidden by default'}</strong></div>
-            <div><span>Approvals</span><strong>review before action</strong></div>
+            <div><span>Approvals</span><strong>ask before action</strong></div>
           </div>
         </section>
       )
@@ -781,7 +660,7 @@ function App() {
   }
 
   return (
-    <main className={reviewOpen ? 'codex-shell' : 'codex-shell review-collapsed'}>
+    <main className="codex-shell">
       <aside className="thread-sidebar">
         <div className="app-rail-header">
           <div className="app-identity" aria-label="Codex Voice">
@@ -793,7 +672,7 @@ function App() {
           <button
             type="button"
             aria-label="Search agent conversations"
-            onClick={() => showNotice('Say “find the review conversation” to search by voice.')}
+            onClick={() => showNotice('Say “find the thread about spending” to search by voice.')}
           >
             <Search size={15} />
           </button>
@@ -807,14 +686,6 @@ function App() {
           <button type="button" onClick={() => createConversation()}>
             <Plus size={16} />
             New thread
-          </button>
-          <button type="button" onClick={() => showNotice('Automations will run recurring Codex tasks; this MVP keeps them in the roadmap.')}>
-            <Wand2 size={16} />
-            Automations
-          </button>
-          <button type="button" onClick={() => showNotice('Skills will expose reusable Codex workflows; this demo keeps voice as the primary path.')}>
-            <Sparkles size={16} />
-            Skills
           </button>
           <input
             ref={workspaceInputRef}
@@ -914,11 +785,6 @@ function App() {
             </span>
           </div>
           <div className="title-actions">
-            {!reviewOpen && (
-              <button type="button" onClick={() => setReviewOpen(true)}>
-                Review
-              </button>
-            )}
             <button type="button" onClick={() => showNotice(`Active workspace: ${selectedWorkspace}`)}>
               Open
             </button>
@@ -972,26 +838,34 @@ function App() {
                       ? 'Screen context attached'
                       : attachedImageName
                         ? `Image attached: ${attachedImageName}`
-                        : 'Speak to create, steer, interrupt, and review Codex work'}
+                        : 'Speak to create, steer, interrupt, and inspect Codex work'}
                   </small>
                 </div>
               </div>
 
-              <div className="user-bubble">{activeConversation.prompt}</div>
+              <section className="voice-thread-board" aria-label="Voice thread state">
+                <article className="spoken-goal">
+                  <span>Current spoken goal</span>
+                  <strong>{activeConversation.prompt}</strong>
+                  <small>{voiceState === 'live' ? 'Listening for refinements' : 'Start voice to update this direction'}</small>
+                </article>
 
-              <article className="assistant-turn">
-                <p>{activeConversation.response}</p>
-                <div className="thought-line">
-                  <strong>Agent work</strong>
-                  <span>{activeConversation.status}</span>
-                </div>
-                {activeConversation.traces.map((trace) => (
-                  <div className="trace-item" key={trace}>
-                    <span>{trace}</span>
-                    <Check size={14} />
+                <article className="agent-brief">
+                  <header>
+                    <span>Agent brief</span>
+                    <strong>{activeConversation.status}</strong>
+                  </header>
+                  <p>{activeConversation.response}</p>
+                  <div className="trace-grid">
+                    {activeConversation.traces.map((trace) => (
+                      <div className="trace-item" key={trace}>
+                        <span>{trace}</span>
+                        <Check size={14} />
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </article>
+                </article>
+              </section>
 
               {transcriptOpen && (
                 <section className="transcript-panel" aria-label="Voice transcript">
@@ -1008,7 +882,7 @@ function App() {
                 </section>
               )}
 
-              <section className="runtime-strip" aria-label="Runtime state">
+              <section className="runtime-strip" aria-label="Voice runtime state">
                 <div>
                   <Radio size={16} />
                   <span>Realtime</span>
@@ -1106,73 +980,6 @@ function App() {
         </section>
       </section>
 
-      {reviewOpen && (
-        <aside className="review-pane">
-          <header className="review-header">
-            <div>
-              <strong>{reviewFileLabel}</strong>
-              <span>+{reviewTotals.plus} -{reviewTotals.minus}</span>
-            </div>
-            <div>
-              <button type="button" aria-label="Close review" onClick={() => setReviewOpen(false)}>
-                <X size={14} />
-              </button>
-              <button type="button" aria-label="Accept review" onClick={acceptAllReview} disabled={visibleDiffFiles.length === 0}>
-                <Check size={14} />
-              </button>
-            </div>
-          </header>
-
-          <div className="review-scroll">
-            {visibleDiffFiles.length === 0 ? (
-              <section className="review-empty">
-                <Check size={18} />
-                <span>No files left in review.</span>
-              </section>
-            ) : (
-              visibleDiffFiles.map((file) => (
-                <DiffCard
-                  accepted={acceptedDiffPaths.includes(file.path)}
-                  file={file}
-                  key={file.path}
-                  onAccept={() => acceptDiff(file.path)}
-                  onDismiss={() => dismissDiff(file.path)}
-                />
-              ))
-            )}
-
-            <section className="usage-card">
-              <header>
-                <span>Usage and spend</span>
-                <ChevronDown size={15} />
-              </header>
-              <div className="spend-total">${totalSpend.toFixed(2)}</div>
-              <div className="meter">
-                <span style={{ width: `${Math.max(4, usagePercent)}%` }} />
-              </div>
-              <div className="spend-list">
-                {spendBuckets.slice(0, 3).map((bucket) => (
-                  <div key={bucket.label}>
-                    <span>{bucket.label}</span>
-                    <strong>${bucket.value.toFixed(2)}</strong>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            <section className="browser-card">
-              <header>
-                <MonitorUp size={15} />
-                <span>Computer-use viewport</span>
-              </header>
-              <div className="browser-preview">
-                <Sparkles size={24} />
-                <span>{screenShared ? 'Screen is available to the voice layer' : 'Ready for browser and app context'}</span>
-              </div>
-            </section>
-          </div>
-        </aside>
-      )}
     </main>
   )
 }

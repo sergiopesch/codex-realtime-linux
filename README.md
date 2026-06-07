@@ -2,7 +2,7 @@
 
 An Electron MVP for a Linux-first, realtime voice Codex client.
 
-This demo explores a voice-led interaction model for Codex: the user speaks, shares screen or image context, interrupts direction naturally, and the Codex execution layer works behind the scenes. The UI is intentionally desktop-like: workspace navigation on the left, nested agent conversations inside each workspace, a collaborative voice conversation in the center, and review, diff, browser context, and usage on the right.
+This demo explores a voice-led interaction model for Codex: the user speaks, shares screen or image context, interrupts direction naturally, and the Codex execution layer works behind the scenes. The UI is intentionally desktop-like: workspace navigation on the left, nested agent conversations inside each workspace, and a collaborative voice control surface in the center.
 
 This is an inspirational demo. It does not reverse engineer the closed Codex Mac app internals.
 
@@ -18,8 +18,7 @@ This is an inspirational demo. It does not reverse engineer the closed Codex Mac
 - Optional transcript view for voice conversations; hidden by default.
 - Settings, Usage, and Account details as dedicated system screens.
 - Screen sharing and image attachment as context surfaces.
-- Spending and rate-limit panels with live data when the right API keys are present, and demo fallback data otherwise.
-- Review pane with Codex-style diff cards for demo clarity.
+- Spending view with live data when the right API keys are present, and demo fallback data otherwise.
 
 ## Run
 
@@ -84,8 +83,6 @@ Based on public Codex app docs and product pages:
 - Codex app is positioned as a command center for multiple agents running in parallel across projects.
 - Agent conversations are grouped by workspace and can run in local, worktree, or cloud modes.
 - Worktrees isolate parallel work and background automations from the foreground checkout.
-- Review workflows include diff inspection, inline feedback, staging, commit, push, and PR flows.
-- Automations create a triage/inbox loop for recurring work and agent conversation heartbeats.
 - In-app browser supports local/public preview, page comments, and browser-use automation for scoped web QA.
 - Computer Use and Appshots provide visual desktop/app context with explicit permissions.
 - App-server is the public integration surface for custom clients: agent conversations, turns, approvals, history, auth, apps, models, and streamed events.
@@ -96,7 +93,6 @@ The demo’s differentiator is replacing the composer-first interaction model wi
 
 - Persist real workspace and agent conversation state from Codex app-server into the sidebar.
 - Stream Codex turn output into the center conversation instead of demo copy.
-- Add real diff inspection from local changes and Codex agent conversation metadata.
 - Wire screen/image context into the Realtime conversation payload.
 - Add packaging for Linux AppImage or deb.
 
@@ -107,8 +103,6 @@ The demo’s differentiator is replacing the composer-first interaction model wi
 - https://developers.openai.com/codex/app
 - https://developers.openai.com/codex/app/features
 - https://developers.openai.com/codex/app/worktrees
-- https://developers.openai.com/codex/app/review
-- https://developers.openai.com/codex/app/automations
 - https://developers.openai.com/codex/app/browser
 - https://developers.openai.com/codex/app/computer-use
 - https://developers.openai.com/codex/appshots
