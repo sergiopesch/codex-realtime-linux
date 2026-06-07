@@ -87,6 +87,10 @@ type DiffLine = {
 
 type SystemScreen = 'settings' | 'usage' | 'account'
 
+type DirectoryPickerWindow = Window & {
+  showDirectoryPicker?: () => Promise<{ name?: string }>
+}
+
 const initialWorkspacePath = '/home/sergiopesch/codex-realtime-linux'
 
 const api = async <T,>(path: string, init?: RequestInit): Promise<T> => {
@@ -251,6 +255,7 @@ function DiffCard({
 function App() {
   const [status, setStatus] = useState<Status | null>(null)
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
+  const [userWorkspaces, setUserWorkspaces] = useState<Workspace[]>([])
   const [conversationsByWorkspace, setConversationsByWorkspace] = useState<Record<string, AgentConversation[]>>({
     [initialWorkspacePath]: defaultConversationsForWorkspace(initialWorkspacePath, 0),
   })
@@ -277,6 +282,7 @@ function App() {
   const dataChannelRef = useRef<RTCDataChannel | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const imageInputRef = useRef<HTMLInputElement | null>(null)
+  const workspaceInputRef = useRef<HTMLInputElement | null>(null)
 
   const spendBuckets = useMemo(
     () =>
@@ -294,13 +300,32 @@ function App() {
       : spendBuckets.reduce((total, bucket) => total + bucket.value, 0)
 
   const usagePercent = rateLimits?.rateLimits?.primary?.usedPercent ?? 0
-  const workspaceRoots = (workspaces.length > 0 ? workspaces : fallbackWorkspaces).slice(0, 5).map((workspace, index) => {
+  const workspaceSource = useMemo(() => {
+    const discovered = workspaces.length > 0 ? workspaces : fallbackWorkspaces
+    const seen = new Set<string>()
+
+    return [...userWorkspaces, ...discovered].filter((workspace) => {
+      const workspacePath = workspace.path ?? workspace.id
+      if (seen.has(workspacePath)) return false
+      seen.add(workspacePath)
+      return true
+    })
+  }, [userWorkspaces, workspaces])
+  const workspaceRoots = workspaceSource.slice(0, 8).map((workspace, index) => {
     const workspacePath = workspace.path ?? workspace.id
-    const conversations = conversationsByWorkspace[workspacePath] ?? defaultConversationsForWorkspace(workspacePath, index)
+    const conversations =
+      conversationsByWorkspace[workspacePath] ??
+      (userWorkspaces.some((userWorkspace) => (userWorkspace.path ?? userWorkspace.id) === workspacePath)
+        ? []
+        : defaultConversationsForWorkspace(workspacePath, index))
     return { workspace, workspacePath, conversations }
   })
   const allConversations = workspaceRoots.flatMap(({ conversations }) => conversations)
-  const activeConversation = allConversations.find((conversation) => conversation.id === selectedConversationId) ?? allConversations[0]
+  const selectedWorkspaceConversations =
+    workspaceRoots.find(({ workspacePath }) => workspacePath === selectedWorkspace)?.conversations ?? []
+  const activeConversation =
+    selectedWorkspaceConversations.find((conversation) => conversation.id === selectedConversationId) ??
+    selectedWorkspaceConversations[0]
   const openConversations = openConversationIds
     .map((id) => allConversations.find((conversation) => conversation.id === id))
     .filter((conversation): conversation is AgentConversation => Boolean(conversation))
@@ -331,12 +356,14 @@ function App() {
     setSelectedWorkspace(workspacePath)
     setSelectedConversationId(conversationId)
     setActiveSystemScreen(null)
+    setNotice(null)
+    setLastError(null)
     setOpenConversationIds((current) => (current.includes(conversationId) ? current : [...current, conversationId]).slice(-5))
   }
 
-  const createConversation = () => {
-    const workspacePath = selectedWorkspace || workspaceRoots[0]?.workspacePath || initialWorkspacePath
-    const existing = conversationsByWorkspace[workspacePath] ?? defaultConversationsForWorkspace(workspacePath, 0)
+  const createConversation = (targetWorkspacePath?: string) => {
+    const workspacePath = targetWorkspacePath || selectedWorkspace || workspaceRoots[0]?.workspacePath || initialWorkspacePath
+    const existing = conversationsByWorkspace[workspacePath] ?? []
     const title = `Voice build ${existing.length + 1}`
     const conversation = makeConversation(workspacePath, title, 'draft', 'draft')
 
@@ -346,6 +373,49 @@ function App() {
     }))
     openConversationWindow(workspacePath, conversation.id)
     showNotice(`${title} opened as a new agent conversation window. Start voice to describe the build goal.`)
+  }
+
+  const addWorkspaceFromFolderName = (folderName: string) => {
+    const name = folderName.trim() || 'New workspace'
+    const baseId = slug(name) || 'workspace'
+    const workspacePath = `picked-folder://${baseId}-${Date.now()}`
+    const workspace = { id: workspacePath, name, path: workspacePath }
+
+    setUserWorkspaces((current) => [workspace, ...current])
+    setConversationsByWorkspace((current) => ({ ...current, [workspacePath]: current[workspacePath] ?? [] }))
+    setCollapsedWorkspaces((current) => current.filter((item) => item !== workspacePath))
+    setSelectedWorkspace(workspacePath)
+    setSelectedConversationId('')
+    setOpenConversationIds([])
+    setActiveSystemScreen(null)
+    showNotice(`${name} added as a workspace. Create a new agent conversation when you are ready.`)
+  }
+
+  const addWorkspaceFromFiles = (files: FileList | null | undefined) => {
+    const firstFile = files?.[0]
+    if (!firstFile) return
+
+    const relativePath = (firstFile as File & { webkitRelativePath?: string }).webkitRelativePath
+    addWorkspaceFromFolderName(relativePath?.split('/')[0] || firstFile.name)
+    if (workspaceInputRef.current) workspaceInputRef.current.value = ''
+  }
+
+  const pickWorkspaceFolder = async () => {
+    const picker = (window as DirectoryPickerWindow).showDirectoryPicker
+
+    if (picker) {
+      try {
+        const handle = await picker.call(window)
+        if (handle?.name) {
+          addWorkspaceFromFolderName(handle.name)
+          return
+        }
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') return
+      }
+    }
+
+    workspaceInputRef.current?.click()
   }
 
   const deleteConversation = (workspacePath: string, conversationId: string) => {
@@ -368,7 +438,19 @@ function App() {
   }
 
   const toggleWorkspace = (workspacePath: string) => {
+    const firstConversation =
+      conversationsByWorkspace[workspacePath]?.[0] ??
+      workspaceRoots.find((root) => root.workspacePath === workspacePath)?.conversations[0]
+
     setSelectedWorkspace(workspacePath)
+    setActiveSystemScreen(null)
+    if (firstConversation) {
+      setSelectedConversationId(firstConversation.id)
+      setOpenConversationIds((current) => (current.includes(firstConversation.id) ? current : [firstConversation.id, ...current]).slice(0, 5))
+    } else {
+      setSelectedConversationId('')
+      setOpenConversationIds([])
+    }
     setCollapsedWorkspaces((current) =>
       current.includes(workspacePath) ? current.filter((item) => item !== workspacePath) : [...current, workspacePath],
     )
@@ -378,6 +460,11 @@ function App() {
     setActiveSystemScreen(screen)
     showNotice(`${screen === 'settings' ? 'Settings' : screen === 'usage' ? 'Usage' : 'Account details'} opened.`)
   }
+
+  useEffect(() => {
+    workspaceInputRef.current?.setAttribute('webkitdirectory', '')
+    workspaceInputRef.current?.setAttribute('directory', '')
+  }, [])
 
   useEffect(() => {
     const load = async () => {
@@ -696,10 +783,13 @@ function App() {
   return (
     <main className={reviewOpen ? 'codex-shell' : 'codex-shell review-collapsed'}>
       <aside className="thread-sidebar">
-        <div className="window-bar">
-          <span className="dot red" />
-          <span className="dot yellow" />
-          <span className="dot green" />
+        <div className="app-rail-header">
+          <div className="app-identity" aria-label="Codex Voice">
+            <span className="app-mark">
+              <AudioLines size={15} />
+            </span>
+            <span>Codex Voice</span>
+          </div>
           <button
             type="button"
             aria-label="Search agent conversations"
@@ -710,9 +800,13 @@ function App() {
         </div>
 
         <nav className="sidebar-nav" aria-label="Primary">
-          <button type="button" onClick={createConversation}>
+          <button type="button" onClick={pickWorkspaceFolder}>
+            <Folder size={16} />
+            New workspace
+          </button>
+          <button type="button" onClick={() => createConversation()}>
             <Plus size={16} />
-            New agent conversation
+            New thread
           </button>
           <button type="button" onClick={() => showNotice('Automations will run recurring Codex tasks; this MVP keeps them in the roadmap.')}>
             <Wand2 size={16} />
@@ -722,6 +816,13 @@ function App() {
             <Sparkles size={16} />
             Skills
           </button>
+          <input
+            ref={workspaceInputRef}
+            type="file"
+            hidden
+            multiple
+            onChange={(event) => addWorkspaceFromFiles(event.target.files)}
+          />
         </nav>
 
         <section className="sidebar-section workspace-list-section">
@@ -743,7 +844,12 @@ function App() {
                   {!collapsed && (
                     <div className="agent-thread-list">
                       {conversations.length === 0 ? (
-                        <div className="empty-workspace">No agent conversations</div>
+                        <div className="empty-workspace">
+                          <span>No threads yet</span>
+                          <button type="button" onClick={() => createConversation(workspacePath)}>
+                            Create thread
+                          </button>
+                        </div>
                       ) : (
                         conversations.map((conversation) => (
                           <div
@@ -759,7 +865,6 @@ function App() {
                               className="agent-thread-open"
                               onClick={() => openConversationWindow(workspacePath, conversation.id)}
                             >
-                              <Bot size={13} />
                               <span>{conversation.title}</span>
                               <small>{conversation.age}</small>
                             </button>

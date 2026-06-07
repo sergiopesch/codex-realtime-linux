@@ -13,6 +13,7 @@ This is an inspirational demo. It does not reverse engineer the closed Codex Mac
 - `codex app-server` bridge for Codex agent conversations, events, approvals, apps, models, and auth state.
 - Voice-first dock with no typed composer in the primary workflow.
 - Collapsible workspace folders with nested agent conversations.
+- No-text workspace creation through a folder picker, then voice-led thread creation inside the selected workspace.
 - Open agent conversations as separate center windows with independent content.
 - Optional transcript view for voice conversations; hidden by default.
 - Settings, Usage, and Account details as dedicated system screens.
