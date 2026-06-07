@@ -7,8 +7,22 @@
   background: #050505;
 }
 
+.codex-shell.review-collapsed {
+  grid-template-columns: 264px minmax(420px, 1fr);
+}
+
 button {
   color: inherit;
+}
+
+button:focus-visible {
+  outline: 2px solid rgba(244, 244, 245, 0.55);
+  outline-offset: 2px;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.46;
 }
 
 .thread-sidebar,
@@ -53,6 +67,17 @@ button {
   margin-left: auto;
   color: #c8cad7;
   border-radius: 7px;
+}
+
+.window-bar button:hover,
+.sidebar-nav button:hover,
+.thread-row:hover,
+.workspace-row:hover,
+.title-actions button:hover,
+.review-header button:hover,
+.diff-card-header button:hover,
+.voice-controls button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .dot {
@@ -230,6 +255,10 @@ button {
   cursor: pointer;
 }
 
+.title-actions button:disabled {
+  background: #161617;
+}
+
 .conversation-scroll,
 .review-scroll {
   min-height: 0;
@@ -381,6 +410,16 @@ button {
   font-size: 12px;
 }
 
+.notice-strip {
+  margin: 0 10px 10px;
+  border: 1px solid #2a2a2f;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #121213;
+  color: #d7d7dd;
+  font-size: 12px;
+}
+
 .voice-dock {
   display: flex;
   align-items: center;
@@ -451,8 +490,7 @@ button {
 }
 
 .voice-controls button:disabled {
-  cursor: not-allowed;
-  opacity: 0.38;
+  background: #1b1b1d;
 }
 
 .voice-controls .primary-voice,
@@ -468,6 +506,13 @@ button {
   border-color: #f0f0f3;
   background: #f0f0f3;
   color: #0b0b0c;
+}
+
+.voice-controls .primary-voice:disabled {
+  border-color: #33343a;
+  background: #151516;
+  color: #c5c6ce;
+  opacity: 0.72;
 }
 
 .voice-controls .danger-voice {
@@ -510,6 +555,11 @@ button {
   color: #dadade;
 }
 
+.review-header button:disabled,
+.diff-card-header button:disabled {
+  color: #777982;
+}
+
 .review-scroll {
   padding: 10px;
 }
@@ -529,6 +579,10 @@ button {
   margin-top: 10px;
 }
 
+.diff-card.accepted {
+  border-color: rgba(40, 210, 132, 0.32);
+}
+
 .diff-card-header {
   display: flex;
   align-items: center;
@@ -542,6 +596,14 @@ button {
 .diff-card-header div {
   display: flex;
   align-items: center;
+  gap: 2px;
+}
+
+.diff-card-header small {
+  margin-right: 6px;
+  color: #28d284;
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .diff-lines {
@@ -566,6 +628,23 @@ button {
 .diff-line.remove {
   background: rgba(108, 38, 43, 0.42);
   color: #ff8e8e;
+}
+
+.review-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 68px;
+  border: 1px solid #202023;
+  border-radius: 8px;
+  padding: 0 12px;
+  background: #151516;
+  color: #bfc0c8;
+  font-size: 12px;
+}
+
+.review-empty svg {
+  color: #28d284;
 }
 
 .usage-card,
@@ -649,10 +728,18 @@ button {
   .codex-shell {
     grid-template-columns: 236px minmax(420px, 1fr) 360px;
   }
+
+  .codex-shell.review-collapsed {
+    grid-template-columns: 236px minmax(420px, 1fr);
+  }
 }
 
 @media (max-width: 980px) {
   .codex-shell {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+
+  .codex-shell.review-collapsed {
     grid-template-columns: 220px minmax(0, 1fr);
   }
 

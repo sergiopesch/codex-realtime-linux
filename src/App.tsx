@@ -79,7 +79,7 @@ const api = async <T,>(path: string, init?: RequestInit): Promise<T> => {
 }
 
 const defaultThreads = [
-  { group: 'Codex', title: 'Realtime Linux MVP', age: 'now', active: true },
+  { group: 'Codex', title: 'Realtime Linux MVP', age: 'now' },
   { group: 'Codex', title: 'Connect voice harness', age: '1h' },
   { group: 'ChatGPT', title: 'Review spending widgets', age: '2h' },
   { group: 'Sora', title: 'Capture product demo', age: '5h' },
@@ -89,8 +89,8 @@ const defaultThreads = [
 const diffFiles: { path: string; plus: number; minus: number; lines: DiffLine[] }[] = [
   {
     path: 'src/App.tsx',
-    plus: 8,
-    minus: 5,
+    plus: 3,
+    minus: 2,
     lines: [
       { kind: 'remove', text: 'const composer = <TextInput />' },
       { kind: 'remove', text: 'placeholder="Ask Codex anything"' },
@@ -101,7 +101,7 @@ const diffFiles: { path: string; plus: number; minus: number; lines: DiffLine[] 
   },
   {
     path: 'electron/main.cjs',
-    plus: 6,
+    plus: 2,
     minus: 1,
     lines: [
       { kind: 'plain', text: 'const { app, BrowserWindow } = require("electron")' },
@@ -112,16 +112,27 @@ const diffFiles: { path: string; plus: number; minus: number; lines: DiffLine[] 
   },
 ]
 
-function DiffCard({ file }: { file: (typeof diffFiles)[number] }) {
+function DiffCard({
+  file,
+  accepted,
+  onAccept,
+  onDismiss,
+}: {
+  file: (typeof diffFiles)[number]
+  accepted: boolean
+  onAccept: () => void
+  onDismiss: () => void
+}) {
   return (
-    <article className="diff-card">
+    <article className={accepted ? 'diff-card accepted' : 'diff-card'}>
       <header className="diff-card-header">
         <span>{file.path}</span>
         <div>
-          <button type="button" aria-label={`Dismiss ${file.path}`}>
+          {accepted && <small>accepted</small>}
+          <button type="button" aria-label={`Dismiss ${file.path}`} onClick={onDismiss}>
             <X size={13} />
           </button>
-          <button type="button" aria-label={`Accept ${file.path}`}>
+          <button type="button" aria-label={`Accept ${file.path}`} onClick={onAccept}>
             <Check size={13} />
           </button>
         </div>
@@ -148,7 +159,13 @@ function App() {
   const [screenShared, setScreenShared] = useState(false)
   const [attachedImageName, setAttachedImageName] = useState<string | null>(null)
   const [selectedWorkspace, setSelectedWorkspace] = useState('/home/sergiopesch/codex-realtime-linux')
+  const [selectedThreadTitle, setSelectedThreadTitle] = useState('Realtime Linux MVP')
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
+  const [buildState, setBuildState] = useState<'idle' | 'starting' | 'running'>('idle')
+  const [notice, setNotice] = useState<string | null>(null)
+  const [reviewOpen, setReviewOpen] = useState(true)
+  const [visibleDiffPaths, setVisibleDiffPaths] = useState(() => diffFiles.map((file) => file.path))
+  const [acceptedDiffPaths, setAcceptedDiffPaths] = useState<string[]>([])
   const [lastError, setLastError] = useState<string | null>(null)
   const peerRef = useRef<RTCPeerConnection | null>(null)
   const dataChannelRef = useRef<RTCDataChannel | null>(null)
@@ -172,8 +189,31 @@ function App() {
 
   const usagePercent = rateLimits?.rateLimits?.primary?.usedPercent ?? 0
   const latestEvents = events.slice(0, 5)
+  const sidebarThreads =
+    selectedThreadTitle === 'New voice thread'
+      ? [{ group: 'Codex', title: 'New voice thread', age: 'draft' }, ...defaultThreads]
+      : defaultThreads
+  const visibleDiffFiles = diffFiles.filter((file) => visibleDiffPaths.includes(file.path))
+  const reviewTotals = visibleDiffFiles.reduce(
+    (total, file) => ({ plus: total.plus + file.plus, minus: total.minus + file.minus }),
+    { plus: 0, minus: 0 },
+  )
+  const reviewFileLabel = `${visibleDiffFiles.length} ${visibleDiffFiles.length === 1 ? 'file' : 'files'} changed`
+  const voiceReady = status?.realtime ?? false
   const selectedWorkspaceName =
     workspaces.find((workspace) => workspace.path === selectedWorkspace)?.name ?? 'codex-realtime-linux'
+
+  const appendEvent = (method: string, params?: Record<string, unknown>) => {
+    setEvents((current) => [
+      { method, receivedAt: new Date().toISOString(), params },
+      ...current,
+    ].slice(0, 160))
+  }
+
+  const showNotice = (message: string) => {
+    setNotice(message)
+    setLastError(null)
+  }
 
   useEffect(() => {
     const load = async () => {
@@ -275,6 +315,11 @@ function App() {
   }
 
   const startVoice = async () => {
+    if (!voiceReady) {
+      showNotice('Add OPENAI_API_KEY in .env to start a live Realtime voice session.')
+      return
+    }
+
     setLastError(null)
     setVoiceState('connecting')
 
@@ -316,6 +361,7 @@ function App() {
 
       await pc.setRemoteDescription({ type: 'answer', sdp: await answerResponse.text() })
       setVoiceState('live')
+      showNotice('Voice is live. Speak naturally; the Codex task controls stay available.')
     } catch (error) {
       setVoiceState('idle')
       setLastError(error instanceof Error ? error.message : 'Voice session failed')
@@ -328,6 +374,7 @@ function App() {
     peerRef.current = null
     dataChannelRef.current = null
     setVoiceState('idle')
+    showNotice('Voice session stopped.')
   }
 
   const shareScreen = async () => {
@@ -335,6 +382,7 @@ function App() {
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false })
       setScreenShared(true)
+      showNotice('Screen context is attached for this session.')
       stream.getVideoTracks()[0]?.addEventListener('ended', () => setScreenShared(false))
     } catch (error) {
       setLastError(error instanceof Error ? error.message : 'Screen share failed')
@@ -344,18 +392,13 @@ function App() {
   const attachImage = (file: File | undefined) => {
     if (!file) return
     setAttachedImageName(file.name)
-    setEvents((current) => [
-      {
-        method: 'context/image-attached',
-        receivedAt: new Date().toISOString(),
-        params: { name: file.name, size: file.size, type: file.type },
-      },
-      ...current,
-    ].slice(0, 160))
+    appendEvent('context/image-attached', { name: file.name, size: file.size, type: file.type })
+    showNotice(`Image attached: ${file.name}`)
   }
 
   const startDemoBuild = async () => {
     setLastError(null)
+    setBuildState('starting')
     try {
       const result = await api<{ thread: { id: string } }>('/api/codex/task', {
         method: 'POST',
@@ -367,42 +410,77 @@ function App() {
         }),
       })
       setActiveThreadId(result.thread.id)
+      setBuildState('running')
+      appendEvent('codex/task-started', { threadId: result.thread.id, cwd: selectedWorkspace })
+      showNotice('Codex build started. Use voice or Interrupt to redirect it.')
     } catch (error) {
+      setBuildState('idle')
       setLastError(error instanceof Error ? error.message : 'Codex task failed')
     }
   }
 
   const interruptBuild = async () => {
     if (!activeThreadId) return
-    await api('/api/codex/interrupt', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ threadId: activeThreadId }),
-    })
+    try {
+      await api('/api/codex/interrupt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ threadId: activeThreadId }),
+      })
+      setBuildState('idle')
+      appendEvent('codex/task-interrupted', { threadId: activeThreadId })
+      showNotice('Codex task interrupted. Start voice to redirect the next step.')
+    } catch (error) {
+      setLastError(error instanceof Error ? error.message : 'Interrupt failed')
+    }
+  }
+
+  const acceptDiff = (path: string) => {
+    setAcceptedDiffPaths((current) => (current.includes(path) ? current : [...current, path]))
+    appendEvent('review/file-accepted', { path })
+    showNotice(`${path} marked accepted for this demo review.`)
+  }
+
+  const dismissDiff = (path: string) => {
+    setVisibleDiffPaths((current) => current.filter((item) => item !== path))
+    appendEvent('review/file-dismissed', { path })
+    showNotice(`${path} dismissed from the review pane.`)
+  }
+
+  const acceptAllReview = () => {
+    setAcceptedDiffPaths(visibleDiffFiles.map((file) => file.path))
+    appendEvent('review/all-accepted', { files: visibleDiffFiles.map((file) => file.path) })
+    showNotice('All visible review items marked accepted.')
   }
 
   return (
-    <main className="codex-shell">
+    <main className={reviewOpen ? 'codex-shell' : 'codex-shell review-collapsed'}>
       <aside className="thread-sidebar">
         <div className="window-bar">
           <span className="dot red" />
           <span className="dot yellow" />
           <span className="dot green" />
-          <button type="button" aria-label="Search threads">
+          <button type="button" aria-label="Search threads" onClick={() => showNotice('Say “find the thread about review” to search by voice.')}>
             <Search size={15} />
           </button>
         </div>
 
         <nav className="sidebar-nav" aria-label="Primary">
-          <button type="button">
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedThreadTitle('New voice thread')
+              showNotice('New voice thread staged. Start voice to describe the work.')
+            }}
+          >
             <Plus size={16} />
             New thread
           </button>
-          <button type="button">
+          <button type="button" onClick={() => showNotice('Automations will run recurring Codex tasks; this MVP keeps them in the roadmap.')}>
             <Wand2 size={16} />
             Automations
           </button>
-          <button type="button">
+          <button type="button" onClick={() => showNotice('Skills will expose reusable Codex workflows; this demo keeps voice as the primary path.')}>
             <Sparkles size={16} />
             Skills
           </button>
@@ -411,11 +489,15 @@ function App() {
         <section className="sidebar-section">
           <h2>Threads</h2>
           <div className="thread-groups">
-            {defaultThreads.map((thread) => (
+            {sidebarThreads.map((thread) => (
               <button
                 type="button"
-                className={thread.active ? 'thread-row active' : 'thread-row'}
+                className={selectedThreadTitle === thread.title ? 'thread-row active' : 'thread-row'}
                 key={`${thread.group}-${thread.title}`}
+                onClick={() => {
+                  setSelectedThreadTitle(thread.title)
+                  showNotice(`${thread.title} selected.`)
+                }}
               >
                 <span className="thread-group-name">
                   <Folder size={14} />
@@ -435,7 +517,10 @@ function App() {
               className={selectedWorkspace === workspace.path ? 'workspace-row active' : 'workspace-row'}
               key={workspace.id}
               type="button"
-              onClick={() => setSelectedWorkspace(workspace.path ?? selectedWorkspace)}
+              onClick={() => {
+                setSelectedWorkspace(workspace.path ?? selectedWorkspace)
+                showNotice(`${workspace.name ?? workspace.id} selected as the active Codex workspace.`)
+              }}
             >
               <Code2 size={14} />
               <span>{workspace.name ?? workspace.id}</span>
@@ -454,10 +539,17 @@ function App() {
             </span>
           </div>
           <div className="title-actions">
-            <button type="button">Open</button>
-            <button type="button" onClick={startDemoBuild}>
+            {!reviewOpen && (
+              <button type="button" onClick={() => setReviewOpen(true)}>
+                Review
+              </button>
+            )}
+            <button type="button" onClick={() => showNotice(`Active workspace: ${selectedWorkspace}`)}>
+              Open
+            </button>
+            <button type="button" onClick={startDemoBuild} disabled={buildState === 'starting'}>
               <Play size={14} />
-              Build
+              {buildState === 'starting' ? 'Starting' : buildState === 'running' ? 'Running' : 'Build'}
             </button>
           </div>
         </header>
@@ -535,6 +627,7 @@ function App() {
         </div>
 
         {lastError && <div className="error-strip">{lastError}</div>}
+        {notice && <div className="notice-strip">{notice}</div>}
 
         <section className="voice-dock" aria-label="Voice-first command dock">
           <div className="voice-status">
@@ -573,9 +666,9 @@ function App() {
               onChange={(event) => attachImage(event.target.files?.[0])}
             />
             {voiceState === 'idle' ? (
-              <button className="primary-voice" type="button" onClick={startVoice}>
+              <button className="primary-voice" type="button" onClick={startVoice} disabled={status !== null && !voiceReady}>
                 <Mic size={18} />
-                Start voice
+                {status !== null && !voiceReady ? 'Needs key' : 'Start voice'}
               </button>
             ) : (
               <button className="danger-voice" type="button" onClick={stopVoice}>
@@ -590,26 +683,40 @@ function App() {
         </section>
       </section>
 
+      {reviewOpen && (
       <aside className="review-pane">
         <header className="review-header">
           <div>
-            <strong>2 files changed</strong>
-            <span>+9 -6</span>
+            <strong>{reviewFileLabel}</strong>
+            <span>+{reviewTotals.plus} -{reviewTotals.minus}</span>
           </div>
           <div>
-            <button type="button" aria-label="Close review">
+            <button type="button" aria-label="Close review" onClick={() => setReviewOpen(false)}>
               <X size={14} />
             </button>
-            <button type="button" aria-label="Accept review">
+            <button type="button" aria-label="Accept review" onClick={acceptAllReview} disabled={visibleDiffFiles.length === 0}>
               <Check size={14} />
             </button>
           </div>
         </header>
 
         <div className="review-scroll">
-          {diffFiles.map((file) => (
-            <DiffCard file={file} key={file.path} />
-          ))}
+          {visibleDiffFiles.length === 0 ? (
+            <section className="review-empty">
+              <Check size={18} />
+              <span>No files left in review.</span>
+            </section>
+          ) : (
+            visibleDiffFiles.map((file) => (
+              <DiffCard
+                accepted={acceptedDiffPaths.includes(file.path)}
+                file={file}
+                key={file.path}
+                onAccept={() => acceptDiff(file.path)}
+                onDismiss={() => dismissDiff(file.path)}
+              />
+            ))
+          )}
 
           <section className="usage-card">
             <header>
@@ -642,6 +749,7 @@ function App() {
           </section>
         </div>
       </aside>
+      )}
     </main>
   )
 }
