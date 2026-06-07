@@ -1,4 +1,5 @@
 import {
+  Activity,
   AudioLines,
   Bot,
   Captions,
@@ -7,8 +8,12 @@ import {
   ChevronRight,
   Circle,
   CircleDollarSign,
+  Database,
   Folder,
+  Gauge,
   ImagePlus,
+  KeyRound,
+  Lock,
   Mic,
   MonitorUp,
   Pause,
@@ -17,6 +22,8 @@ import {
   Radio,
   Search,
   Settings,
+  ShieldCheck,
+  SlidersHorizontal,
   Square,
   Terminal,
   Trash2,
@@ -599,62 +606,190 @@ function App() {
   const renderSystemScreen = () => {
     if (activeSystemScreen === 'settings') {
       return (
-        <section className="system-screen">
-          <header>
-            <Settings size={18} />
-            <div>
-              <h2>Settings</h2>
-              <p>Voice, model, approvals, and workspace permissions.</p>
+        <section className="system-screen system-settings">
+          <header className="system-hero">
+            <div className="system-hero-icon">
+              <Settings size={28} />
             </div>
+            <div>
+              <span className="system-kicker">Voice operating system</span>
+              <h2>Settings</h2>
+              <p>Model routing, interaction defaults, and permission posture for voice-led Codex work.</p>
+            </div>
+            <strong className="system-status-pill">local demo</strong>
           </header>
-          <div className="system-grid">
-            <div><span>Voice model</span><strong>{status?.realtimeModel ?? 'gpt-realtime-2'}</strong></div>
-            <div><span>Codex model</span><strong>{status?.codexModel ?? 'gpt-5.4'}</strong></div>
-            <div><span>Transcript</span><strong>{transcriptOpen ? 'visible' : 'hidden by default'}</strong></div>
-            <div><span>Approvals</span><strong>ask before action</strong></div>
+
+          <div className="system-card-grid">
+            <article className="system-stat-card">
+              <AudioLines size={18} />
+              <span>Realtime model</span>
+              <strong>{status?.realtimeModel ?? 'gpt-realtime-2'}</strong>
+            </article>
+            <article className="system-stat-card">
+              <Bot size={18} />
+              <span>Codex model</span>
+              <strong>{status?.codexModel ?? 'gpt-5.4'}</strong>
+            </article>
+            <article className="system-stat-card">
+              <Captions size={18} />
+              <span>Transcript</span>
+              <strong>{transcriptOpen ? 'visible' : 'hidden'}</strong>
+            </article>
           </div>
+
+          <section className="system-detail-panel">
+            <header>
+              <SlidersHorizontal size={17} />
+              <span>Interaction defaults</span>
+            </header>
+            <div className="system-row">
+              <div>
+                <strong>Conversation mode</strong>
+                <span>Voice remains the primary input for every thread.</span>
+              </div>
+              <em>voice first</em>
+            </div>
+            <div className="system-row">
+              <div>
+                <strong>Transcript behavior</strong>
+                <span>Hidden until the captions control is explicitly opened.</span>
+              </div>
+              <em>{transcriptOpen ? 'expanded' : 'collapsed'}</em>
+            </div>
+            <div className="system-row">
+              <div>
+                <strong>Agent approval posture</strong>
+                <span>Codex actions should be confirmed before they affect the workspace.</span>
+              </div>
+              <em>ask first</em>
+            </div>
+          </section>
         </section>
       )
     }
 
     if (activeSystemScreen === 'usage') {
+      const usagePeak = Math.max(totalSpend, ...spendBuckets.map((bucket) => bucket.value), 1)
+      const primarySpendBucket = spendBuckets.reduce(
+        (top, bucket) => (bucket.value > top.value ? bucket : top),
+        { label: 'None', value: 0 },
+      )
+
       return (
-        <section className="system-screen">
-          <header>
-            <CircleDollarSign size={18} />
-            <div>
-              <h2>Usage</h2>
-              <p>Live spend when admin scope is configured, demo data otherwise.</p>
+        <section className="system-screen system-usage">
+          <header className="system-hero usage-hero">
+            <div className="system-hero-icon">
+              <CircleDollarSign size={28} />
             </div>
+            <div>
+              <span className="system-kicker">{spend?.source === 'admin' ? 'Live admin data' : 'Demo usage data'}</span>
+              <h2>Usage</h2>
+              <p>Spend should be visible, calm, and secondary to the voice collaboration loop.</p>
+            </div>
+            <strong className="usage-total">${totalSpend.toFixed(2)}</strong>
           </header>
-          <div className="usage-system-total">${totalSpend.toFixed(2)}</div>
-          <div className="spend-list system-spend-list">
+
+          <div className="usage-breakdown">
             {spendBuckets.map((bucket) => (
-              <div key={bucket.label}>
-                <span>{bucket.label}</span>
-                <strong>${bucket.value.toFixed(2)}</strong>
-              </div>
+              <article className="usage-row" key={bucket.label}>
+                <div>
+                  <span>{bucket.label}</span>
+                  <strong>${bucket.value.toFixed(2)}</strong>
+                </div>
+                <div className="usage-meter" aria-hidden="true">
+                  <span style={{ width: `${Math.max(5, (bucket.value / usagePeak) * 100)}%` }} />
+                </div>
+              </article>
             ))}
+          </div>
+
+          <div className="system-card-grid">
+            <article className="system-stat-card">
+              <Gauge size={18} />
+              <span>Spend state</span>
+              <strong>{totalSpend > 0 ? 'active' : 'quiet'}</strong>
+            </article>
+            <article className="system-stat-card">
+              <Activity size={18} />
+              <span>Primary cost driver</span>
+              <strong>{primarySpendBucket.label}</strong>
+            </article>
+            <article className="system-stat-card">
+              <Database size={18} />
+              <span>Source</span>
+              <strong>{spend?.source ?? 'fallback'}</strong>
+            </article>
           </div>
         </section>
       )
     }
 
     return (
-      <section className="system-screen">
-        <header>
-          <UserRound size={18} />
-          <div>
-            <h2>Account details</h2>
-            <p>Local demo auth and Codex account readiness.</p>
+      <section className="system-screen system-account">
+        <header className="system-hero">
+          <div className="system-hero-icon">
+            <UserRound size={28} />
           </div>
+          <div>
+            <span className="system-kicker">Identity and access</span>
+            <h2>Account details</h2>
+            <p>Connection readiness for realtime voice, Codex execution, and optional organization telemetry.</p>
+          </div>
+          <strong className={status?.realtime ? 'system-status-pill ready' : 'system-status-pill'}>
+            {status?.realtime ? 'ready' : 'needs key'}
+          </strong>
         </header>
-        <div className="system-grid">
-          <div><span>Realtime API</span><strong>{status?.realtime ? 'configured' : 'needs key'}</strong></div>
-          <div><span>Codex auth</span><strong>{status?.codexApiKey ? 'API key' : 'local account'}</strong></div>
-          <div><span>Admin API</span><strong>{status?.adminApi ? 'configured' : 'not configured'}</strong></div>
-          <div><span>Mode</span><strong>{status?.codexAuthPreference ?? 'demo'}</strong></div>
+
+        <div className="account-readiness">
+          <article>
+            <KeyRound size={18} />
+            <span>Realtime API</span>
+            <strong>{status?.realtime ? 'configured' : 'needs key'}</strong>
+          </article>
+          <article>
+            <ShieldCheck size={18} />
+            <span>Codex auth</span>
+            <strong>{status?.codexApiKey ? 'API key' : 'local account'}</strong>
+          </article>
+          <article>
+            <Database size={18} />
+            <span>Admin API</span>
+            <strong>{status?.adminApi ? 'configured' : 'not configured'}</strong>
+          </article>
+          <article>
+            <Lock size={18} />
+            <span>Mode</span>
+            <strong>{status?.codexAuthPreference ?? 'demo'}</strong>
+          </article>
         </div>
+
+        <section className="system-detail-panel">
+          <header>
+            <ShieldCheck size={17} />
+            <span>Trust posture</span>
+          </header>
+          <div className="system-row">
+            <div>
+              <strong>Voice session</strong>
+              <span>{status?.realtime ? 'Realtime voice can start from the dock.' : 'Add an OpenAI API key before live voice starts.'}</span>
+            </div>
+            <em>{status?.realtime ? 'enabled' : 'blocked'}</em>
+          </div>
+          <div className="system-row">
+            <div>
+              <strong>Workspace execution</strong>
+              <span>Codex tasks run from the selected workspace context.</span>
+            </div>
+            <em>scoped</em>
+          </div>
+          <div className="system-row">
+            <div>
+              <strong>Spend visibility</strong>
+              <span>{status?.adminApi ? 'Organization spend is connected.' : 'Using fallback spend for the demo.'}</span>
+            </div>
+            <em>{status?.adminApi ? 'live' : 'demo'}</em>
+          </div>
+        </section>
       </section>
     )
   }

@@ -557,8 +557,7 @@ button:disabled {
   font-size: 13px;
 }
 
-.transcript-panel,
-.system-screen {
+.transcript-panel {
   border: 1px solid #242427;
   border-radius: 10px;
   margin: 18px 0;
@@ -566,8 +565,7 @@ button:disabled {
   background: #101011;
 }
 
-.transcript-panel header,
-.system-screen header {
+.transcript-panel header {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -700,70 +698,220 @@ button:disabled {
 }
 
 .system-screen {
-  max-width: 720px;
-  margin: 0;
-  padding-bottom: 12px;
-}
-
-.system-screen header {
-  min-height: 62px;
-}
-
-.system-screen h2,
-.system-screen p {
-  margin: 0;
-}
-
-.system-screen h2 {
-  color: #f4f4f5;
-  font-size: 16px;
-}
-
-.system-screen p {
-  margin-top: 4px;
-  color: #9f9fa7;
-  font-size: 12px;
-}
-
-.system-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  padding: 12px;
+  gap: 14px;
+  max-width: 980px;
+  margin: 0 auto;
 }
 
-.system-grid div {
+.system-hero {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  min-height: 148px;
   border: 1px solid #242427;
-  border-radius: 8px;
-  padding: 12px;
-  background: #151516;
+  border-radius: 12px;
+  padding: 22px;
+  background:
+    radial-gradient(circle at 12% 18%, rgba(255, 255, 255, 0.08), transparent 32%),
+    #101011;
 }
 
-.system-grid span,
-.system-grid strong {
-  display: block;
+.system-hero-icon {
+  display: grid;
+  place-items: center;
+  width: 76px;
+  height: 76px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 18px;
+  background: linear-gradient(145deg, #f1f1f4, #999ba5 48%, #2a2b31);
+  color: #080809;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.24), 0 18px 42px rgba(0, 0, 0, 0.35);
 }
 
-.system-grid span {
+.system-kicker,
+.system-stat-card span,
+.usage-row span,
+.account-readiness span,
+.system-row span {
   color: #9f9fa7;
   font-size: 12px;
 }
 
-.system-grid strong {
-  margin-top: 6px;
+.system-hero h2,
+.system-hero p {
+  margin: 0;
+}
+
+.system-hero h2 {
+  margin-top: 5px;
   color: #f4f4f5;
+  font-size: 28px;
+  line-height: 1.12;
+}
+
+.system-hero p {
+  max-width: 560px;
+  margin-top: 8px;
+  color: #c0c1c8;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.system-status-pill,
+.usage-total {
+  justify-self: end;
+  border: 1px solid #33343a;
+  border-radius: 999px;
+  padding: 7px 12px;
+  background: #151516;
+  color: #f4f4f5;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.system-status-pill.ready {
+  border-color: rgba(72, 191, 132, 0.36);
+  color: #86efac;
+}
+
+.usage-total {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font-size: 36px;
+  font-weight: 760;
+  letter-spacing: 0;
+}
+
+.system-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.account-readiness {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.system-stat-card,
+.account-readiness article {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 10px;
+  min-height: 78px;
+  border: 1px solid #242427;
+  border-radius: 10px;
+  padding: 14px;
+  background: #101011;
+}
+
+.system-stat-card svg,
+.account-readiness svg {
+  grid-row: 1 / 3;
+  color: #d9d9de;
+}
+
+.system-stat-card strong,
+.account-readiness strong {
+  color: #f4f4f5;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.system-detail-panel {
+  overflow: hidden;
+  border: 1px solid #242427;
+  border-radius: 10px;
+  background: #101011;
+}
+
+.system-detail-panel > header {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 44px;
+  padding: 0 14px;
+  border-bottom: 1px solid #242427;
+  color: #d9d9de;
   font-size: 13px;
 }
 
-.usage-system-total {
-  padding: 18px 12px 4px;
-  color: #f4f4f5;
-  font-size: 38px;
-  font-weight: 750;
+.system-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  min-height: 68px;
+  padding: 12px 14px;
+  border-top: 1px solid #202023;
 }
 
-.system-spend-list {
-  padding: 12px;
+.system-row:first-of-type {
+  border-top: 0;
+}
+
+.system-row strong,
+.usage-row strong {
+  display: block;
+  color: #f4f4f5;
+  font-size: 14px;
+}
+
+.system-row span {
+  display: block;
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+.system-row em {
+  border: 1px solid #303034;
+  border-radius: 999px;
+  padding: 5px 9px;
+  color: #d9dbe6;
+  font-size: 12px;
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.usage-breakdown {
+  display: grid;
+  gap: 10px;
+}
+
+.usage-row {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #242427;
+  border-radius: 10px;
+  padding: 14px;
+  background: #101011;
+}
+
+.usage-row div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.usage-meter {
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #2a2a2e;
+}
+
+.usage-meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #48bf84, #8bd7ff);
 }
 
 .voice-dock {
@@ -869,24 +1017,6 @@ button:disabled {
   background: #7e2d30;
 }
 
-.spend-list {
-  display: grid;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.spend-list div {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  color: #bcbcc4;
-  font-size: 12px;
-}
-
-.spend-list strong {
-  color: #f4f4f5;
-}
-
 @keyframes voicePulse {
   0%,
   100% {
@@ -910,6 +1040,10 @@ button:disabled {
 @media (max-width: 1180px) {
   .codex-shell {
     grid-template-columns: 260px minmax(0, 1fr);
+  }
+
+  .account-readiness {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -940,8 +1074,16 @@ button:disabled {
 
   .voice-hero,
   .voice-thread-board,
-  .system-grid {
+  .system-hero,
+  .system-card-grid,
+  .account-readiness {
     grid-template-columns: 1fr;
+  }
+
+  .system-hero-icon,
+  .system-status-pill,
+  .usage-total {
+    justify-self: start;
   }
 
   .realtime-orb {
