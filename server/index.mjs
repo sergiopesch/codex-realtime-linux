@@ -29,6 +29,11 @@ const REALTIME_PERSONA =
 const VISION_MODEL = process.env.VISION_MODEL ?? CODEX_MODEL
 const USAGE_PERIOD_DAYS = Number(process.env.OPENAI_USAGE_PERIOD_DAYS ?? 30)
 const GBP_RATE_API = process.env.OPENAI_USAGE_GBP_RATE_API ?? 'https://api.frankfurter.app/latest?from=USD&to=GBP'
+const CONFIGURED_CODEX_RPC_TIMEOUT_MS = Number(process.env.CODEX_RPC_TIMEOUT_MS)
+const CODEX_RPC_TIMEOUT_MS =
+  Number.isFinite(CONFIGURED_CODEX_RPC_TIMEOUT_MS) && CONFIGURED_CODEX_RPC_TIMEOUT_MS > 0
+    ? CONFIGURED_CODEX_RPC_TIMEOUT_MS
+    : 120_000
 const STATE_PATH =
   process.env.CODEX_REALTIME_STATE_PATH ??
   path.join(os.homedir(), '.local', 'state', 'codex-realtime-linux', 'app-state.json')
@@ -426,24 +431,30 @@ class CodexRpc {
   rl = null
   nextId = 1
   ready = false
+  initPromise = null
   pending = new Map()
   notifications = []
 
   async ensure() {
     if (this.ready) return
+    if (this.initPromise) return this.initPromise
 
+    this.initPromise = this.#initialize().catch((error) => {
+      if (this.proc && !this.proc.killed) this.proc.kill()
+      this.#resetProcessState(error)
+      throw error
+    })
+    return this.initPromise
+  }
+
+  async #initialize() {
     this.proc = spawn('codex', ['app-server'], {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: process.env,
     })
 
     this.proc.once('error', (error) => {
-      this.ready = false
-      this.proc = null
-      for (const { reject } of this.pending.values()) {
-        reject(error)
-      }
-      this.pending.clear()
+      this.#resetProcessState(error)
     })
 
     this.proc.stderr.on('data', (chunk) => {
@@ -458,12 +469,7 @@ class CodexRpc {
     })
 
     this.proc.once('exit', (code) => {
-      this.ready = false
-      this.proc = null
-      for (const { reject } of this.pending.values()) {
-        reject(new Error(`codex app-server exited with code ${code}`))
-      }
-      this.pending.clear()
+      this.#resetProcessState(new Error(`codex app-server exited with code ${code}`))
     })
 
     this.rl = createInterface({ input: this.proc.stdout })
@@ -492,6 +498,19 @@ class CodexRpc {
     }
   }
 
+  #resetProcessState(error) {
+    this.ready = false
+    this.initPromise = null
+    this.proc = null
+    this.rl?.close()
+    this.rl = null
+    for (const { reject, timeout } of this.pending.values()) {
+      clearTimeout(timeout)
+      reject(error)
+    }
+    this.pending.clear()
+  }
+
   #handleLine(line) {
     let message
     try {
@@ -501,7 +520,8 @@ class CodexRpc {
     }
 
     if (message.id != null && this.pending.has(message.id)) {
-      const { resolve, reject } = this.pending.get(message.id)
+      const { resolve, reject, timeout } = this.pending.get(message.id)
+      clearTimeout(timeout)
       this.pending.delete(message.id)
       if (message.error) reject(new Error(message.error.message ?? 'Codex app-server request failed'))
       else resolve(message.result)
@@ -513,15 +533,32 @@ class CodexRpc {
   }
 
   request(method, params = {}) {
+    if (!this.proc?.stdin?.writable) {
+      return Promise.reject(new Error('codex app-server is not connected.'))
+    }
+
     const id = this.nextId++
     const payload = { method, id, params }
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject })
-      this.proc.stdin.write(`${JSON.stringify(payload)}\n`)
+      const timeout = setTimeout(() => {
+        if (!this.pending.has(id)) return
+        this.pending.delete(id)
+        reject(new Error(`codex app-server request timed out: ${method}`))
+      }, CODEX_RPC_TIMEOUT_MS)
+
+      this.pending.set(id, { resolve, reject, timeout })
+      try {
+        this.proc.stdin.write(`${JSON.stringify(payload)}\n`)
+      } catch (error) {
+        clearTimeout(timeout)
+        this.pending.delete(id)
+        reject(error)
+      }
     })
   }
 
   notify(method, params = {}) {
+    if (!this.proc?.stdin?.writable) return
     this.proc.stdin.write(`${JSON.stringify({ method, params })}\n`)
   }
 }

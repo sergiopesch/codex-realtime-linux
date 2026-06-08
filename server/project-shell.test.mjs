@@ -85,6 +85,18 @@ test('Codex task routes require explicit user goals and IDs before app-server ca
   assert.doesNotMatch(appSource, /Inspect this project and summarize the next best implementation step/)
 })
 
+test('Codex app-server RPC bridge has bounded requests and single-flight initialization', async () => {
+  const serverSource = await readFile(path.join(repoRoot, 'server', 'index.mjs'), 'utf8')
+
+  assert.match(serverSource, /const CODEX_RPC_TIMEOUT_MS =/)
+  assert.match(serverSource, /initPromise = null/)
+  assert.match(serverSource, /if \(this\.initPromise\) return this\.initPromise/)
+  assert.match(serverSource, /codex app-server request timed out/)
+  assert.match(serverSource, /clearTimeout\(timeout\)/)
+  assert.match(serverSource, /#resetProcessState\(error\)/)
+  assert.match(serverSource, /if \(!this\.proc\?\.stdin\?\.writable\)/)
+})
+
 test('electron shell keeps renderer isolation and external navigation guarded', async () => {
   const mainSource = await readFile(path.join(repoRoot, 'electron', 'main.cjs'), 'utf8')
 

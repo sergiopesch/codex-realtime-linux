@@ -94,6 +94,12 @@ Use `CODEX_API_KEY` if Codex local execution should use a different key than Rea
 CODEX_API_KEY=sk-...
 ```
 
+Codex app-server RPC calls are bounded so the desktop app does not hang indefinitely if the local Codex bridge stalls. Override the timeout only when you have a known long-running local app-server operation:
+
+```bash
+CODEX_RPC_TIMEOUT_MS=120000
+```
+
 Visual context uses the same OpenAI key by default. The app captures uploaded images or a single screen-share frame, analyzes it with the Responses API, then injects the concise summary into the live Realtime conversation when voice is active. Override the vision model if needed:
 
 ```bash
