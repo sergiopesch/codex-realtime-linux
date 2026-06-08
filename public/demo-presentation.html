@@ -276,6 +276,67 @@
         padding: 32px;
       }
 
+      .composer-ghost {
+        position: absolute;
+        inset: auto clamp(18px, 4vw, 50px) clamp(24px, 4vw, 48px);
+        display: grid;
+        grid-template-columns: 42px 1fr 32px;
+        gap: 14px;
+        align-items: center;
+        border: 1px solid rgba(255, 255, 255, 0.13);
+        border-radius: 10px;
+        padding: 14px;
+        background: rgba(255, 255, 255, 0.07);
+        box-shadow: 0 18px 54px rgba(0, 0, 0, 0.38);
+        transition:
+          opacity 520ms ease,
+          transform 520ms ease,
+          filter 520ms ease;
+        z-index: 3;
+      }
+
+      .composer-icon,
+      .send-dot {
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.14);
+      }
+
+      .composer-icon {
+        width: 42px;
+        height: 42px;
+      }
+
+      .composer-lines {
+        display: grid;
+        gap: 8px;
+      }
+
+      .composer-lines i {
+        height: 8px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.17);
+      }
+
+      .composer-lines i:nth-child(1) {
+        width: 84%;
+      }
+
+      .composer-lines i:nth-child(2) {
+        width: 58%;
+      }
+
+      .send-dot {
+        width: 32px;
+        height: 32px;
+      }
+
+      .slide[data-slide="0"][data-step="1"] .composer-ghost,
+      .slide[data-slide="0"][data-step="2"] .composer-ghost {
+        opacity: 0;
+        filter: blur(8px);
+        transform: translateY(18px) scale(0.96);
+      }
+
       .voice-ring {
         position: relative;
         display: grid;
@@ -288,6 +349,19 @@
           conic-gradient(from 0deg, rgba(134, 168, 200, 0.22), rgba(185, 210, 194, 0.1), rgba(216, 154, 97, 0.18), rgba(134, 168, 200, 0.22)),
           rgba(255, 255, 255, 0.035);
         animation: slow-turn 9s linear infinite;
+        opacity: 0.42;
+        transform: scale(0.84);
+        transition:
+          opacity 520ms ease,
+          transform 520ms ease,
+          filter 520ms ease;
+      }
+
+      .slide[data-slide="0"][data-step="1"] .voice-ring,
+      .slide[data-slide="0"][data-step="2"] .voice-ring {
+        opacity: 1;
+        filter: drop-shadow(0 0 34px rgba(134, 168, 200, 0.18));
+        transform: scale(1);
       }
 
       .voice-ring::before,
@@ -333,6 +407,33 @@
         bottom: clamp(18px, 4vw, 42px);
         display: grid;
         gap: 12px;
+        opacity: 0;
+        transform: translateY(20px);
+        transition:
+          opacity 520ms ease,
+          transform 520ms ease;
+      }
+
+      .slide[data-slide="0"][data-step="1"] .utterance,
+      .slide[data-slide="0"][data-step="2"] .utterance {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      .slide[data-slide="0"][data-step="0"] .impact-row {
+        opacity: 0.34;
+      }
+
+      .slide[data-slide="0"][data-step="2"] .chip {
+        animation: chip-pop 900ms ease both;
+      }
+
+      .slide[data-slide="0"][data-step="2"] .chip:nth-child(2) {
+        animation-delay: 90ms;
+      }
+
+      .slide[data-slide="0"][data-step="2"] .chip:nth-child(3) {
+        animation-delay: 180ms;
       }
 
       .spoken {
@@ -426,6 +527,13 @@
         background: var(--green);
         box-shadow: 0 0 26px rgba(185, 210, 194, 0.78);
         animation: packet 3.4s ease-in-out infinite;
+        opacity: 0;
+        transition: opacity 320ms ease;
+      }
+
+      .slide[data-slide="1"][data-step="1"] .packet,
+      .slide[data-slide="1"][data-step="2"] .packet {
+        opacity: 1;
       }
 
       .node {
@@ -438,6 +546,27 @@
         padding: 16px;
         background: rgba(255, 255, 255, 0.058);
         overflow: hidden;
+        opacity: 0.38;
+        transform: translateY(10px);
+        transition:
+          opacity 420ms ease,
+          transform 420ms ease,
+          border-color 420ms ease,
+          background 420ms ease;
+      }
+
+      .slide[data-slide="1"][data-step="0"] .node:nth-of-type(1),
+      .slide[data-slide="1"][data-step="1"] .node:nth-of-type(1),
+      .slide[data-slide="1"][data-step="1"] .node:nth-of-type(2),
+      .slide[data-slide="1"][data-step="2"] .node {
+        opacity: 1;
+        transform: translateY(0);
+        border-color: rgba(255, 255, 255, 0.22);
+        background: rgba(255, 255, 255, 0.078);
+      }
+
+      .slide[data-slide="1"][data-step="2"] .node:nth-of-type(3) {
+        animation: route-pulse 1.2s ease both;
       }
 
       .node::after {
@@ -547,6 +676,10 @@
         gap: 5px;
         min-height: 58px;
         padding: 10px;
+        transition:
+          opacity 360ms ease,
+          transform 360ms ease,
+          background 360ms ease;
       }
 
       .thread b {
@@ -621,6 +754,49 @@
           linear-gradient(180deg, rgba(255, 255, 255, 0.076), rgba(255, 255, 255, 0.03)),
           rgba(255, 255, 255, 0.045);
         overflow: hidden;
+        opacity: 0.28;
+        transform: translateY(14px);
+        transition:
+          opacity 430ms ease,
+          transform 430ms ease,
+          border-color 430ms ease,
+          background 430ms ease;
+      }
+
+      .slide[data-slide="2"][data-step="1"] .lane:nth-child(1),
+      .slide[data-slide="2"][data-step="2"] .lane:nth-child(-n + 2),
+      .slide[data-slide="2"][data-step="3"] .lane {
+        opacity: 1;
+        transform: translateY(0);
+        border-color: rgba(255, 255, 255, 0.22);
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.04)),
+          rgba(255, 255, 255, 0.06);
+      }
+
+      .slide[data-slide="2"][data-step="0"] .generated-thread {
+        opacity: 0;
+        transform: translateX(-12px);
+      }
+
+      .slide[data-slide="2"][data-step="2"] .generated-thread,
+      .slide[data-slide="2"][data-step="3"] .generated-thread {
+        background: rgba(255, 255, 255, 0.11);
+      }
+
+      .slide[data-slide="2"][data-step="0"] .mini-mic {
+        opacity: 0.44;
+        transform: scale(0.86);
+      }
+
+      .slide[data-slide="2"][data-step="1"] .mini-mic,
+      .slide[data-slide="2"][data-step="2"] .mini-mic,
+      .slide[data-slide="2"][data-step="3"] .mini-mic {
+        opacity: 1;
+        transform: scale(1);
+        transition:
+          opacity 420ms ease,
+          transform 420ms ease;
       }
 
       .lane::before {
@@ -691,6 +867,9 @@
         background: linear-gradient(180deg, #f7f8f8, #cfd3d6);
         color: #101010;
         box-shadow: 0 18px 40px rgba(0, 0, 0, 0.34);
+        transition:
+          opacity 420ms ease,
+          transform 420ms ease;
       }
 
       .mini-mic::before {
@@ -807,6 +986,28 @@
         }
       }
 
+      @keyframes chip-pop {
+        0% {
+          transform: translateY(7px);
+        }
+        42% {
+          transform: translateY(-3px);
+        }
+        100% {
+          transform: translateY(0);
+        }
+      }
+
+      @keyframes route-pulse {
+        0%,
+        100% {
+          box-shadow: none;
+        }
+        45% {
+          box-shadow: 0 0 34px rgba(216, 154, 97, 0.22);
+        }
+      }
+
       @media (max-width: 900px) {
         body {
           overflow: auto;
@@ -844,6 +1045,21 @@
         .stage {
           height: auto;
           min-height: 360px;
+        }
+
+        .composer-ghost {
+          display: none;
+        }
+
+        .voice-ring,
+        .utterance,
+        .packet,
+        .node,
+        .lane,
+        .generated-thread,
+        .mini-mic {
+          opacity: 1;
+          transform: none;
         }
 
         .loop,
@@ -986,7 +1202,7 @@
   </head>
   <body>
     <main class="deck" id="deck">
-      <section class="slide" aria-label="Slide 1">
+      <section class="slide" aria-label="Slide 1" data-slide="0" data-step="0">
         <div class="frame">
           <header>
             <div class="brand">
@@ -1009,6 +1225,11 @@
             </div>
 
             <div class="stage voice-stage" aria-label="Voice interaction animation">
+              <div class="composer-ghost" aria-hidden="true">
+                <div class="composer-icon"></div>
+                <div class="composer-lines"><i></i><i></i></div>
+                <div class="send-dot"></div>
+              </div>
               <div class="voice-ring" aria-hidden="true">
                 <div class="mic"></div>
               </div>
@@ -1026,7 +1247,7 @@
         </div>
       </section>
 
-      <section class="slide" aria-label="Slide 2">
+      <section class="slide" aria-label="Slide 2" data-slide="1" data-step="0">
         <div class="frame">
           <header>
             <div class="brand">
@@ -1070,7 +1291,7 @@
         </div>
       </section>
 
-      <section class="slide" aria-label="Slide 3">
+      <section class="slide" aria-label="Slide 3" data-slide="2" data-step="0">
         <div class="frame">
           <header>
             <div class="brand">
@@ -1097,7 +1318,7 @@
                   <b>codex-realtime-linux</b>
                   <span>voice session live</span>
                 </div>
-                <div class="thread">
+                <div class="thread generated-thread">
                   <b>demo presentation</b>
                   <span>running</span>
                 </div>
@@ -1146,21 +1367,62 @@
     <script>
       const deck = document.querySelector("#deck");
       const slides = Array.from(document.querySelectorAll(".slide"));
+      const stepCounts = [2, 2, 3];
       let current = 0;
+      let currentStep = 0;
+
+      const setStep = (step) => {
+        currentStep = Math.max(0, Math.min(stepCounts[current], step));
+        slides[current].dataset.step = String(currentStep);
+      };
 
       const goTo = (index) => {
-        current = Math.max(0, Math.min(slides.length - 1, index));
+        const next = Math.max(0, Math.min(slides.length - 1, index));
+        if (next === current) {
+          return;
+        }
+
+        current = next;
+        currentStep = 0;
+        setStep(0);
         slides[current].scrollIntoView({ behavior: "smooth", block: "start" });
       };
 
-      document.querySelector("#prev").addEventListener("click", () => goTo(current - 1));
-      document.querySelector("#next").addEventListener("click", () => goTo(current + 1));
+      const advance = () => {
+        if (currentStep < stepCounts[current]) {
+          setStep(currentStep + 1);
+          return;
+        }
+
+        goTo(current + 1);
+      };
+
+      const retreat = () => {
+        if (currentStep > 0) {
+          setStep(currentStep - 1);
+          return;
+        }
+
+        if (current > 0) {
+          current -= 1;
+          currentStep = stepCounts[current];
+          slides[current].dataset.step = String(currentStep);
+          slides[current].scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      };
+
+      document.querySelector("#prev").addEventListener("click", retreat);
+      document.querySelector("#next").addEventListener("click", advance);
 
       deck.addEventListener(
         "scroll",
         () => {
           const next = Math.round(deck.scrollTop / window.innerHeight);
-          current = Math.max(0, Math.min(slides.length - 1, next));
+          const nextSlide = Math.max(0, Math.min(slides.length - 1, next));
+          if (nextSlide !== current) {
+            current = nextSlide;
+            currentStep = Number(slides[current].dataset.step || 0);
+          }
         },
         { passive: true },
       );
@@ -1173,12 +1435,12 @@
           event.key === " "
         ) {
           event.preventDefault();
-          goTo(current + 1);
+          advance();
         }
 
         if (event.key === "ArrowUp" || event.key === "ArrowLeft" || event.key === "PageUp") {
           event.preventDefault();
-          goTo(current - 1);
+          retreat();
         }
       });
     </script>
