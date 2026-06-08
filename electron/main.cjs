@@ -14,6 +14,16 @@ const apiPort = Number(process.env.PORT || 3311)
 const apiUrl = process.env.CODEX_DESKTOP_API_URL || `http://127.0.0.1:${apiPort}`
 let apiProcess = null
 
+const openExternalIfAllowed = (url) => {
+  try {
+    const parsed = new URL(url)
+    if (!['http:', 'https:', 'mailto:'].includes(parsed.protocol)) return
+    shell.openExternal(url)
+  } catch {
+    // Ignore invalid external URLs from renderer content.
+  }
+}
+
 const waitForHttp = (url, timeoutMs = 15000) =>
   new Promise((resolve, reject) => {
     const deadline = Date.now() + timeoutMs
@@ -92,12 +102,22 @@ const createWindow = async () => {
   win.setBackgroundColor('#00000000')
 
   win.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url)
+    openExternalIfAllowed(url)
     return { action: 'deny' }
   })
 
   try {
     const appUrl = await ensureApiServer()
+    const appOrigin = new URL(appUrl).origin
+    win.webContents.on('will-navigate', (event, url) => {
+      try {
+        if (new URL(url).origin === appOrigin) return
+      } catch {
+        // Invalid navigations are blocked below.
+      }
+      event.preventDefault()
+      openExternalIfAllowed(url)
+    })
     await win.loadURL(appUrl)
   } catch (error) {
     await dialog.showMessageBox(win, {

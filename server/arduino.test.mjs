@@ -39,6 +39,24 @@ test('normalizeUploadRequest rejects custom sketches without setup and loop', ()
   )
 })
 
+test('normalizeUploadRequest rejects unsupported serial ports and malformed FQBNs', () => {
+  assert.throws(
+    () => normalizeUploadRequest({ port: '/etc/passwd' }),
+    (error) =>
+      error instanceof ArduinoUploadError &&
+      error.status === 400 &&
+      error.code === 'arduino_invalid_port',
+  )
+
+  assert.throws(
+    () => normalizeUploadRequest({ fqbn: 'arduino avr uno' }),
+    (error) =>
+      error instanceof ArduinoUploadError &&
+      error.status === 400 &&
+      error.code === 'arduino_invalid_fqbn',
+  )
+})
+
 test('listSerialPorts returns ttyACM and ttyUSB devices', async () => {
   const devDir = await mkdtemp(path.join(os.tmpdir(), 'codex-arduino-dev-'))
   await writeFile(path.join(devDir, 'ttyACM0'), '')
@@ -49,6 +67,26 @@ test('listSerialPorts returns ttyACM and ttyUSB devices', async () => {
     path.join(devDir, 'ttyACM0'),
     path.join(devDir, 'ttyUSB1'),
   ])
+})
+
+test('uploadArduinoSketch ignores unsupported detected board addresses and falls back to scanned serial ports', async () => {
+  const commands = []
+  const run = async (args) => {
+    commands.push(args)
+    return { stdout: `${args[0]} ok`, stderr: '' }
+  }
+
+  const result = await uploadArduinoSketch(
+    { action: 'onboard_led_on' },
+    {
+      run,
+      listPorts: async () => ['/dev/ttyUSB0'],
+      listBoards: async () => [{ address: '192.168.1.42', fqbn: 'arduino:avr:uno', boardName: 'Network board' }],
+    },
+  )
+
+  assert.equal(result.port, '/dev/ttyUSB0')
+  assert.deepEqual(commands[1].slice(0, 5), ['upload', '-p', '/dev/ttyUSB0', '--fqbn', 'arduino:avr:uno'])
 })
 
 test('uploadArduinoSketch compiles and uploads through arduino-cli', async () => {

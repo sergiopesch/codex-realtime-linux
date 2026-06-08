@@ -40,7 +40,8 @@ if [ "\${CODEX_REALTIME_DIALOUT_REEXEC:-}" != "1" ] &&
   command -v sg >/dev/null 2>&1 &&
   getent group dialout | grep -Eq "(^|[:,])$USER($|,)" &&
   ! id -nG | tr ' ' '\\n' | grep -qx dialout; then
-  exec env CODEX_REALTIME_DIALOUT_REEXEC=1 sg dialout -c "cd '$repo_root' && ./scripts/launch-desktop.sh"
+  reexec_cmd="$(printf 'cd %q && %q' "$repo_root" "$repo_root/scripts/launch-desktop.sh")"
+  exec env CODEX_REALTIME_DIALOUT_REEXEC=1 sg dialout -c "$reexec_cmd"
 fi
 
 state_dir="\${XDG_STATE_HOME:-$HOME/.local/state}/codex-realtime-linux"

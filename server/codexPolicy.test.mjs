@@ -27,7 +27,6 @@ test('guard routes generic file creation away from protected app source', () => 
   const guarded = goalWithWorkspaceGuard('Create a simple index.html about this project.', plan)
 
   assert.equal(plan?.relativePath, `${GENERATED_ARTIFACT_DIR}/20260608t200000-create-a-simple-index-html-about-this-project/index.html`)
-  assert.equal(plan?.url, '/agent-files/20260608t200000-create-a-simple-index-html-about-this-project/index.html')
   assert.match(guarded, new RegExp(`${GENERATED_ARTIFACT_DIR}/`))
   assert.match(guarded, /Protected app source paths:/)
   assert.match(guarded, /Never turn it into a standalone content page/)

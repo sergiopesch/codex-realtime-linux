@@ -43,7 +43,6 @@ export function artifactPlanForGoal(goal, date = new Date()) {
     directoryName,
     relativeDir: `${GENERATED_ARTIFACT_DIR}/${directoryName}`,
     relativePath: `${GENERATED_ARTIFACT_DIR}/${directoryName}/index.html`,
-    url: `/agent-files/${directoryName}/index.html`,
   }
 }
 

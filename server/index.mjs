@@ -13,7 +13,6 @@ import { getCurrentWeather, WeatherServiceError } from './weather.mjs'
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const DIST_DIR = path.join(REPO_ROOT, 'dist')
-const GENERATED_ARTIFACTS_DIR = path.join(REPO_ROOT, GENERATED_ARTIFACT_DIR)
 const PORT = Number(process.env.PORT ?? 3311)
 const ENV_OPENAI_API_KEY = process.env.OPENAI_API_KEY
 const OPENAI_ADMIN_KEY = process.env.OPENAI_ADMIN_KEY ?? process.env.OPENAI_API_ADMIN_KEY
@@ -86,6 +85,36 @@ function workspaceFromToken(token) {
 function isPathInside(parent, child) {
   const relative = path.relative(path.resolve(parent), path.resolve(child))
   return relative === '' || (relative && !relative.startsWith('..') && !path.isAbsolute(relative))
+}
+
+function isSafeArtifactName(value) {
+  return /^[a-z0-9][a-z0-9-]*$/i.test(value)
+}
+
+function httpError(message, { statusCode = 400, code = 'bad_request' } = {}) {
+  const error = new Error(message)
+  error.statusCode = statusCode
+  error.code = code
+  return error
+}
+
+function sendJsonError(res, error, { fallbackStatus = 500, fallbackMessage = 'Request failed.' } = {}) {
+  res.status(error?.statusCode || fallbackStatus).json({
+    error: error instanceof Error ? error.message : fallbackMessage,
+    ...(error?.code ? { code: error.code } : {}),
+  })
+}
+
+function requireText(value, label, { maxLength = 12_000 } = {}) {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw httpError(`${label} is required.`, { statusCode: 400, code: 'invalid_request' })
+  }
+
+  const text = value.trim()
+  if (text.length > maxLength) {
+    throw httpError(`${label} is too long.`, { statusCode: 400, code: 'invalid_request' })
+  }
+  return text
 }
 
 function artifactPlanForWorkspace(cwd, goal) {
@@ -299,7 +328,7 @@ async function createRealtimeClientSecret(openAiApiKey) {
     headers: {
       Authorization: `Bearer ${openAiApiKey}`,
       'Content-Type': 'application/json',
-      'OpenAI-Safety-Identifier': process.env.OPENAI_SAFETY_IDENTIFIER ?? 'local-demo-user',
+      'OpenAI-Safety-Identifier': process.env.OPENAI_SAFETY_IDENTIFIER ?? 'local-codex-realtime-user',
     },
     body: JSON.stringify({
       expires_after: { anchor: 'created_at', seconds: 600 },
@@ -332,9 +361,17 @@ function extractResponseText(response) {
 
 async function analyzeVisualContext({ imageDataUrl, source, prompt }) {
   const openAiApiKey = getOpenAiApiKey()
-  if (!openAiApiKey) throw new Error('OPENAI_API_KEY is required for visual context analysis.')
+  if (!openAiApiKey) {
+    throw httpError('OPENAI_API_KEY is required for visual context analysis.', {
+      statusCode: 503,
+      code: 'openai_key_missing',
+    })
+  }
   if (typeof imageDataUrl !== 'string' || !imageDataUrl.startsWith('data:image/')) {
-    throw new Error('imageDataUrl must be a data:image URL.')
+    throw httpError('imageDataUrl must be a data:image URL.', {
+      statusCode: 400,
+      code: 'invalid_visual_context',
+    })
   }
 
   const response = await fetch('https://api.openai.com/v1/responses', {
@@ -503,19 +540,46 @@ function normalizeString(value, fallback = '') {
   return typeof value === 'string' && value.trim() ? value.trim() : fallback
 }
 
+function normalizeWorkspacePath(value) {
+  const workspacePath = normalizeString(value)
+  return workspacePath && path.isAbsolute(workspacePath) ? path.resolve(workspacePath) : ''
+}
+
+async function requireWorkspaceDirectory(value, label = 'workspacePath') {
+  const workspacePath = normalizeString(value)
+  if (!workspacePath) {
+    throw httpError(`${label} is required.`, { statusCode: 400, code: 'invalid_workspace_path' })
+  }
+  if (!path.isAbsolute(workspacePath)) {
+    throw httpError(`${label} must be an absolute local path.`, { statusCode: 400, code: 'invalid_workspace_path' })
+  }
+
+  const resolvedPath = path.resolve(workspacePath)
+  let details
+  try {
+    details = await stat(resolvedPath)
+  } catch {
+    throw httpError(`${label} does not exist.`, { statusCode: 404, code: 'workspace_not_found' })
+  }
+  if (!details.isDirectory()) {
+    throw httpError(`${label} must be a directory.`, { statusCode: 400, code: 'invalid_workspace_path' })
+  }
+  return resolvedPath
+}
+
 function normalizeWorkspace(input) {
-  const id = normalizeString(input?.id || input?.path, `workspace-${Date.now()}`)
-  const pathValue = normalizeString(input?.path, id)
+  const pathValue = normalizeWorkspacePath(input?.path || input?.id)
+  if (!pathValue) return null
   return {
-    id,
-    name: normalizeString(input?.name, path.basename(pathValue) || id),
+    id: pathValue,
+    name: normalizeString(input?.name, path.basename(pathValue) || pathValue),
     path: pathValue,
     status: normalizeString(input?.status, 'local'),
   }
 }
 
 function normalizeConversation(input, workspacePath) {
-  const title = normalizeString(input?.title, 'Voice build')
+  const title = normalizeString(input?.title, 'Untitled conversation')
   const id = normalizeString(input?.id, `${workspacePath}::${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`)
   const status = ['draft', 'ready', 'running'].includes(input?.status) ? input.status : 'draft'
 
@@ -524,8 +588,8 @@ function normalizeConversation(input, workspacePath) {
     title,
     age: normalizeString(input?.age, 'saved'),
     status,
-    prompt: normalizeString(input?.prompt, 'Describe the next build step out loud.'),
-    response: normalizeString(input?.response, 'This agent conversation is ready for realtime voice direction.'),
+    prompt: normalizeString(input?.prompt),
+    response: normalizeString(input?.response),
     traces: Array.isArray(input?.traces) ? input.traces.filter((item) => typeof item === 'string') : [],
     transcript: Array.isArray(input?.transcript)
       ? input.transcript.filter((line) => line?.speaker === 'user' || line?.speaker === 'codex')
@@ -539,16 +603,18 @@ function normalizeConversation(input, workspacePath) {
 
 function normalizeAppState(input) {
   const state = emptyAppState()
-  state.workspaces = Array.isArray(input?.workspaces) ? input.workspaces.map(normalizeWorkspace) : []
+  state.workspaces = Array.isArray(input?.workspaces) ? input.workspaces.map(normalizeWorkspace).filter(Boolean) : []
   state.hiddenWorkspacePaths = Array.isArray(input?.hiddenWorkspacePaths)
-    ? input.hiddenWorkspacePaths.filter((item) => typeof item === 'string' && item.trim())
+    ? input.hiddenWorkspacePaths.map(normalizeWorkspacePath).filter(Boolean)
     : []
 
   if (input?.conversationsByWorkspace && typeof input.conversationsByWorkspace === 'object') {
     for (const [workspacePath, conversations] of Object.entries(input.conversationsByWorkspace)) {
+      const normalizedWorkspacePath = normalizeWorkspacePath(workspacePath)
+      if (!normalizedWorkspacePath) continue
       if (Array.isArray(conversations)) {
-        state.conversationsByWorkspace[workspacePath] = conversations.map((conversation) =>
-          normalizeConversation(conversation, workspacePath),
+        state.conversationsByWorkspace[normalizedWorkspacePath] = conversations.map((conversation) =>
+          normalizeConversation(conversation, normalizedWorkspacePath),
         )
       }
     }
@@ -834,7 +900,7 @@ app.post('/api/vision/context', async (req, res) => {
       source: req.body?.source ?? 'visual context',
     })
   } catch (error) {
-    res.status(502).json({ error: error.message })
+    sendJsonError(res, error, { fallbackStatus: 502, fallbackMessage: 'Visual context analysis failed.' })
   }
 })
 
@@ -950,13 +1016,14 @@ app.get('/api/codex/events', async (_req, res) => {
 app.get('/api/codex/threads', async (req, res) => {
   try {
     await codex.ensure()
+    const requestedLimit = Number(req.query.limit ?? 40)
     const params = {
-      limit: Number(req.query.limit ?? 40),
+      limit: Number.isFinite(requestedLimit) ? Math.min(Math.max(Math.floor(requestedLimit), 1), 100) : 40,
       sortKey: 'updated_at',
       sortDirection: 'desc',
       archived: false,
     }
-    if (typeof req.query.cwd === 'string' && req.query.cwd) params.cwd = req.query.cwd
+    if (typeof req.query.cwd === 'string' && req.query.cwd) params.cwd = await requireWorkspaceDirectory(req.query.cwd, 'cwd')
 
     const result = await codex.request('thread/list', params)
     res.json({
@@ -964,26 +1031,25 @@ app.get('/api/codex/threads', async (req, res) => {
       conversations: (result.data ?? []).map(threadToConversation),
     })
   } catch (error) {
-    res.status(502).json({ error: error.message })
+    sendJsonError(res, error, { fallbackStatus: 502, fallbackMessage: 'Failed to list Codex threads.' })
   }
 })
 
 app.post('/api/codex/thread/archive', async (req, res) => {
   try {
+    const threadId = requireText(req.body?.threadId, 'threadId', { maxLength: 300 })
     await codex.ensure()
-    res.json(await codex.request('thread/archive', { threadId: req.body.threadId }))
+    res.json(await codex.request('thread/archive', { threadId }))
   } catch (error) {
-    res.status(502).json({ error: error.message })
+    sendJsonError(res, error, { fallbackStatus: 502, fallbackMessage: 'Failed to archive Codex thread.' })
   }
 })
 
 app.post('/api/codex/task', async (req, res) => {
-  const requestedCwd = req.body.cwd || REPO_ROOT
-  const cwd = path.resolve(requestedCwd)
-  const goal = req.body.goal || 'Inspect this project and summarize the next best implementation step.'
-  const artifactPlan = artifactPlanForWorkspace(requestedCwd, goal)
-
   try {
+    const goal = requireText(req.body?.goal, 'goal')
+    const cwd = await requireWorkspaceDirectory(req.body?.cwd || REPO_ROOT, 'cwd')
+    const artifactPlan = artifactPlanForWorkspace(cwd, goal)
     if (artifactPlan) await mkdir(artifactPlan.absoluteDir, { recursive: true })
     await codex.ensure()
     const threadResult = await codex.request('thread/start', {
@@ -1000,28 +1066,32 @@ app.post('/api/codex/task', async (req, res) => {
     })
     res.json({ thread: threadResult.thread, turn: turnResult.turn, artifact: artifactPlan })
   } catch (error) {
-    res.status(502).json({ error: error.message })
+    sendJsonError(res, error, { fallbackStatus: 502, fallbackMessage: 'Failed to start Codex task.' })
   }
 })
 
 app.post('/api/codex/steer', async (req, res) => {
   try {
+    const threadId = requireText(req.body?.threadId, 'threadId', { maxLength: 300 })
+    const instruction = requireText(req.body?.instruction, 'instruction')
     await codex.ensure()
     res.json(await codex.request('turn/steer', {
-      threadId: req.body.threadId,
-      input: [{ type: 'text', text: req.body.instruction }],
+      threadId,
+      input: [{ type: 'text', text: instruction }],
     }))
   } catch (error) {
-    res.status(502).json({ error: error.message })
+    sendJsonError(res, error, { fallbackStatus: 502, fallbackMessage: 'Failed to steer Codex task.' })
   }
 })
 
 app.post('/api/codex/interrupt', async (req, res) => {
   try {
+    const threadId = requireText(req.body?.threadId, 'threadId', { maxLength: 300 })
+    const turnId = requireText(req.body?.turnId, 'turnId', { maxLength: 300 })
     await codex.ensure()
-    res.json(await codex.request('turn/interrupt', { threadId: req.body.threadId, turnId: req.body.turnId }))
+    res.json(await codex.request('turn/interrupt', { threadId, turnId }))
   } catch (error) {
-    res.status(502).json({ error: error.message })
+    sendJsonError(res, error, { fallbackStatus: 502, fallbackMessage: 'Failed to interrupt Codex task.' })
   }
 })
 
@@ -1030,8 +1100,14 @@ app.get('/api/app-state', async (_req, res) => {
 })
 
 app.post('/api/app-state/workspaces', async (req, res) => {
-  const workspace = normalizeWorkspace(req.body.workspace ?? req.body)
-  const workspacePath = workspace.path ?? workspace.id
+  let workspacePath
+  try {
+    workspacePath = await requireWorkspaceDirectory((req.body.workspace ?? req.body)?.path || (req.body.workspace ?? req.body)?.id, 'workspacePath')
+  } catch (error) {
+    res.status(error.statusCode || 400).json({ error: error.message })
+    return
+  }
+  const workspace = normalizeWorkspace({ ...(req.body.workspace ?? req.body), id: workspacePath, path: workspacePath })
 
   const { state } = await mutateAppState(async (state) => {
     state.workspaces = [workspace, ...state.workspaces.filter((item) => (item.path ?? item.id) !== workspacePath)]
@@ -1042,9 +1118,9 @@ app.post('/api/app-state/workspaces', async (req, res) => {
 })
 
 app.post('/api/app-state/workspaces/delete', async (req, res) => {
-  const workspacePath = normalizeString(req.body.workspacePath)
+  const workspacePath = normalizeWorkspacePath(req.body.workspacePath)
   if (!workspacePath) {
-    res.status(400).json({ error: 'workspacePath is required' })
+    res.status(400).json({ error: 'workspacePath must be an absolute local path' })
     return
   }
 
@@ -1056,9 +1132,9 @@ app.post('/api/app-state/workspaces/delete', async (req, res) => {
 })
 
 app.post('/api/app-state/conversations', async (req, res) => {
-  const workspacePath = normalizeString(req.body.workspacePath, req.body.conversation?.workspacePath)
+  const workspacePath = normalizeWorkspacePath(req.body.workspacePath || req.body.conversation?.workspacePath)
   if (!workspacePath) {
-    res.status(400).json({ error: 'workspacePath is required' })
+    res.status(400).json({ error: 'workspacePath must be an absolute local path' })
     return
   }
 
@@ -1071,10 +1147,10 @@ app.post('/api/app-state/conversations', async (req, res) => {
 })
 
 app.patch('/api/app-state/conversations', async (req, res) => {
-  const workspacePath = normalizeString(req.body.workspacePath)
+  const workspacePath = normalizeWorkspacePath(req.body.workspacePath)
   const conversationId = normalizeString(req.body.conversationId)
   if (!workspacePath || !conversationId) {
-    res.status(400).json({ error: 'workspacePath and conversationId are required' })
+    res.status(400).json({ error: 'absolute workspacePath and conversationId are required' })
     return
   }
 
@@ -1092,10 +1168,10 @@ app.patch('/api/app-state/conversations', async (req, res) => {
 })
 
 app.post('/api/app-state/conversations/delete', async (req, res) => {
-  const workspacePath = normalizeString(req.body.workspacePath)
+  const workspacePath = normalizeWorkspacePath(req.body.workspacePath)
   const conversationId = normalizeString(req.body.conversationId)
   if (!workspacePath || !conversationId) {
-    res.status(400).json({ error: 'workspacePath and conversationId are required' })
+    res.status(400).json({ error: 'absolute workspacePath and conversationId are required' })
     return
   }
 
@@ -1149,13 +1225,10 @@ app.get('/api/spend', async (_req, res) => {
 
 app.get('/api/artifacts', async (req, res) => {
   try {
-    const workspacePath =
-      typeof req.query.workspacePath === 'string' && req.query.workspacePath.trim()
-        ? req.query.workspacePath.trim()
-        : REPO_ROOT
+    const workspacePath = await requireWorkspaceDirectory(req.query.workspacePath, 'workspacePath')
     res.json({ data: await listGeneratedArtifacts(workspacePath) })
   } catch (error) {
-    res.status(502).json({ error: error instanceof Error ? error.message : 'Failed to list generated artifacts.' })
+    res.status(error.statusCode || 502).json({ error: error instanceof Error ? error.message : 'Failed to list generated artifacts.' })
   }
 })
 
@@ -1164,6 +1237,10 @@ app.get(/^\/workspace-artifacts\/([^/]+)\/([^/]+)\/(.+)$/, (req, res) => {
     const token = req.params[0]
     const artifactName = req.params[1]
     const filePath = req.params[2]
+    if (!isSafeArtifactName(artifactName)) {
+      res.status(400).send('Invalid artifact name')
+      return
+    }
     const workspacePath = workspaceFromToken(token)
     const artifactRoot = path.join(workspacePath, GENERATED_ARTIFACT_DIR, artifactName)
     const requestedPath = path.resolve(artifactRoot, filePath)
@@ -1186,7 +1263,6 @@ app.use('/workspace-artifacts', (_req, res) => {
   res.status(404).send('Artifact not found')
 })
 
-app.use('/agent-files', express.static(GENERATED_ARTIFACTS_DIR))
 app.use(express.static(DIST_DIR))
 app.get(/^(?!\/api(?:\/|$)).*/, (_req, res) => {
   res.sendFile(path.join(DIST_DIR, 'index.html'))

@@ -10,6 +10,9 @@ const ARDUINO_CLI_PATH = process.env.ARDUINO_CLI_PATH || path.join(REPO_ROOT, 'b
 const DEFAULT_SKETCH_NAME = 'CodexRealtimeSketch'
 const MAX_SKETCH_BYTES = 64 * 1024
 const SERIAL_PORT_PATTERN = /^tty(?:ACM|USB)\d+$/
+const SERIAL_PORT_PATH_PATTERN = /^\/dev\/tty(?:ACM|USB)\d+$/
+const SERIAL_BY_ID_PATTERN = /^\/dev\/serial\/by-id\/[a-zA-Z0-9._:-]+$/
+const FQBN_PATTERN = /^[a-zA-Z0-9_.-]+:[a-zA-Z0-9_.-]+:[a-zA-Z0-9_.-]+(?::[a-zA-Z0-9_.=,-]+)?$/
 
 export class ArduinoUploadError extends Error {
   constructor(message, { code = 'arduino_error', status = 500, details } = {}) {
@@ -88,6 +91,20 @@ export function normalizeUploadRequest(input = {}) {
     })
   }
 
+  if (port && !isSupportedSerialPort(port)) {
+    throw new ArduinoUploadError('Arduino serial ports must be /dev/ttyACM*, /dev/ttyUSB*, or /dev/serial/by-id/*.', {
+      code: 'arduino_invalid_port',
+      status: 400,
+    })
+  }
+
+  if (fqbn && !FQBN_PATTERN.test(fqbn)) {
+    throw new ArduinoUploadError('Arduino FQBN values must use package:architecture:board format.', {
+      code: 'arduino_invalid_fqbn',
+      status: 400,
+    })
+  }
+
   return { action, port, fqbn, sketch, sketchName }
 }
 
@@ -103,6 +120,10 @@ export async function listSerialPorts({ devDir = '/dev' } = {}) {
     .filter((entry) => SERIAL_PORT_PATTERN.test(entry))
     .sort()
     .map((entry) => path.join(devDir, entry))
+}
+
+function isSupportedSerialPort(port) {
+  return SERIAL_PORT_PATH_PATTERN.test(port) || SERIAL_BY_ID_PATTERN.test(port)
 }
 
 function summarizeCommandOutput(stdout, stderr) {
@@ -233,7 +254,8 @@ export async function uploadArduinoSketch(
   const request = normalizeUploadRequest(input)
   const [ports, boards] = await Promise.all([listPorts(), listBoards({ run })])
   const detectedBoard = boards.find((board) => board.address === request.port) ?? boards[0]
-  const port = request.port ?? detectedBoard?.address ?? ports[0]
+  const detectedPort = detectedBoard?.address && isSupportedSerialPort(detectedBoard.address) ? detectedBoard.address : null
+  const port = request.port ?? detectedPort ?? ports[0]
   if (!port) {
     throw new ArduinoUploadError('No Arduino serial port was found. Plug in the board and try again.', {
       code: 'arduino_port_not_found',

@@ -1,10 +1,10 @@
 # Codex Realtime Linux
 
-An Electron MVP for a Linux-first, realtime voice Codex client.
+An Electron app for a Linux-first, realtime voice Codex client.
 
-This demo explores a voice-led interaction model for Codex: the user speaks, shares screen or image context, interrupts direction naturally, and the Codex execution layer works behind the scenes. The UI is intentionally desktop-like: workspace navigation on the left, nested agent conversations inside each workspace, and a collaborative voice control surface in the center.
+This app explores a voice-led interaction model for Codex: the user speaks, shares screen or image context, interrupts direction naturally, and the Codex execution layer works behind the scenes. The UI is intentionally desktop-like: workspace navigation on the left, nested agent conversations inside each workspace, and a collaborative voice control surface in the center.
 
-This is an inspirational demo. It does not reverse engineer the closed Codex Mac app internals.
+This is an independent prototype. It does not reverse engineer the closed Codex Mac app internals.
 
 ![Codex Realtime Linux voice workspace](docs/images/codex-realtime-linux-solution.png)
 
@@ -69,7 +69,7 @@ After installation, open the app menu and launch **Codex**. The launcher starts 
 
 ## Generated HTML Previews
 
-Realtime-generated HTML presentations are written into the selected workspace under `public/agent-files/` and shown in the in-app browser preview when the Codex task finishes. The app does not ship a fixed demo presentation route.
+Realtime-generated HTML presentations are written into the selected workspace under `public/agent-files/` and shown in the in-app browser preview when the Codex task finishes. Preview routes are workspace-scoped and require a real local workspace path; the app does not expose a fixed bundled presentation route.
 
 ## API Keys
 
@@ -79,7 +79,7 @@ Live voice requires:
 OPENAI_API_KEY=sk-...
 ```
 
-For an API-key-only Codex demo:
+For API-key-only Codex execution:
 
 ```bash
 OPENAI_API_KEY=sk-...
@@ -150,7 +150,7 @@ OPENAI_USAGE_GBP_RATE_API=https://api.frankfurter.app/latest?from=USD&to=GBP
 - `src/App.css` defines the compact dark desktop layout.
 - `electron/main.cjs` creates the desktop window. In development it loads the Vite renderer; from the app-menu launcher it starts the local API server and loads the built renderer served by `server/index.mjs`.
 
-## Weather Demo
+## Weather Check
 
 Open `Settings` in the app, enter a location, and use `Get weather` to verify the feature in the UI.
 
@@ -160,7 +160,7 @@ You can also hit the local API directly after `npm run dev`:
 curl "http://127.0.0.1:3311/api/weather/current?location=Berlin&units=metric"
 ```
 
-## Arduino USB Voice Demo
+## Arduino USB Voice Flow
 
 On Ubuntu, the local API watches `udevadm monitor` for USB serial devices such as `/dev/ttyACM0` and `/dev/ttyUSB0`. Start voice, then plug in an Arduino Uno, Nano, Mega, Leonardo, or common CH340/CP210x/FTDI Arduino-compatible board. The renderer cancels the current Realtime response, clears pending output audio, injects the USB connection event into the active conversation, and asks Codex to say one short playful British-style joke.
 
@@ -176,7 +176,7 @@ If the board appears but later serial reading is needed, add your Ubuntu user to
 sudo usermod -aG dialout "$USER"
 ```
 
-## Arduino Upload Demo
+## Arduino Upload Flow
 
 Arduino uploads use `arduino-cli`. Install it, initialise the AVR core for Uno-compatible boards, then restart the app:
 
@@ -195,7 +195,7 @@ ARDUINO_CLI_PATH=/absolute/path/to/arduino-cli
 ARDUINO_DEFAULT_FQBN=arduino:avr:uno
 ```
 
-With voice running and the board connected, say something like: “turn on the Arduino light” or “make the Arduino LED blink”. Realtime calls `arduino_upload_sketch`, the server compiles the sketch, and uploads it to the first detected `/dev/ttyACM*` or `/dev/ttyUSB*` port unless a specific port is supplied.
+With voice running and the board connected, say something like: “turn on the Arduino light” or “make the Arduino LED blink”. Realtime calls `arduino_upload_sketch`, the server compiles the sketch, and uploads it to the first detected `/dev/ttyACM*` or `/dev/ttyUSB*` port unless a supported `/dev/ttyACM*`, `/dev/ttyUSB*`, or `/dev/serial/by-id/*` port is supplied explicitly.
 
 You can test the API directly:
 
@@ -216,7 +216,7 @@ Based on public Codex app docs and product pages:
 - Computer Use and Appshots provide visual desktop/app context with explicit permissions.
 - App-server is the public integration surface for custom clients: agent conversations, turns, approvals, history, auth, apps, models, and streamed events.
 
-The demo’s differentiator is replacing the composer-first interaction model with a realtime voice router that supervises Codex execution. Realtime is the conversational layer: it listens, clarifies intent, and decides whether the user is chatting, starting work, steering active work, or interrupting work. The Codex app-server harness is the execution layer: it owns coding threads, turns, approvals, history, and streamed agent events. Visual inputs are bridged into voice as summarized context rather than streamed as continuous video.
+The app’s differentiator is replacing the composer-first interaction model with a realtime voice router that supervises Codex execution. Realtime is the conversational layer: it listens, clarifies intent, and decides whether the user is chatting, starting work, steering active work, or interrupting work. The Codex app-server harness is the execution layer: it owns coding threads, turns, approvals, history, and streamed agent events. Visual inputs are bridged into voice as summarized context rather than streamed as continuous video.
 
 ## Next Milestones
 

@@ -68,7 +68,7 @@ type AgentConversation = {
   response: string
   traces: string[]
   transcript: { speaker: 'user' | 'codex'; text: string }[]
-  source?: 'demo' | 'local' | 'codex'
+  source?: 'local' | 'codex'
   codexThreadId?: string | null
   workspacePath?: string
   createdAt?: string
@@ -268,83 +268,28 @@ const formatGbp = (value: number | null | undefined) =>
 const formatTokens = (value: number | null | undefined) =>
   new Intl.NumberFormat('en-GB', { notation: 'compact', maximumFractionDigits: 1 }).format(value ?? 0)
 
-const conversationCopy: Record<string, Omit<AgentConversation, 'id' | 'age' | 'status'>> = {
-  'Realtime Linux MVP': {
-    title: 'Realtime Linux MVP',
-    prompt: 'Build a voice-first Codex desktop demo for Linux. No text composer.',
-    response:
-      'Coordinate the Codex execution layer from live speech, keep every thread steerable, and treat screen or image context as explicit input.',
-    traces: ['Workspace selected', 'Voice direction is primary', 'Codex agents ready behind the session'],
-    transcript: [
-      { speaker: 'user', text: 'I want this to feel like Codex, but the main action is talking.' },
-      { speaker: 'codex', text: 'I’ll keep the center surface voice-led and make transcript optional.' },
-    ],
-  },
-  'Connect voice harness': {
-    title: 'Connect voice harness',
-    prompt: 'Wire realtime speech to Codex task creation, steering, and interruption.',
-    response:
-      'The voice layer starts Codex tasks, sends steering instructions, and can interrupt a running build without switching into a text composer.',
-    traces: ['Realtime data channel receives tool calls', 'Codex app-server starts task turns', 'Interrupt stays available in the voice dock'],
-    transcript: [
-      { speaker: 'user', text: 'Start a task, but let me interrupt if the product direction changes.' },
-      { speaker: 'codex', text: 'I’ll keep the build running behind the voice conversation and expose interrupt in the dock.' },
-    ],
-  },
-  'Review spending widgets': {
-    title: 'Review spending widgets',
-    prompt: 'Show usage and cost clearly without making it the primary task surface.',
-    response:
-      'Usage belongs in the system context: visible when needed, but secondary to the realtime collaboration loop.',
-    traces: ['Usage appears in right pane', 'System Usage screen has details', 'Voice dock remains persistent'],
-    transcript: [
-      { speaker: 'user', text: 'I need to know what I’m spending while building.' },
-      { speaker: 'codex', text: 'I’ll keep spend visible and make deeper usage a system screen.' },
-    ],
-  },
-  'Browser-use checkpoint': {
-    title: 'Browser-use checkpoint',
-    prompt: 'Reserve a browser/computer-use viewport for Codex QA and visual context.',
-    response:
-      'The browser panel stays inspectable while the voice conversation continues. Screen context can be attached explicitly from the dock.',
-    traces: ['Computer-use viewport reserved', 'Screen context is explicit', 'Browser QA remains a background agent lane'],
-    transcript: [
-      { speaker: 'user', text: 'I want the agent to see what I’m seeing and keep building.' },
-      { speaker: 'codex', text: 'Share screen from the voice dock, then steer the agent conversationally.' },
-    ],
-  },
-}
-
-const makeConversation = (
+const makeDraftConversation = (
   workspacePath: string,
   title: string,
   age: string,
   status: AgentConversation['status'] = 'ready',
 ): AgentConversation => {
-  const copy = conversationCopy[title] ?? {
+  const conversation = {
     title,
-    prompt: 'Describe the next build step out loud.',
-    response: 'This agent conversation is ready for realtime voice direction.',
-    traces: ['Workspace selected', 'Voice direction pending', 'Codex execution ready'],
-    transcript: [
-      { speaker: 'user' as const, text: 'Create a new agent conversation for this workspace.' },
-      { speaker: 'codex' as const, text: 'Ready. Start voice and describe the build goal.' },
-    ],
+    prompt: '',
+    response: '',
+    traces: [],
+    transcript: [],
   }
 
   return {
-    ...copy,
+    ...conversation,
     id: `${workspacePath}::${slug(title)}`,
     age,
     status,
-    source: 'demo',
+    source: 'local',
   }
 }
-
-const defaultConversationsForWorkspace = (workspacePath: string, index: number) =>
-  ['Realtime Linux MVP', 'Connect voice harness', ...(index === 0 ? ['Review spending widgets', 'Browser-use checkpoint'] : [])].map(
-    (title, titleIndex) => makeConversation(workspacePath, title, titleIndex === 0 ? 'now' : `${titleIndex}h`, 'ready'),
-  )
 
 const mergeConversations = (current: AgentConversation[], incoming: AgentConversation[]) => {
   const seen = new Set<string>()
@@ -464,13 +409,9 @@ function App() {
       return true
     })
   }, [fallbackWorkspaces, hiddenWorkspacePaths, userWorkspaces, workspaces])
-  const workspaceRoots = workspaceSource.slice(0, 8).map((workspace, index) => {
+  const workspaceRoots = workspaceSource.slice(0, 8).map((workspace) => {
     const workspacePath = workspace.path ?? workspace.id
-    const conversations =
-      conversationsByWorkspace[workspacePath] ??
-      (userWorkspaces.some((userWorkspace) => (userWorkspace.path ?? userWorkspace.id) === workspacePath)
-        ? []
-        : defaultConversationsForWorkspace(workspacePath, index))
+    const conversations = conversationsByWorkspace[workspacePath] ?? []
     return { workspace, workspacePath, conversations }
   })
   const selectedWorkspaceConversations =
@@ -496,9 +437,7 @@ function App() {
   const agentIsWorkingOnArtifact = Boolean(pendingArtifact && activeThreadId)
   const subagentTitle = activeConversation?.title ? briefThreadTitle(activeConversation.title) : 'Codex'
   const subagentHint =
-    activeConversation?.prompt && activeConversation.prompt !== 'Describe the next build step out loud.'
-      ? activeConversation.prompt
-      : activeConversation?.response || 'Working through the active Codex turn.'
+    activeConversation?.prompt || activeConversation?.response || 'Working through the active Codex turn.'
 
   const appendEvent = (method: string, params?: Record<string, unknown>) => {
     setEvents((current) => mergeEvents(current, [{ method, receivedAt: new Date().toISOString(), params }]))
@@ -593,6 +532,24 @@ function App() {
     audioContextRef.current?.close().catch(() => {})
     audioContextRef.current = null
     setWaveLevels(Array.from({ length: 18 }, () => 0.18))
+  }
+
+  const cleanupVoiceSession = () => {
+    const peer = peerRef.current
+    peerRef.current = null
+    dataChannelRef.current = null
+
+    peer?.getSenders().forEach((sender) => sender.track?.stop())
+    peer?.close()
+
+    if (audioRef.current) {
+      audioRef.current.srcObject = null
+      audioRef.current.remove()
+      audioRef.current = null
+    }
+
+    stopWaveform()
+    setVoiceMuted(false)
   }
 
   const startWaveform = (stream: MediaStream) => {
@@ -773,7 +730,7 @@ function App() {
     return data.data
   }, [status?.appRoot])
 
-  const requestWeatherDemo = async (event?: FormEvent<HTMLFormElement>) => {
+  const requestWeather = async (event?: FormEvent<HTMLFormElement>) => {
     event?.preventDefault()
     setWeatherLoading(true)
     setWeatherError(null)
@@ -844,9 +801,9 @@ function App() {
       return
     }
     const existing = conversationsByWorkspace[workspacePath] ?? []
-    const title = `Voice build ${existing.length + 1}`
+    const title = `Voice conversation ${existing.length + 1}`
     const conversation = {
-      ...makeConversation(workspacePath, title, 'draft', 'draft'),
+      ...makeDraftConversation(workspacePath, title, 'draft', 'draft'),
       source: 'local' as const,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -872,7 +829,11 @@ function App() {
 
   const addWorkspaceFromFolder = async ({ name: rawName, path: rawPath }: { name: string; path?: string }) => {
     const name = rawName.trim() || 'New workspace'
-    const workspacePath = rawPath?.trim() || `picked-folder://${slug(name) || 'workspace'}-${Date.now()}`
+    const workspacePath = rawPath?.trim() ?? ''
+    if (!workspacePath) {
+      setLastError('A real local folder path is required. Launch the desktop app and use Add workspace from there.')
+      return
+    }
     const workspace = { id: workspacePath, name, path: workspacePath }
 
     setUserWorkspaces((current) => [workspace, ...current])
@@ -921,7 +882,7 @@ function App() {
       try {
         const handle = await picker.call(window)
         if (handle?.name) {
-          await addWorkspaceFromFolder({ name: handle.name })
+          setLastError('Browser folder handles do not expose local paths. Use the desktop app to add a workspace folder.')
           return
         }
       } catch (error) {
@@ -933,7 +894,7 @@ function App() {
   }
 
   const deleteConversation = async (workspacePath: string, conversationId: string) => {
-    const current = conversationsByWorkspace[workspacePath] ?? defaultConversationsForWorkspace(workspacePath, 0)
+    const current = conversationsByWorkspace[workspacePath] ?? []
     const deleted = current.find((conversation) => conversation.id === conversationId)
     const next = current.filter((conversation) => conversation.id !== conversationId)
     const fallback = next[0]
@@ -1085,12 +1046,7 @@ function App() {
         const visibleSavedWorkspaces = savedWorkspaces.filter((workspace) => !hiddenPaths.includes(workspace.path ?? workspace.id))
         const firstPath = visibleRoots[0]?.path ?? visibleRoots[0]?.id ?? ''
         const preferredPath = visibleSavedWorkspaces[0]?.path ?? visibleSavedWorkspaces[0]?.id ?? firstPath
-        const savedWorkspaceIsPreferred = savedWorkspaces.some((workspace) => (workspace.path ?? workspace.id) === preferredPath)
-        const firstConversation =
-          preferredPath
-            ? savedConversationState[preferredPath]?.[0] ??
-              (savedWorkspaceIsPreferred ? null : defaultConversationsForWorkspace(preferredPath, 0)[0])
-            : null
+        const firstConversation = preferredPath ? savedConversationState[preferredPath]?.[0] ?? null : null
 
         setStatus(statusData)
         setWorkspaces(workspaceData.data)
@@ -1109,9 +1065,9 @@ function App() {
         }
         setConversationsByWorkspace(() => {
           const next = { ...savedConversationState }
-          roots.forEach((workspace, index) => {
+          roots.forEach((workspace) => {
             const workspacePath = workspace.path ?? workspace.id
-            if (!next[workspacePath]) next[workspacePath] = defaultConversationsForWorkspace(workspacePath, index)
+            if (!next[workspacePath]) next[workspacePath] = []
           })
           return next
         })
@@ -1407,6 +1363,7 @@ function App() {
     setLastError(null)
     setVoiceState('connecting')
     setVoiceMuted(false)
+    setRealtimeTranscript([])
     setActivity('Voice router', 'Connecting')
 
     try {
@@ -1425,9 +1382,27 @@ function App() {
 
       const dataChannel = pc.createDataChannel('oai-events')
       dataChannelRef.current = dataChannel
+      const handleRealtimeDisconnect = (message: string) => {
+        if (dataChannelRef.current !== dataChannel) return
+        cleanupVoiceSession()
+        setVoiceState('idle')
+        setActivity('Voice router idle')
+        setLastError(message)
+      }
+      pc.addEventListener('connectionstatechange', () => {
+        if (peerRef.current === pc && pc.connectionState === 'failed') {
+          handleRealtimeDisconnect('Realtime voice connection failed.')
+        }
+      })
       dataChannel.addEventListener('open', () => {
         setActivity('Voice router', 'Realtime ready')
         flushPendingVisualContext()
+      })
+      dataChannel.addEventListener('close', () => {
+        handleRealtimeDisconnect('Realtime voice session closed.')
+      })
+      dataChannel.addEventListener('error', () => {
+        handleRealtimeDisconnect('Realtime voice data channel failed.')
       })
       dataChannel.addEventListener('message', (event) => {
         let message: Record<string, unknown>
@@ -1489,22 +1464,16 @@ function App() {
       setActivity('Voice router', 'Listening')
       showNotice('Voice is live.')
     } catch (error) {
+      cleanupVoiceSession()
       setVoiceState('idle')
-      setVoiceMuted(false)
-      stopWaveform()
       setActivity('Voice router idle')
       setLastError(error instanceof Error ? error.message : 'Voice session failed')
     }
   }
 
   const stopVoice = () => {
-    peerRef.current?.getSenders().forEach((sender) => sender.track?.stop())
-    peerRef.current?.close()
-    peerRef.current = null
-    dataChannelRef.current = null
-    stopWaveform()
+    cleanupVoiceSession()
     setVoiceState('idle')
-    setVoiceMuted(false)
     setActivity('Voice router idle')
     showNotice('Voice session stopped.')
   }
@@ -1704,7 +1673,7 @@ function App() {
             </span>
           </form>
 
-          <form className="settings-key-form weather-request-form" onSubmit={(event) => void requestWeatherDemo(event)}>
+          <form className="settings-key-form weather-request-form" onSubmit={(event) => void requestWeather(event)}>
             <label htmlFor="weather-location">Current weather</label>
             <div className="weather-request-row">
               <input
