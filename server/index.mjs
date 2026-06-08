@@ -1132,9 +1132,11 @@ app.post('/api/app-state/workspaces/delete', async (req, res) => {
 })
 
 app.post('/api/app-state/conversations', async (req, res) => {
-  const workspacePath = normalizeWorkspacePath(req.body.workspacePath || req.body.conversation?.workspacePath)
-  if (!workspacePath) {
-    res.status(400).json({ error: 'workspacePath must be an absolute local path' })
+  let workspacePath
+  try {
+    workspacePath = await requireWorkspaceDirectory(req.body.workspacePath || req.body.conversation?.workspacePath, 'workspacePath')
+  } catch (error) {
+    sendJsonError(res, error, { fallbackStatus: 400, fallbackMessage: 'Invalid workspace path.' })
     return
   }
 
@@ -1147,10 +1149,17 @@ app.post('/api/app-state/conversations', async (req, res) => {
 })
 
 app.patch('/api/app-state/conversations', async (req, res) => {
-  const workspacePath = normalizeWorkspacePath(req.body.workspacePath)
   const conversationId = normalizeString(req.body.conversationId)
-  if (!workspacePath || !conversationId) {
-    res.status(400).json({ error: 'absolute workspacePath and conversationId are required' })
+  if (!conversationId) {
+    res.status(400).json({ error: 'conversationId is required' })
+    return
+  }
+
+  let workspacePath
+  try {
+    workspacePath = await requireWorkspaceDirectory(req.body.workspacePath, 'workspacePath')
+  } catch (error) {
+    sendJsonError(res, error, { fallbackStatus: 400, fallbackMessage: 'Invalid workspace path.' })
     return
   }
 
@@ -1232,7 +1241,7 @@ app.get('/api/artifacts', async (req, res) => {
   }
 })
 
-app.get(/^\/workspace-artifacts\/([^/]+)\/([^/]+)\/(.+)$/, (req, res) => {
+app.get(/^\/workspace-artifacts\/([^/]+)\/([^/]+)\/(.+)$/, async (req, res) => {
   try {
     const token = req.params[0]
     const artifactName = req.params[1]
@@ -1241,7 +1250,7 @@ app.get(/^\/workspace-artifacts\/([^/]+)\/([^/]+)\/(.+)$/, (req, res) => {
       res.status(400).send('Invalid artifact name')
       return
     }
-    const workspacePath = workspaceFromToken(token)
+    const workspacePath = await requireWorkspaceDirectory(workspaceFromToken(token), 'workspace token')
     const artifactRoot = path.join(workspacePath, GENERATED_ARTIFACT_DIR, artifactName)
     const requestedPath = path.resolve(artifactRoot, filePath)
 
@@ -1254,8 +1263,8 @@ app.get(/^\/workspace-artifacts\/([^/]+)\/([^/]+)\/(.+)$/, (req, res) => {
       if (!error || res.headersSent) return
       res.status(error.statusCode || 404).send('Not found')
     })
-  } catch {
-    res.status(400).send('Invalid artifact path')
+  } catch (error) {
+    res.status(error.statusCode || 400).send(error instanceof Error ? error.message : 'Invalid artifact path')
   }
 })
 
