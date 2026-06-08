@@ -1,7 +1,7 @@
 import 'dotenv/config'
 import express from 'express'
 import { spawn } from 'node:child_process'
-import { chmod, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { createInterface } from 'node:readline'
@@ -61,10 +61,29 @@ async function loadLocalSecrets() {
   }
 }
 
+async function writeJsonFileAtomic(filePath, value, { dirMode, fileMode } = {}) {
+  await mkdir(path.dirname(filePath), { recursive: true, ...(dirMode ? { mode: dirMode } : {}) })
+  const tempPath = path.join(
+    path.dirname(filePath),
+    `.${path.basename(filePath)}.${process.pid}.${Date.now()}.tmp`,
+  )
+  try {
+    await writeFile(tempPath, `${JSON.stringify(value, null, 2)}\n`, fileMode ? { mode: fileMode } : undefined)
+    if (fileMode) await chmod(tempPath, fileMode)
+    await rename(tempPath, filePath)
+    if (fileMode) await chmod(filePath, fileMode)
+  } catch (error) {
+    try {
+      await rm(tempPath, { force: true })
+    } catch {
+      // Ignore cleanup errors; the original write failure is more useful.
+    }
+    throw error
+  }
+}
+
 async function writeLocalSecrets(nextSecrets) {
-  await mkdir(path.dirname(SECRETS_PATH), { recursive: true, mode: 0o700 })
-  await writeFile(SECRETS_PATH, `${JSON.stringify(nextSecrets, null, 2)}\n`, { mode: 0o600 })
-  await chmod(SECRETS_PATH, 0o600)
+  await writeJsonFileAtomic(SECRETS_PATH, nextSecrets, { dirMode: 0o700, fileMode: 0o600 })
   localSecrets = nextSecrets
 }
 
@@ -687,8 +706,7 @@ async function readAppState() {
 }
 
 async function writeAppState(state) {
-  await mkdir(path.dirname(STATE_PATH), { recursive: true })
-  await writeFile(STATE_PATH, `${JSON.stringify(normalizeAppState(state), null, 2)}\n`)
+  await writeJsonFileAtomic(STATE_PATH, normalizeAppState(state), { fileMode: 0o600 })
 }
 
 async function mutateAppState(updater) {

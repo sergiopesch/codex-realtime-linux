@@ -66,6 +66,11 @@ test('persisted workspaces and conversations require absolute workspace paths', 
 
   assert.match(serverSource, /function httpError/)
   assert.match(serverSource, /function sendJsonError/)
+  assert.match(serverSource, /async function writeJsonFileAtomic/)
+  assert.match(serverSource, /await rename\(tempPath, filePath\)/)
+  assert.match(serverSource, /await rm\(tempPath, \{ force: true \}\)/)
+  assert.match(serverSource, /writeJsonFileAtomic\(SECRETS_PATH, nextSecrets, \{ dirMode: 0o700, fileMode: 0o600 \}\)/)
+  assert.match(serverSource, /writeJsonFileAtomic\(STATE_PATH, normalizeAppState\(state\), \{ fileMode: 0o600 \}\)/)
   assert.match(serverSource, /function normalizeWorkspacePath/)
   assert.match(serverSource, /path\.isAbsolute\(workspacePath\)/)
   assert.match(serverSource, /input\.workspaces\.map\(normalizeWorkspace\)\.filter\(Boolean\)/)
