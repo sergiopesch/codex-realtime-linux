@@ -104,6 +104,18 @@ test('Codex app-server RPC bridge has bounded requests and single-flight initial
   assert.match(serverSource, /if \(!this\.proc\?\.stdin\?\.writable\)/)
 })
 
+test('upstream OpenAI and usage fetches are timeout bounded', async () => {
+  const serverSource = await readFile(path.join(repoRoot, 'server', 'index.mjs'), 'utf8')
+
+  assert.match(serverSource, /const UPSTREAM_FETCH_TIMEOUT_MS =/)
+  assert.match(serverSource, /function upstreamSignal\(\)/)
+  assert.match(serverSource, /AbortSignal\.timeout\(UPSTREAM_FETCH_TIMEOUT_MS\)/)
+  assert.match(serverSource, /client_secrets'[\s\S]*signal: upstreamSignal\(\)/)
+  assert.match(serverSource, /\/v1\/responses'[\s\S]*signal: upstreamSignal\(\)/)
+  assert.match(serverSource, /fetch\(GBP_RATE_API, \{ signal: upstreamSignal\(\) \}\)/)
+  assert.match(serverSource, /fetch\(`https:\/\/api\.openai\.com\/v1\$\{path\}`,[\s\S]*signal: upstreamSignal\(\)/)
+})
+
 test('electron shell keeps renderer isolation and external navigation guarded', async () => {
   const mainSource = await readFile(path.join(repoRoot, 'electron', 'main.cjs'), 'utf8')
 

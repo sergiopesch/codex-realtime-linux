@@ -100,6 +100,12 @@ Codex app-server RPC calls are bounded so the desktop app does not hang indefini
 CODEX_RPC_TIMEOUT_MS=120000
 ```
 
+OpenAI, admin usage, vision, Realtime token, and exchange-rate HTTP calls are also bounded so startup and settings flows fail cleanly when upstream services stall:
+
+```bash
+UPSTREAM_FETCH_TIMEOUT_MS=20000
+```
+
 Visual context uses the same OpenAI key by default. The app captures uploaded images or a single screen-share frame, analyzes it with the Responses API, then injects the concise summary into the live Realtime conversation when voice is active. Override the vision model if needed:
 
 ```bash

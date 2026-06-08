@@ -29,6 +29,11 @@ const REALTIME_PERSONA =
 const VISION_MODEL = process.env.VISION_MODEL ?? CODEX_MODEL
 const USAGE_PERIOD_DAYS = Number(process.env.OPENAI_USAGE_PERIOD_DAYS ?? 30)
 const GBP_RATE_API = process.env.OPENAI_USAGE_GBP_RATE_API ?? 'https://api.frankfurter.app/latest?from=USD&to=GBP'
+const CONFIGURED_UPSTREAM_FETCH_TIMEOUT_MS = Number(process.env.UPSTREAM_FETCH_TIMEOUT_MS)
+const UPSTREAM_FETCH_TIMEOUT_MS =
+  Number.isFinite(CONFIGURED_UPSTREAM_FETCH_TIMEOUT_MS) && CONFIGURED_UPSTREAM_FETCH_TIMEOUT_MS > 0
+    ? CONFIGURED_UPSTREAM_FETCH_TIMEOUT_MS
+    : 20_000
 const CONFIGURED_CODEX_RPC_TIMEOUT_MS = Number(process.env.CODEX_RPC_TIMEOUT_MS)
 const CODEX_RPC_TIMEOUT_MS =
   Number.isFinite(CONFIGURED_CODEX_RPC_TIMEOUT_MS) && CONFIGURED_CODEX_RPC_TIMEOUT_MS > 0
@@ -120,6 +125,10 @@ function requireText(value, label, { maxLength = 12_000 } = {}) {
     throw httpError(`${label} is too long.`, { statusCode: 400, code: 'invalid_request' })
   }
   return text
+}
+
+function upstreamSignal() {
+  return AbortSignal.timeout(UPSTREAM_FETCH_TIMEOUT_MS)
 }
 
 function artifactPlanForWorkspace(cwd, goal) {
@@ -330,6 +339,7 @@ function realtimeSessionConfig() {
 async function createRealtimeClientSecret(openAiApiKey) {
   const response = await fetch('https://api.openai.com/v1/realtime/client_secrets', {
     method: 'POST',
+    signal: upstreamSignal(),
     headers: {
       Authorization: `Bearer ${openAiApiKey}`,
       'Content-Type': 'application/json',
@@ -381,6 +391,7 @@ async function analyzeVisualContext({ imageDataUrl, source, prompt }) {
 
   const response = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
+    signal: upstreamSignal(),
     headers: {
       Authorization: `Bearer ${openAiApiKey}`,
       'Content-Type': 'application/json',
@@ -795,7 +806,7 @@ async function getUsdToGbpRate() {
     return { rate: configuredRate, source: 'env' }
   }
 
-  const response = await fetch(GBP_RATE_API)
+  const response = await fetch(GBP_RATE_API, { signal: upstreamSignal() })
   if (!response.ok) throw new Error(`GBP conversion failed with ${response.status}`)
   const data = await response.json()
   const rate = Number(data?.rates?.GBP)
@@ -855,6 +866,7 @@ async function openaiGet(path, key = OPENAI_ADMIN_KEY) {
   if (!key) throw new Error('OPENAI_ADMIN_KEY is not configured')
   const response = await fetch(`https://api.openai.com/v1${path}`, {
     headers: { Authorization: `Bearer ${key}` },
+    signal: upstreamSignal(),
   })
   if (!response.ok) {
     const body = await response.text()
