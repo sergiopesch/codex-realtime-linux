@@ -68,6 +68,7 @@ test('persisted workspaces and conversations require absolute workspace paths', 
 
 test('Codex task routes require explicit user goals and IDs before app-server calls', async () => {
   const serverSource = await readFile(path.join(repoRoot, 'server', 'index.mjs'), 'utf8')
+  const appSource = await readFile(path.join(repoRoot, 'src', 'App.tsx'), 'utf8')
 
   assert.match(serverSource, /function requireText/)
   assert.match(serverSource, /const goal = requireText\(req\.body\?\.goal, 'goal'\)/)
@@ -75,6 +76,10 @@ test('Codex task routes require explicit user goals and IDs before app-server ca
   assert.match(serverSource, /const instruction = requireText\(req\.body\?\.instruction, 'instruction'\)/)
   assert.match(serverSource, /const turnId = requireText\(req\.body\?\.turnId, 'turnId'/)
   assert.doesNotMatch(serverSource, /Inspect this project and summarize the next best implementation step/)
+  assert.match(appSource, /A concrete Codex goal is required before routing work\./)
+  assert.match(appSource, /Realtime function call did not include a call_id\./)
+  assert.match(appSource, /Function call arguments were not valid JSON\./)
+  assert.doesNotMatch(appSource, /Inspect this project and summarize the next best implementation step/)
 })
 
 test('electron shell keeps renderer isolation and external navigation guarded', async () => {

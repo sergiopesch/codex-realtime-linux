@@ -1215,22 +1215,34 @@ function App() {
     const item = message.item as { type?: string; name?: string; arguments?: string; call_id?: string } | undefined
     if (message.type !== 'response.output_item.done' || item?.type !== 'function_call') return
 
+    if (typeof item.call_id !== 'string' || !item.call_id.trim()) {
+      const error = 'Realtime function call did not include a call_id.'
+      setLastError(error)
+      appendEvent('realtime/function-call-invalid', { error, name: item.name })
+      return
+    }
+
     setActivity('Voice router', item.name ?? 'Tool call')
 
     let payload: Record<string, unknown>
     try {
       payload = item.arguments ? JSON.parse(item.arguments) : {}
     } catch {
-      payload = {}
+      payload = { error: 'Function call arguments were not valid JSON.' }
     }
 
     let result: unknown = { ignored: true }
     try {
+      if (typeof payload.error === 'string') {
+        throw new Error(payload.error)
+      }
+
       if (item.name === 'codex_start_task') {
         setActivity('Voice router', 'Codex starting')
-        const goal = typeof payload.goal === 'string' && payload.goal.trim()
-          ? payload.goal.trim()
-          : 'Inspect this project and summarize the next best implementation step.'
+        if (typeof payload.goal !== 'string' || !payload.goal.trim()) {
+          throw new Error('A concrete Codex goal is required before routing work.')
+        }
+        const goal = payload.goal.trim()
         const workspacePath =
           typeof payload.cwd === 'string' && payload.cwd.trim()
             ? payload.cwd.trim()
@@ -1288,10 +1300,13 @@ function App() {
 
       if (item.name === 'codex_steer_task' && activeThreadIdRef.current) {
         setActivity('Voice router', 'Codex steering')
+        if (typeof payload.instruction !== 'string' || !payload.instruction.trim()) {
+          throw new Error('A steering instruction is required.')
+        }
         result = await api('/api/codex/steer', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ threadId: activeThreadIdRef.current, instruction: payload.instruction }),
+          body: JSON.stringify({ threadId: activeThreadIdRef.current, instruction: payload.instruction.trim() }),
         })
       } else if (item.name === 'codex_steer_task') {
         result = { error: 'No active Codex task is available to steer. Start a task first.' }
