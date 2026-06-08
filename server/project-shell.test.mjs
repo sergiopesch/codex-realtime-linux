@@ -134,3 +134,14 @@ test('realtime voice sessions reset transcript state and clean up media resource
   assert.match(appSource, /No microphone audio track was available\./)
   assert.match(appSource, /Realtime voice data channel failed/)
 })
+
+test('screen context capture stops display streams after a frame is analyzed', async () => {
+  const appSource = await readFile(path.join(repoRoot, 'src', 'App.tsx'), 'utf8')
+
+  assert.match(appSource, /const cleanupScreenShare = \(stream = screenStreamRef\.current\) =>/)
+  assert.match(appSource, /stream\?\.getTracks\(\)\.forEach\(\(track\) => track\.stop\(\)\)/)
+  assert.match(appSource, /video\.srcObject = null/)
+  assert.match(appSource, /finally \{\s+cleanupScreenShare\(stream \?\? undefined\)/)
+  assert.match(appSource, /stream = await navigator\.mediaDevices\.getDisplayMedia\(\{ video: true, audio: false \}\)/)
+  assert.doesNotMatch(appSource, /screenStreamRef\.current \?\? await navigator\.mediaDevices\.getDisplayMedia/)
+})

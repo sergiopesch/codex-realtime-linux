@@ -556,6 +556,14 @@ function App() {
     setVoiceMuted(false)
   }
 
+  const cleanupScreenShare = (stream = screenStreamRef.current) => {
+    stream?.getTracks().forEach((track) => track.stop())
+    if (!stream || screenStreamRef.current === stream) {
+      screenStreamRef.current = null
+      setScreenShared(false)
+    }
+  }
+
   const startWaveform = (stream: MediaStream) => {
     stopWaveform()
     const audioContext = new AudioContext()
@@ -610,16 +618,18 @@ function App() {
     const video = document.createElement('video')
     video.srcObject = stream
     video.muted = true
-    await new Promise<void>((resolve) => {
-      if (video.videoWidth > 0) resolve()
-      else video.onloadedmetadata = () => resolve()
-    })
-    await video.play()
-    await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()))
-    const dataUrl = imageToJpegDataUrl(video, video.videoWidth, video.videoHeight, 1280)
-    video.pause()
-    video.srcObject = null
-    return dataUrl
+    try {
+      await new Promise<void>((resolve) => {
+        if (video.videoWidth > 0) resolve()
+        else video.onloadedmetadata = () => resolve()
+      })
+      await video.play()
+      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()))
+      return imageToJpegDataUrl(video, video.videoWidth, video.videoHeight, 1280)
+    } finally {
+      video.pause()
+      video.srcObject = null
+    }
   }
 
   const injectVisualContextIntoRealtime = (source: string, summary: string, respond = true) => {
@@ -1525,19 +1535,21 @@ function App() {
 
   const shareScreen = async () => {
     setLastError(null)
+    let stream: MediaStream | null = null
     try {
-      const stream = screenStreamRef.current ?? await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false })
+      stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false })
       screenStreamRef.current = stream
       setScreenShared(true)
       stream.getVideoTracks()[0]?.addEventListener('ended', () => {
-        screenStreamRef.current = null
-        setScreenShared(false)
+        cleanupScreenShare(stream ?? undefined)
       })
       appendEvent('context/screen-attached', { tracks: stream.getVideoTracks().length })
       const imageDataUrl = await dataUrlFromVideoFrame(stream)
       await analyzeAndAttachVisualContext(imageDataUrl, 'screen')
     } catch (error) {
       setLastError(error instanceof Error ? error.message : 'Screen share failed')
+    } finally {
+      cleanupScreenShare(stream ?? undefined)
     }
   }
 
