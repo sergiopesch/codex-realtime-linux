@@ -37,6 +37,7 @@ test('public assets do not include fixed demo presentation routes', async () => 
 
   assert.equal(publicPaths.some((entry) => entry.includes('demo-presentation')), false)
   assert.equal(publicPaths.some((entry) => entry.includes('presentations')), false)
+  assert.equal(publicPaths.some((entry) => entry.endsWith('.html')), false)
 })
 
 test('artifact previews are served through workspace-scoped routes only', async () => {
