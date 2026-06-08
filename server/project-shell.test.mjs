@@ -119,9 +119,13 @@ test('realtime voice sessions reset transcript state and clean up media resource
   const appSource = await readFile(path.join(repoRoot, 'src', 'App.tsx'), 'utf8')
 
   assert.match(appSource, /const cleanupVoiceSession = \(\) =>/)
+  assert.match(appSource, /const microphoneStreamRef = useRef<MediaStream \| null>\(null\)/)
+  assert.match(appSource, /microphoneStream\?\.getTracks\(\)\.forEach\(\(track\) => track\.stop\(\)\)/)
   assert.match(appSource, /peer\?\.getSenders\(\)\.forEach\(\(sender\) => sender\.track\?\.stop\(\)\)/)
   assert.match(appSource, /audioRef\.current\.srcObject = null/)
   assert.match(appSource, /setRealtimeTranscript\(\[\]\)/)
   assert.match(appSource, /connectionstatechange/)
+  assert.match(appSource, /\['failed', 'disconnected', 'closed'\]\.includes\(pc\.connectionState\)/)
+  assert.match(appSource, /No microphone audio track was available\./)
   assert.match(appSource, /Realtime voice data channel failed/)
 })

@@ -364,6 +364,7 @@ function App() {
   const audioContextRef = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
   const waveformFrameRef = useRef<number | null>(null)
+  const microphoneStreamRef = useRef<MediaStream | null>(null)
   const screenStreamRef = useRef<MediaStream | null>(null)
   const pendingVisualContextRef = useRef<{ source: string; summary: string }[]>([])
   const activeThreadIdRef = useRef<string | null>(null)
@@ -536,11 +537,14 @@ function App() {
 
   const cleanupVoiceSession = () => {
     const peer = peerRef.current
+    const microphoneStream = microphoneStreamRef.current
     peerRef.current = null
     dataChannelRef.current = null
+    microphoneStreamRef.current = null
 
     peer?.getSenders().forEach((sender) => sender.track?.stop())
     peer?.close()
+    microphoneStream?.getTracks().forEach((track) => track.stop())
 
     if (audioRef.current) {
       audioRef.current.srcObject = null
@@ -1404,7 +1408,12 @@ function App() {
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      pc.addTrack(stream.getAudioTracks()[0], stream)
+      microphoneStreamRef.current = stream
+      const audioTrack = stream.getAudioTracks()[0]
+      if (!audioTrack) {
+        throw new Error('No microphone audio track was available.')
+      }
+      pc.addTrack(audioTrack, stream)
       startWaveform(stream)
 
       const dataChannel = pc.createDataChannel('oai-events')
@@ -1417,7 +1426,7 @@ function App() {
         setLastError(message)
       }
       pc.addEventListener('connectionstatechange', () => {
-        if (peerRef.current === pc && pc.connectionState === 'failed') {
+        if (peerRef.current === pc && ['failed', 'disconnected', 'closed'].includes(pc.connectionState)) {
           handleRealtimeDisconnect('Realtime voice connection failed.')
         }
       })
