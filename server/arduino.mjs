@@ -1,0 +1,285 @@
+import { spawn } from 'node:child_process'
+import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const DEFAULT_FQBN = process.env.ARDUINO_DEFAULT_FQBN ?? 'arduino:avr:uno'
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const ARDUINO_CLI_PATH = process.env.ARDUINO_CLI_PATH || path.join(REPO_ROOT, 'bin', 'arduino-cli')
+const DEFAULT_SKETCH_NAME = 'CodexRealtimeSketch'
+const MAX_SKETCH_BYTES = 64 * 1024
+const SERIAL_PORT_PATTERN = /^tty(?:ACM|USB)\d+$/
+
+export class ArduinoUploadError extends Error {
+  constructor(message, { code = 'arduino_error', status = 500, details } = {}) {
+    super(message)
+    this.name = 'ArduinoUploadError'
+    this.code = code
+    this.status = status
+    this.details = details
+  }
+}
+
+export function sketchForAction(action) {
+  if (action === 'onboard_led_on') {
+    return `void setup() {
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, HIGH);
+}
+
+void loop() {
+}
+`
+  }
+
+  if (action === 'onboard_led_blink') {
+    return `void setup() {
+  pinMode(LED_BUILTIN, OUTPUT);
+}
+
+void loop() {
+  digitalWrite(LED_BUILTIN, HIGH);
+  delay(500);
+  digitalWrite(LED_BUILTIN, LOW);
+  delay(500);
+}
+`
+  }
+
+  return null
+}
+
+export function normalizeUploadRequest(input = {}) {
+  const action = typeof input.action === 'string' && input.action.trim() ? input.action.trim() : 'onboard_led_on'
+  const port = typeof input.port === 'string' && input.port.trim() ? input.port.trim() : null
+  const fqbn = typeof input.fqbn === 'string' && input.fqbn.trim() ? input.fqbn.trim() : null
+  const sketchName =
+    typeof input.sketchName === 'string' && /^[a-zA-Z][a-zA-Z0-9_]{0,48}$/.test(input.sketchName)
+      ? input.sketchName
+      : DEFAULT_SKETCH_NAME
+  const sketch = action === 'custom_sketch' ? input.sketch : sketchForAction(action)
+
+  if (!['onboard_led_on', 'onboard_led_blink', 'custom_sketch'].includes(action)) {
+    throw new ArduinoUploadError('Unsupported Arduino action.', {
+      code: 'arduino_invalid_action',
+      status: 400,
+    })
+  }
+
+  if (typeof sketch !== 'string' || !sketch.trim()) {
+    throw new ArduinoUploadError('A sketch is required for this Arduino upload.', {
+      code: 'arduino_missing_sketch',
+      status: 400,
+    })
+  }
+
+  if (Buffer.byteLength(sketch, 'utf8') > MAX_SKETCH_BYTES) {
+    throw new ArduinoUploadError('The Arduino sketch is too large for this upload path.', {
+      code: 'arduino_sketch_too_large',
+      status: 400,
+    })
+  }
+
+  if (!/\bsetup\s*\(\s*\)/.test(sketch) || !/\bloop\s*\(\s*\)/.test(sketch)) {
+    throw new ArduinoUploadError('Arduino sketches must include setup() and loop().', {
+      code: 'arduino_invalid_sketch',
+      status: 400,
+    })
+  }
+
+  return { action, port, fqbn, sketch, sketchName }
+}
+
+export async function listSerialPorts({ devDir = '/dev' } = {}) {
+  let entries
+  try {
+    entries = await readdir(devDir)
+  } catch {
+    return []
+  }
+
+  return entries
+    .filter((entry) => SERIAL_PORT_PATTERN.test(entry))
+    .sort()
+    .map((entry) => path.join(devDir, entry))
+}
+
+function summarizeCommandOutput(stdout, stderr) {
+  return `${stderr || stdout || ''}`
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(-6)
+    .join(' ')
+    .slice(0, 700)
+}
+
+function runCommand(command, args, { spawnImpl = spawn, timeoutMs = 120_000 } = {}) {
+  return new Promise((resolve, reject) => {
+    const proc = spawnImpl(command, args, { stdio: ['ignore', 'pipe', 'pipe'] })
+    let stdout = ''
+    let stderr = ''
+    const timeout = setTimeout(() => {
+      proc.kill?.('SIGTERM')
+      reject(new ArduinoUploadError(`${command} timed out.`, { code: 'arduino_cli_timeout', status: 504 }))
+    }, timeoutMs)
+
+    proc.stdout?.on('data', (chunk) => {
+      stdout += chunk.toString()
+    })
+    proc.stderr?.on('data', (chunk) => {
+      stderr += chunk.toString()
+    })
+    proc.once('error', (error) => {
+      clearTimeout(timeout)
+      reject(
+        new ArduinoUploadError('arduino-cli is not available. Install it before uploading sketches.', {
+          code: 'arduino_cli_missing',
+          status: 503,
+          details: error.message,
+        }),
+      )
+    })
+    proc.once('exit', (exitCode) => {
+      clearTimeout(timeout)
+      if (exitCode === 0) {
+        resolve({ stdout, stderr })
+        return
+      }
+      reject(
+        new ArduinoUploadError(
+          [`${command} failed with exit code ${exitCode}.`, summarizeCommandOutput(stdout, stderr)]
+            .filter(Boolean)
+            .join(' '),
+          {
+            code: 'arduino_cli_failed',
+            status: 502,
+            details: { stdout, stderr, exitCode },
+          },
+        ),
+      )
+    })
+  })
+}
+
+async function runArduinoCli(args, options = {}) {
+  try {
+    return await runCommand(ARDUINO_CLI_PATH, args, options)
+  } catch (error) {
+    if (process.env.ARDUINO_CLI_PATH || error?.code !== 'arduino_cli_missing') throw error
+    return runCommand('arduino-cli', args, options)
+  }
+}
+
+function parseBoardListJson(value) {
+  let data
+  try {
+    data = JSON.parse(value || '{}')
+  } catch {
+    return []
+  }
+
+  const detectedPorts = Array.isArray(data?.detected_ports) ? data.detected_ports : []
+  return detectedPorts
+    .map((entry) => {
+      const matchingBoards = Array.isArray(entry?.matching_boards) ? entry.matching_boards : []
+      const matchingBoard = matchingBoards.find((board) => typeof board?.fqbn === 'string') ?? matchingBoards[0]
+      const port = entry?.port ?? {}
+      return {
+        address: typeof port?.address === 'string' ? port.address : null,
+        label: typeof port?.label === 'string' ? port.label : null,
+        protocol: typeof port?.protocol === 'string' ? port.protocol : null,
+        boardName: typeof matchingBoard?.name === 'string' ? matchingBoard.name : null,
+        fqbn: typeof matchingBoard?.fqbn === 'string' ? matchingBoard.fqbn : null,
+      }
+    })
+    .filter((entry) => entry.address)
+}
+
+export async function listArduinoBoards({ run = runArduinoCli } = {}) {
+  try {
+    const result = await run(['board', 'list', '--format', 'json'], { timeoutMs: 10_000 })
+    return parseBoardListJson(result.stdout || result.stderr)
+  } catch {
+    return []
+  }
+}
+
+export async function getArduinoCliStatus({ run = runArduinoCli } = {}) {
+  try {
+    const version = await run(['version'], { timeoutMs: 10_000 })
+    return {
+      available: true,
+      version: version.stdout.trim() || version.stderr.trim(),
+      defaultFqbn: DEFAULT_FQBN,
+      command: ARDUINO_CLI_PATH,
+    }
+  } catch (error) {
+    return {
+      available: false,
+      version: null,
+      defaultFqbn: DEFAULT_FQBN,
+      command: ARDUINO_CLI_PATH,
+      error: error instanceof Error ? error.message : 'arduino-cli is not available.',
+    }
+  }
+}
+
+export async function uploadArduinoSketch(
+  input = {},
+  { run = runArduinoCli, listPorts = listSerialPorts, listBoards = listArduinoBoards } = {},
+) {
+  const request = normalizeUploadRequest(input)
+  const [ports, boards] = await Promise.all([listPorts(), listBoards({ run })])
+  const detectedBoard = boards.find((board) => board.address === request.port) ?? boards[0]
+  const port = request.port ?? detectedBoard?.address ?? ports[0]
+  if (!port) {
+    throw new ArduinoUploadError('No Arduino serial port was found. Plug in the board and try again.', {
+      code: 'arduino_port_not_found',
+      status: 404,
+      details: {
+        serialPorts: ports,
+        detectedBoards: boards,
+        hint: 'If the board is connected but missing here, unplug/replug it and check Linux serial permissions. The user may need to be in the dialout group.',
+      },
+    })
+  }
+  const fqbn = request.fqbn ?? detectedBoard?.fqbn ?? DEFAULT_FQBN
+
+  const sketchRoot = await mkdtemp(path.join(os.tmpdir(), 'codex-arduino-'))
+  const sketchDir = path.join(sketchRoot, request.sketchName)
+  const sketchPath = path.join(sketchDir, `${request.sketchName}.ino`)
+
+  try {
+    await mkdir(sketchDir, { recursive: true })
+    await writeFile(sketchPath, request.sketch, { flag: 'wx' })
+
+    const compile = await run(['compile', '--fqbn', fqbn, sketchDir])
+    const upload = await run(['upload', '-p', port, '--fqbn', fqbn, sketchDir])
+
+    return {
+      action: request.action,
+      fqbn,
+      port,
+      boardName: detectedBoard?.boardName ?? null,
+      sketchName: request.sketchName,
+      compile: {
+        stdout: compile.stdout,
+        stderr: compile.stderr,
+      },
+      upload: {
+        stdout: upload.stdout,
+        stderr: upload.stderr,
+      },
+      summary:
+        request.action === 'onboard_led_on'
+          ? `Uploaded onboard LED on sketch to ${detectedBoard?.boardName ?? fqbn} on ${port}.`
+          : request.action === 'onboard_led_blink'
+            ? `Uploaded onboard LED blink sketch to ${detectedBoard?.boardName ?? fqbn} on ${port}.`
+            : `Uploaded custom sketch to ${detectedBoard?.boardName ?? fqbn} on ${port}.`,
+    }
+  } finally {
+    await rm(sketchRoot, { recursive: true, force: true })
+  }
+}

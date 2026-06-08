@@ -6,19 +6,33 @@ This demo explores a voice-led interaction model for Codex: the user speaks, sha
 
 This is an inspirational demo. It does not reverse engineer the closed Codex Mac app internals.
 
+![Codex Realtime Linux voice workspace](docs/images/codex-realtime-linux-solution.png)
+
+## Solution Overview
+
+The current solution is a standalone Linux desktop app with a realtime voice-first center surface. The primary flow is deliberately minimal: start voice, add transcript/screen/image context when needed, and while voice is live switch to mute and stop controls. Codex work runs through the app-server bridge in the selected workspace, while generated HTML presentations and previews are written under that workspace and rendered inside the app browser preview.
+
 ## Current Shape
 
 - Electron desktop shell for Linux.
 - Realtime API over WebRTC for live voice.
+- Minimal voice control surface: idle mode offers voice plus optional context actions; live mode offers transcript, mute/unmute, and stop.
+- Live transcript panel for the current Realtime session; it opens empty until the active voice session emits transcript events.
+- Responses API vision bridge for image uploads and screen snapshots.
+- Current weather lookup via Open-Meteo, available to the Realtime voice tool flow and from Settings.
+- Ubuntu USB watcher for Arduino-style serial boards; when a board is connected during a live voice session, Codex notices and responds out loud.
+- Arduino upload path through `arduino-cli` for safe onboard LED sketches and explicit custom sketches.
 - `codex app-server` bridge for Codex agent conversations, events, approvals, apps, models, and auth state.
-- Voice-first dock with no typed composer in the primary workflow.
+- Voice-first center workflow with no typed composer in the primary path.
 - Collapsible workspace folders with nested agent conversations.
 - No-text workspace creation through a folder picker, then voice-led thread creation inside the selected workspace.
 - Open agent conversations as separate center windows with independent content.
+- Persisted local sidebar state for added workspaces and voice-created agent conversations.
+- Codex app-server thread history is merged into matching workspace folders when available.
 - Optional transcript view for voice conversations; hidden by default.
 - Settings, Usage, and Account details as dedicated system screens.
 - Screen sharing and image attachment as context surfaces.
-- Spending view with live data when the right API keys are present, and demo fallback data otherwise.
+- Spending view with live data when the right API keys are present, shown in GBP.
 
 ## Run
 
@@ -40,6 +54,23 @@ For browser-only development:
 npm run dev:browser
 ```
 
+## Install Desktop App
+
+To add Codex to the Linux app menu and launch it by clicking the app icon:
+
+```bash
+npm install
+npm run install:desktop
+```
+
+The installer builds the renderer, installs the desktop entry at `~/.local/share/applications/codex-realtime-linux.desktop`, installs hicolor app icons, and writes `scripts/launch-desktop.sh`.
+
+After installation, open the app menu and launch **Codex**. The launcher starts Electron directly; Electron starts the local API server and loads the built app from `http://127.0.0.1:3311`. Launcher failures are written to `~/.local/state/codex-realtime-linux/desktop-launch.log`.
+
+## Generated HTML Previews
+
+Realtime-generated HTML presentations are written into the selected workspace under `public/agent-files/` and shown in the in-app browser preview when the Codex task finishes. The app does not ship a fixed demo presentation route.
+
 ## API Keys
 
 Live voice requires:
@@ -55,10 +86,39 @@ OPENAI_API_KEY=sk-...
 CODEX_USE_OPENAI_API_KEY=true
 ```
 
+You can also add the OpenAI key from the app itself: open `Settings`, paste the key into `OpenAI API key`, and save. The key is validated against the Realtime API before it is stored locally. A key in `.env` takes precedence over the Settings-saved key.
+
 Use `CODEX_API_KEY` if Codex local execution should use a different key than Realtime voice:
 
 ```bash
 CODEX_API_KEY=sk-...
+```
+
+Visual context uses the same OpenAI key by default. The app captures uploaded images or a single screen-share frame, analyzes it with the Responses API, then injects the concise summary into the live Realtime conversation when voice is active. Override the vision model if needed:
+
+```bash
+VISION_MODEL=gpt-5.4
+```
+
+Realtime voice defaults to the configured Realtime model and voice, and its persona/user context is controlled by environment variables. If `REALTIME_USER_NAME` is not set, the server uses the OS username; location is omitted unless you set it.
+
+```bash
+REALTIME_VOICE=cedar
+REALTIME_USER_NAME=
+REALTIME_USER_LOCATION=
+REALTIME_PERSONA=
+```
+
+Local sidebar state is saved outside the repo by default. To override it, use an absolute path:
+
+```bash
+CODEX_REALTIME_STATE_PATH=/tmp/codex-realtime-linux/app-state.json
+```
+
+Settings-saved secrets are also stored outside the repo by default with user-only file permissions. To override that path:
+
+```bash
+CODEX_REALTIME_SECRETS_PATH=/tmp/codex-realtime-linux/secrets.json
 ```
 
 Organization spending, project, and admin analytics require:
@@ -67,14 +127,83 @@ Organization spending, project, and admin analytics require:
 OPENAI_ADMIN_KEY=sk-admin-...
 ```
 
-Without admin scope, the app keeps the demo usable with local workspace and spending fallback data.
+Without admin scope, Usage shows a clean empty state instead of fabricated numbers. Cost data is displayed in GBP; if OpenAI returns USD, the server converts it with `OPENAI_USAGE_GBP_RATE` or the configured live rate endpoint.
+
+```bash
+# Optional: pin USD -> GBP conversion instead of using the live rate endpoint.
+OPENAI_USAGE_GBP_RATE=0.79
+# Optional: override the no-key live conversion endpoint.
+OPENAI_USAGE_GBP_RATE_API=https://api.frankfurter.app/latest?from=USD&to=GBP
+```
 
 ## Architecture
 
 - `server/index.mjs` is the local API bridge for Realtime session creation, Codex app-server RPC, workspace discovery, events, spending, and rate limits.
+- `/api/weather/current` resolves a place name and returns normalized current weather data without requiring an API key.
+- `/api/usb/events` reports Linux USB serial add/remove events and flags Arduino-like devices.
+- `/api/arduino/upload` compiles and uploads sketches with `arduino-cli`; defaults to `ARDUINO_DEFAULT_FQBN=arduino:avr:uno`.
+- `/api/vision/context` analyzes image and screen context with Responses vision, then the renderer sends the summary into the active Realtime data channel.
+- The server persists this client's local workspace/thread state to `CODEX_REALTIME_STATE_PATH`, defaulting to `~/.local/state/codex-realtime-linux/app-state.json`.
+- The server persists Settings-saved API secrets to `CODEX_REALTIME_SECRETS_PATH`, defaulting to `~/.config/codex-realtime-linux/secrets.json`.
+- Removing a workspace in the app hides that workspace from this client's sidebar state only; it does not delete the local folder.
 - `src/App.tsx` is the Electron renderer UI.
 - `src/App.css` defines the compact dark desktop layout.
-- `electron/main.cjs` creates the desktop window and loads the Vite renderer.
+- `electron/main.cjs` creates the desktop window. In development it loads the Vite renderer; from the app-menu launcher it starts the local API server and loads the built renderer served by `server/index.mjs`.
+
+## Weather Demo
+
+Open `Settings` in the app, enter a location, and use `Get weather` to verify the feature in the UI.
+
+You can also hit the local API directly after `npm run dev`:
+
+```bash
+curl "http://127.0.0.1:3311/api/weather/current?location=Berlin&units=metric"
+```
+
+## Arduino USB Voice Demo
+
+On Ubuntu, the local API watches `udevadm monitor` for USB serial devices such as `/dev/ttyACM0` and `/dev/ttyUSB0`. Start voice, then plug in an Arduino Uno, Nano, Mega, Leonardo, or common CH340/CP210x/FTDI Arduino-compatible board. The renderer cancels the current Realtime response, clears pending output audio, injects the USB connection event into the active conversation, and asks Codex to say one short playful British-style joke.
+
+You can verify the watcher directly:
+
+```bash
+curl "http://127.0.0.1:3311/api/usb/events?scan=true"
+```
+
+If the board appears but later serial reading is needed, add your Ubuntu user to `dialout`, then sign out and back in:
+
+```bash
+sudo usermod -aG dialout "$USER"
+```
+
+## Arduino Upload Demo
+
+Arduino uploads use `arduino-cli`. Install it, initialise the AVR core for Uno-compatible boards, then restart the app:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh
+./bin/arduino-cli core update-index
+./bin/arduino-cli core install arduino:avr
+```
+
+The app automatically looks for `./bin/arduino-cli`. Override this if you install it somewhere else:
+
+The default board target is:
+
+```bash
+ARDUINO_CLI_PATH=/absolute/path/to/arduino-cli
+ARDUINO_DEFAULT_FQBN=arduino:avr:uno
+```
+
+With voice running and the board connected, say something like: “turn on the Arduino light” or “make the Arduino LED blink”. Realtime calls `arduino_upload_sketch`, the server compiles the sketch, and uploads it to the first detected `/dev/ttyACM*` or `/dev/ttyUSB*` port unless a specific port is supplied.
+
+You can test the API directly:
+
+```bash
+curl -X POST http://127.0.0.1:3311/api/arduino/upload \
+  -H "Content-Type: application/json" \
+  -d '{"action":"onboard_led_on","fqbn":"arduino:avr:uno"}'
+```
 
 ## Public Codex App Signals Mirrored
 
@@ -87,13 +216,12 @@ Based on public Codex app docs and product pages:
 - Computer Use and Appshots provide visual desktop/app context with explicit permissions.
 - App-server is the public integration surface for custom clients: agent conversations, turns, approvals, history, auth, apps, models, and streamed events.
 
-The demo’s differentiator is replacing the composer-first interaction model with a realtime voice director that supervises Codex execution.
+The demo’s differentiator is replacing the composer-first interaction model with a realtime voice router that supervises Codex execution. Realtime is the conversational layer: it listens, clarifies intent, and decides whether the user is chatting, starting work, steering active work, or interrupting work. The Codex app-server harness is the execution layer: it owns coding threads, turns, approvals, history, and streamed agent events. Visual inputs are bridged into voice as summarized context rather than streamed as continuous video.
 
 ## Next Milestones
 
-- Persist real workspace and agent conversation state from Codex app-server into the sidebar.
-- Stream Codex turn output into the center conversation instead of demo copy.
-- Wire screen/image context into the Realtime conversation payload.
+- Stream Codex app-server turn output into the center conversation instead of summary cards.
+- Upgrade visual context from single-frame snapshots to continuous multimodal Realtime when the product needs live video understanding.
 - Add packaging for Linux AppImage or deb.
 
 ## Sources

@@ -8,8 +8,10 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+bin
 dist
 dist-ssr
+tmp
 *.local
 .env
 .env.*
@@ -17,6 +19,7 @@ dist-ssr
 .playwright-cli
 output/playwright
 node_modules/.tmp
+public/agent-files
 
 # Editor directories and files
 .vscode/*
