@@ -348,7 +348,7 @@ function App() {
   const [visualContextLabel, setVisualContextLabel] = useState<string | null>(null)
   const [, setArtifacts] = useState<GeneratedArtifact[]>([])
   const [selectedArtifact, setSelectedArtifact] = useState<GeneratedArtifact | null>(null)
-  const [artifactViewerClosed, setArtifactViewerClosed] = useState(false)
+  const [dismissedArtifact, setDismissedArtifact] = useState<{ url: string; updatedAt: string } | null>(null)
   const [pendingArtifact, setPendingArtifact] = useState<ArtifactPlan | null>(null)
   const [routingActivity, setRoutingActivity] = useState<string[]>(['Voice router idle'])
   const [waveLevels, setWaveLevels] = useState<number[]>(() => Array.from({ length: 18 }, () => 0.18))
@@ -433,7 +433,7 @@ function App() {
       : `What should we build in ${selectedWorkspaceName}?`
   const primaryActivity = [routingActivity[0] ?? 'Voice router idle', visualContextLabel].filter(Boolean).join(' · ')
   const showSubagentPreview = Boolean(activeThreadId)
-  const artifactPreview = artifactViewerClosed ? null : selectedArtifact
+  const artifactPreview = selectedArtifact && selectedArtifact.url !== dismissedArtifact?.url ? selectedArtifact : null
   const agentIsWorkingOnArtifact = Boolean(pendingArtifact && activeThreadId)
   const subagentTitle = activeConversation?.title ? briefThreadTitle(activeConversation.title) : 'Codex'
   const subagentHint =
@@ -730,6 +730,18 @@ function App() {
     return data.data
   }, [status?.appRoot])
 
+  const selectLatestArtifact = useCallback((artifactData: GeneratedArtifact[]) => {
+    setSelectedArtifact((current) => {
+      if (current && artifactData.some((artifact) => artifact.url === current.url)) return current
+      const dismissedTime = dismissedArtifact ? Date.parse(dismissedArtifact.updatedAt) : null
+      return artifactData.find((artifact) => {
+        if (artifact.url === dismissedArtifact?.url) return false
+        if (dismissedTime != null) return Date.parse(artifact.updatedAt) > dismissedTime
+        return true
+      }) ?? null
+    })
+  }, [dismissedArtifact])
+
   const requestWeather = async (event?: FormEvent<HTMLFormElement>) => {
     event?.preventDefault()
     setWeatherLoading(true)
@@ -1000,13 +1012,9 @@ function App() {
   useEffect(() => {
     selectedWorkspaceRef.current = selectedWorkspace
     refreshArtifacts(selectedWorkspace)
-      .then((artifactData) => {
-        setSelectedArtifact((current) =>
-          current && artifactData.some((artifact) => artifact.url === current.url) ? current : null,
-        )
-      })
+      .then(selectLatestArtifact)
       .catch(() => undefined)
-  }, [refreshArtifacts, selectedWorkspace])
+  }, [refreshArtifacts, selectLatestArtifact, selectedWorkspace])
 
   useEffect(() => {
     activeThreadIdRef.current = activeThreadId
@@ -1060,6 +1068,7 @@ function App() {
           fetchGeneratedArtifacts(preferredPath)
             .then((artifactData) => {
               setArtifacts(artifactData.data)
+              setSelectedArtifact((current) => current ?? artifactData.data[0] ?? null)
             })
             .catch(() => undefined)
         }
@@ -1132,12 +1141,15 @@ function App() {
     const pollArtifacts = async () => {
       try {
         const artifactData = await refreshArtifacts(pendingArtifact?.workspacePath ?? selectedWorkspaceRef.current)
-        if (!pendingArtifact) return
+        if (!pendingArtifact) {
+          selectLatestArtifact(artifactData)
+          return
+        }
         const completed = artifactData.find((artifact) => artifact.url === pendingArtifact.url)
         if (!completed) return
 
         setSelectedArtifact(completed)
-        setArtifactViewerClosed(false)
+        setDismissedArtifact(null)
         setPendingArtifact(null)
         setActiveCodexTurn(activeThreadIdRef.current, null)
         setActivity('Artifact ready', completed.title)
@@ -1150,7 +1162,7 @@ function App() {
     void pollArtifacts()
     const interval = window.setInterval(() => void pollArtifacts(), pendingArtifact ? 1500 : 5000)
     return () => window.clearInterval(interval)
-  }, [pendingArtifact, refreshArtifacts])
+  }, [pendingArtifact, refreshArtifacts, selectLatestArtifact])
 
   useEffect(() => {
     const pollUsbEvents = async () => {
@@ -1250,7 +1262,7 @@ function App() {
         if (!workspacePath) {
           throw new Error('Select a workspace before routing work to Codex.')
         }
-        setArtifactViewerClosed(false)
+        setDismissedArtifact(null)
         result = await api('/api/codex/task', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -2090,7 +2102,7 @@ function App() {
                         aria-label="Close preview"
                         title="Close preview"
                         onClick={() => {
-                          setArtifactViewerClosed(true)
+                          setDismissedArtifact({ url: artifactPreview.url, updatedAt: artifactPreview.updatedAt })
                           setSelectedArtifact(null)
                         }}
                       >
@@ -2110,7 +2122,7 @@ function App() {
                       key={artifactPreview.url}
                       src={artifactPreview.url}
                       title={artifactPreview.title}
-                      sandbox="allow-scripts allow-same-origin"
+                      sandbox="allow-scripts"
                     />
                   ) : null}
                 </section>

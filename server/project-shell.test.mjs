@@ -43,6 +43,7 @@ test('public assets do not include fixed demo presentation routes', async () => 
 test('artifact previews are served through workspace-scoped routes only', async () => {
   const serverSource = await readFile(path.join(repoRoot, 'server', 'index.mjs'), 'utf8')
   const policySource = await readFile(path.join(repoRoot, 'server', 'codexPolicy.mjs'), 'utf8')
+  const appSource = await readFile(path.join(repoRoot, 'src', 'App.tsx'), 'utf8')
 
   assert.match(serverSource, /async function requireWorkspaceDirectory/)
   assert.match(serverSource, /must be an absolute local path/)
@@ -52,6 +53,12 @@ test('artifact previews are served through workspace-scoped routes only', async 
   assert.match(serverSource, /await requireWorkspaceDirectory\(workspaceFromToken\(token\), 'workspace token'\)/)
   assert.doesNotMatch(serverSource, /app\.use\('\/agent-files'/)
   assert.doesNotMatch(policySource, /url:\s*`\/agent-files/)
+  assert.match(appSource, /const selectLatestArtifact = useCallback/)
+  assert.match(appSource, /selectLatestArtifact\(artifactData\)/)
+  assert.match(appSource, /const dismissedTime = dismissedArtifact \? Date\.parse\(dismissedArtifact\.updatedAt\) : null/)
+  assert.match(appSource, /Date\.parse\(artifact\.updatedAt\) > dismissedTime/)
+  assert.match(appSource, /sandbox="allow-scripts"/)
+  assert.doesNotMatch(appSource, /sandbox="allow-scripts allow-same-origin"/)
 })
 
 test('persisted workspaces and conversations require absolute workspace paths', async () => {
