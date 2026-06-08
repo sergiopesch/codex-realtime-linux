@@ -110,6 +110,14 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   assert.equal(invalidToken.status, 400)
   assert.match(await invalidToken.text(), /workspace token must be an absolute local path/)
 
+  const missingTaskWorkspace = await fetch(`${baseUrl}/api/codex/task`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ goal: 'Create an HTML presentation about this workspace.' }),
+  })
+  assert.equal(missingTaskWorkspace.status, 400)
+  assert.equal((await readJson(missingTaskWorkspace)).code, 'invalid_workspace_path')
+
   const missingWorkspaceSave = await fetch(`${baseUrl}/api/app-state/conversations`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

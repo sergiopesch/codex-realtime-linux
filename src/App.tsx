@@ -370,6 +370,7 @@ function App() {
   const activeThreadIdRef = useRef<string | null>(null)
   const activeTurnIdRef = useRef<string | null>(null)
   const selectedWorkspaceRef = useRef(initialWorkspacePath)
+  const routableWorkspacePathsRef = useRef<Set<string>>(new Set())
   const seenUsbEventIdsRef = useRef<Set<string>>(new Set())
   const usbInitializedRef = useRef(false)
 
@@ -410,6 +411,10 @@ function App() {
       return true
     })
   }, [fallbackWorkspaces, hiddenWorkspacePaths, userWorkspaces, workspaces])
+  const routableWorkspacePaths = useMemo(
+    () => workspaceSource.map((workspace) => workspace.path ?? workspace.id).filter(Boolean),
+    [workspaceSource],
+  )
   const workspaceRoots = workspaceSource.slice(0, 8).map((workspace) => {
     const workspacePath = workspace.path ?? workspace.id
     const conversations = conversationsByWorkspace[workspacePath] ?? []
@@ -458,6 +463,20 @@ function App() {
     activeTurnIdRef.current = turnId
     setActiveThreadId(threadId)
     setActiveTurnId(turnId)
+  }
+
+  const selectedRoutableWorkspacePath = (requestedCwd: unknown) => {
+    const selected = selectedWorkspaceRef.current
+    if (!selected) {
+      throw new Error('Select a workspace before routing work to Codex.')
+    }
+    if (!routableWorkspacePathsRef.current.has(selected)) {
+      throw new Error('The selected workspace is not available for Codex routing.')
+    }
+    if (typeof requestedCwd === 'string' && requestedCwd.trim() && requestedCwd.trim() !== selected) {
+      throw new Error('Realtime requested a workspace that is not currently selected. Select that workspace first.')
+    }
+    return selected
   }
 
   const updateTranscriptLine = (
@@ -1031,6 +1050,10 @@ function App() {
   }, [refreshArtifacts, selectLatestArtifact, selectedWorkspace])
 
   useEffect(() => {
+    routableWorkspacePathsRef.current = new Set(routableWorkspacePaths)
+  }, [routableWorkspacePaths])
+
+  useEffect(() => {
     activeThreadIdRef.current = activeThreadId
   }, [activeThreadId])
 
@@ -1269,13 +1292,7 @@ function App() {
           throw new Error('A concrete Codex goal is required before routing work.')
         }
         const goal = payload.goal.trim()
-        const workspacePath =
-          typeof payload.cwd === 'string' && payload.cwd.trim()
-            ? payload.cwd.trim()
-                          : selectedWorkspaceRef.current || status?.appRoot || initialWorkspacePath
-        if (!workspacePath) {
-          throw new Error('Select a workspace before routing work to Codex.')
-        }
+        const workspacePath = selectedRoutableWorkspacePath(payload.cwd)
         setDismissedArtifact(null)
         result = await api('/api/codex/task', {
           method: 'POST',

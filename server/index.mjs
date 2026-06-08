@@ -1115,7 +1115,7 @@ app.post('/api/codex/thread/archive', async (req, res) => {
 app.post('/api/codex/task', async (req, res) => {
   try {
     const goal = requireText(req.body?.goal, 'goal')
-    const cwd = await requireWorkspaceDirectory(req.body?.cwd || REPO_ROOT, 'cwd')
+    const cwd = await requireWorkspaceDirectory(req.body?.cwd, 'cwd')
     const artifactPlan = artifactPlanForWorkspace(cwd, goal)
     if (artifactPlan) await mkdir(artifactPlan.absoluteDir, { recursive: true })
     await codex.ensure()
