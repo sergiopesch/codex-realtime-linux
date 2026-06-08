@@ -12,6 +12,7 @@ if (process.platform === 'linux') {
 
 const apiPort = Number(process.env.PORT || 3311)
 const apiUrl = process.env.CODEX_DESKTOP_API_URL || `http://127.0.0.1:${apiPort}`
+const repoRoot = path.join(__dirname, '..')
 let apiProcess = null
 
 const openExternalIfAllowed = (url) => {
@@ -24,30 +25,53 @@ const openExternalIfAllowed = (url) => {
   }
 }
 
-const waitForHttp = (url, timeoutMs = 15000) =>
+const readJson = (url) =>
+  new Promise((resolve, reject) => {
+    const request = http.get(url, (response) => {
+      let body = ''
+      response.setEncoding('utf8')
+      response.on('data', (chunk) => {
+        body += chunk
+      })
+      response.on('end', () => {
+        if (!response.statusCode || response.statusCode >= 500) {
+          reject(new Error(`Server returned ${response.statusCode || 'no status'} for ${url}`))
+          return
+        }
+        try {
+          resolve(JSON.parse(body))
+        } catch {
+          reject(new Error(`Server response was not JSON for ${url}`))
+        }
+      })
+    })
+    request.on('error', reject)
+    request.setTimeout(1000, () => {
+      request.destroy(new Error(`Timed out requesting ${url}`))
+    })
+  })
+
+const waitForAppServer = (baseUrl, timeoutMs = 15000) =>
   new Promise((resolve, reject) => {
     const deadline = Date.now() + timeoutMs
 
-    const attempt = () => {
-      const request = http.get(url, (response) => {
-        response.resume()
-        if (response.statusCode && response.statusCode < 500) {
-          resolve()
+    const attempt = async () => {
+      try {
+        const status = await readJson(`${baseUrl}/api/status`)
+        if (path.resolve(status?.appRoot || '') === path.resolve(repoRoot)) {
+          resolve(status)
           return
         }
+        reject(new Error(`Refusing to load unrelated local server at ${baseUrl}`))
+        return
+      } catch {
         retry()
-      })
-
-      request.on('error', retry)
-      request.setTimeout(1000, () => {
-        request.destroy()
-        retry()
-      })
+      }
     }
 
     const retry = () => {
       if (Date.now() >= deadline) {
-        reject(new Error(`Timed out waiting for ${url}`))
+        reject(new Error(`Timed out waiting for ${baseUrl}`))
         return
       }
       setTimeout(attempt, 250)
@@ -60,16 +84,16 @@ const ensureApiServer = async () => {
   if (process.env.VITE_DEV_SERVER_URL) return process.env.VITE_DEV_SERVER_URL
 
   try {
-    await waitForHttp(`${apiUrl}/api/status`, 750)
+    await waitForAppServer(apiUrl, 750)
     return apiUrl
   } catch {
     apiProcess = spawn('node', ['server/index.mjs'], {
-      cwd: path.join(__dirname, '..'),
+      cwd: repoRoot,
       env: { ...process.env, PORT: String(apiPort), NODE_ENV: process.env.NODE_ENV || 'production' },
       stdio: 'ignore',
     })
     apiProcess.unref()
-    await waitForHttp(`${apiUrl}/api/status`)
+    await waitForAppServer(apiUrl)
     return apiUrl
   }
 }

@@ -113,6 +113,11 @@ test('electron shell keeps renderer isolation and external navigation guarded', 
   assert.match(mainSource, /setWindowOpenHandler/)
   assert.match(mainSource, /openExternalIfAllowed/)
   assert.match(mainSource, /new URL\(url\)\.origin === appOrigin/)
+  assert.match(mainSource, /const repoRoot = path\.join\(__dirname, '\.\.'\)/)
+  assert.match(mainSource, /const waitForAppServer = \(baseUrl/)
+  assert.match(mainSource, /path\.resolve\(status\?\.appRoot \|\| ''\) === path\.resolve\(repoRoot\)/)
+  assert.match(mainSource, /Refusing to load unrelated local server/)
+  assert.doesNotMatch(mainSource, /const waitForHttp =/)
 })
 
 test('realtime voice sessions reset transcript state and clean up media resources', async () => {
