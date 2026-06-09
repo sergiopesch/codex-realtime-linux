@@ -718,6 +718,8 @@ test('electron shell keeps renderer isolation and external navigation guarded', 
   assert.match(mainSource, /stdio: \['ignore', apiLogFd, apiLogFd\]/)
   assert.match(mainSource, /API server failed to start/)
   assert.match(mainSource, /API server exited with/)
+  assert.match(mainSource, /app\.on\('before-quit', \(\) => \{\s+if \(apiProcess && !apiProcess\.killed\) apiProcess\.kill\(\)\s+\}\)/)
+  assert.match(mainSource, /app\.on\('window-all-closed', \(\) => \{\s+if \(process\.platform !== 'darwin'\) app\.quit\(\)\s+\}\)/)
   assert.match(mainSource, /await waitForAppServer\(apiUrl, 15000, desktopServerToken\)/)
   assert.match(mainSource, /ipcMain\.on\('window-control', \(event, action\) => \{\s+if \(!isTrustedRendererEvent\(event\)\) return/)
   assert.match(mainSource, /ipcMain\.handle\('select-workspace-folder', async \(event\) => \{\s+if \(!isTrustedRendererEvent\(event\)\) return null/)
@@ -772,7 +774,9 @@ test('electron shell keeps renderer isolation and external navigation guarded', 
 
 test('README documents live release verification for non-automated capabilities', async () => {
   const readme = await readFile(path.join(repoRoot, 'README.md'), 'utf8')
+  const codeFenceCount = [...readme.matchAll(/```/g)].length
 
+  assert.equal(codeFenceCount % 2, 0)
   assert.match(readme, /## Live Verification Checklist/)
   assert.match(readme, /Automated tests cover routing, persistence, preview policy, API guards, and build correctness/)
   assert.match(readme, /They do not prove microphone permissions, speaker output, app-menu launch behavior, screen capture permissions, or physical Arduino upload success/)
