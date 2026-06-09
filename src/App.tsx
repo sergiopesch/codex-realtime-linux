@@ -940,7 +940,12 @@ function App() {
       ? selectedArtifact
       : null
   const shouldShowArtifactBrowser = Boolean(artifactPreview)
-  const agentIsWorkingOnArtifact = Boolean(pendingArtifact && codexTurnInProgress)
+  const agentIsWorkingOnArtifact = Boolean(
+    !activeSystemScreen &&
+      pendingArtifact &&
+      pendingArtifact.workspacePath === selectedWorkspace &&
+      codexTurnInProgress,
+  )
 
   const appendEvent = (method: string, params?: Record<string, unknown>) => {
     setEvents((current) => mergeEvents(current, [{ method, receivedAt: new Date().toISOString(), params }]))
