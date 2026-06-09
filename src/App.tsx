@@ -1074,13 +1074,14 @@ function App() {
     return data.data
   }, [])
 
-  const selectLatestArtifact = useCallback((artifactData: GeneratedArtifact[]) => {
+  const refreshOpenArtifact = useCallback((artifactData: GeneratedArtifact[]) => {
     setSelectedArtifact((current) => {
+      if (!current) return null
       const refreshedCurrent = current
         ? artifactData.find((artifact) => artifact.workspacePath === current.workspacePath && artifact.url === current.url)
         : null
       if (refreshedCurrent && !artifactMatchesDismissal(refreshedCurrent, dismissedArtifact)) return refreshedCurrent
-      return artifactData.find((artifact) => !artifactMatchesDismissal(artifact, dismissedArtifact)) ?? null
+      return null
     })
   }, [dismissedArtifact])
 
@@ -1363,9 +1364,9 @@ function App() {
   useEffect(() => {
     selectedWorkspaceRef.current = selectedWorkspace
     refreshArtifacts(selectedWorkspace)
-      .then(selectLatestArtifact)
+      .then(refreshOpenArtifact)
       .catch(() => undefined)
-  }, [refreshArtifacts, selectLatestArtifact, selectedWorkspace])
+  }, [refreshArtifacts, refreshOpenArtifact, selectedWorkspace])
 
   useEffect(() => {
     routableWorkspacePathsRef.current = new Set(routableWorkspacePaths)
@@ -1430,7 +1431,7 @@ function App() {
             .then((artifactData) => {
               if (!effectActive) return
               setArtifacts(artifactData.data)
-              setSelectedArtifact((current) => current ?? artifactData.data[0] ?? null)
+              setSelectedArtifact(null)
             })
             .catch(() => undefined)
         }
@@ -1560,7 +1561,7 @@ function App() {
         })
         if (!effectActive) return
         if (!pendingArtifact) {
-          selectLatestArtifact(artifactData)
+          refreshOpenArtifact(artifactData)
           return
         }
         const completed = artifactData.find((artifact) => artifact.url === pendingArtifact.url)
@@ -1587,7 +1588,7 @@ function App() {
       controller.abort()
       window.clearInterval(interval)
     }
-  }, [pendingArtifact, refreshArtifacts, selectLatestArtifact])
+  }, [pendingArtifact, refreshArtifacts, refreshOpenArtifact])
 
   useEffect(() => {
     const controller = new AbortController()
