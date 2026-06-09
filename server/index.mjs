@@ -1285,6 +1285,16 @@ function normalizeWorkspacePathList(values, maxItems) {
   return [...new Set(values.map(normalizeWorkspacePath).filter(Boolean))].slice(0, maxItems)
 }
 
+function firstUniqueBy(values, keyForValue) {
+  const seen = new Set()
+  return values.filter((value) => {
+    const key = keyForValue(value)
+    if (!key || seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
 function normalizeTranscript(input) {
   if (!Array.isArray(input)) return []
   return input
@@ -1375,7 +1385,7 @@ function normalizeConversation(input, workspacePath) {
 function normalizeAppState(input) {
   const state = emptyAppState()
   state.workspaces = Array.isArray(input?.workspaces)
-    ? input.workspaces.map(normalizeWorkspace).filter(Boolean).slice(0, MAX_LOCAL_WORKSPACES)
+    ? firstUniqueBy(input.workspaces.map(normalizeWorkspace).filter(Boolean), (workspace) => workspace.path).slice(0, MAX_LOCAL_WORKSPACES)
     : []
   state.hiddenWorkspacePaths = normalizeWorkspacePathList(input?.hiddenWorkspacePaths, MAX_LOCAL_HIDDEN_WORKSPACES)
 
@@ -1386,10 +1396,12 @@ function normalizeAppState(input) {
       const normalizedWorkspacePath = normalizeWorkspacePath(workspacePath)
       if (!normalizedWorkspacePath || state.conversationsByWorkspace[normalizedWorkspacePath]) continue
       if (Array.isArray(conversations)) {
-        const normalizedConversations = conversations
-          .map((conversation) => normalizeConversation(conversation, normalizedWorkspacePath))
-          .filter((conversation) => !isEmptyGeneratedVoiceDraft(conversation))
-          .slice(0, MAX_LOCAL_CONVERSATIONS_PER_WORKSPACE)
+        const normalizedConversations = firstUniqueBy(
+          conversations
+            .map((conversation) => normalizeConversation(conversation, normalizedWorkspacePath))
+            .filter((conversation) => !isEmptyGeneratedVoiceDraft(conversation)),
+          (conversation) => conversation.id,
+        ).slice(0, MAX_LOCAL_CONVERSATIONS_PER_WORKSPACE)
         if (normalizedConversations.length > 0) {
           state.conversationsByWorkspace[normalizedWorkspacePath] = normalizedConversations
           normalizedWorkspaceBuckets += 1

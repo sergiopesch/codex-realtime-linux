@@ -571,6 +571,17 @@ test('server bounds persisted app state loaded from disk', async (t) => {
           ]
         : [{ speaker: 'user', text: 'hello' }],
   }))
+  const persistedWorkspaces = [
+    manyWorkspaces[0],
+    { ...manyWorkspaces[0], name: 'Duplicate saved workspace' },
+    ...manyWorkspaces.slice(1),
+  ]
+  const persistedConversations = [
+    conversations[0],
+    conversations[1],
+    { ...conversations[1], title: 'Duplicate conversation 1' },
+    ...conversations.slice(2),
+  ]
   const emptyVoiceDrafts = Array.from({ length: 3 }, (_, index) => ({
     id: `empty-voice-draft-${index}`,
     title: `Voice conversation ${index + 1}`,
@@ -589,7 +600,7 @@ test('server bounds persisted app state loaded from disk', async (t) => {
   await writeFile(
     statePath,
     JSON.stringify({
-      workspaces: manyWorkspaces,
+      workspaces: persistedWorkspaces,
       hiddenWorkspacePaths: [
         manyWorkspaces[0].id,
         manyWorkspaces[0].id,
@@ -598,7 +609,7 @@ test('server bounds persisted app state loaded from disk', async (t) => {
       ],
       conversationsByWorkspace: {
         ...invalidConversationBuckets,
-        ...Object.fromEntries(manyWorkspaces.map((workspace) => [workspace.id, conversations])),
+        ...Object.fromEntries(manyWorkspaces.map((workspace) => [workspace.id, persistedConversations])),
         [emptyVoiceDraftWorkspace]: emptyVoiceDrafts,
       },
     }),
@@ -611,6 +622,7 @@ test('server bounds persisted app state loaded from disk', async (t) => {
   const state = await (await fetch(`${baseUrl}/api/app-state`)).json()
 
   assert.equal(state.workspaces.length, 40)
+  assert.equal(state.workspaces.filter((workspace) => workspace.path === manyWorkspaces[0].id).length, 1)
   assert.equal(state.hiddenWorkspacePaths.length, 80)
   assert.equal(state.hiddenWorkspacePaths.filter((workspacePath) => workspacePath === manyWorkspaces[0].id).length, 1)
   assert.equal(state.hiddenWorkspacePaths.includes('relative-hidden-workspace'), false)
@@ -618,6 +630,10 @@ test('server bounds persisted app state loaded from disk', async (t) => {
   assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id].length, 80)
   assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id].some((conversation) => conversation.title === 'Voice conversation 7'), false)
   assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id][0].title, 'Conversation 1')
+  assert.equal(
+    state.conversationsByWorkspace[manyWorkspaces[0].id].filter((conversation) => conversation.id === 'conversation-1').length,
+    1,
+  )
   assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id][0].workspacePath, manyWorkspaces[0].id)
   assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id][0].transcript[0].text, 'hello')
   assert.equal(state.conversationsByWorkspace[emptyVoiceDraftWorkspace], undefined)
