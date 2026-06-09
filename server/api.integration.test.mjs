@@ -113,7 +113,17 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
 
   const invalidToken = await fetch(`${baseUrl}/workspace-artifacts/not-a-workspace-token/sample-report/index.html`)
   assert.equal(invalidToken.status, 400)
-  assert.match(await invalidToken.text(), /workspace token must be an absolute local path/)
+  assert.match(await invalidToken.text(), /Invalid workspace token/)
+
+  const relativeToken = Buffer.from('relative-workspace', 'utf8').toString('base64url')
+  const relativeWorkspaceToken = await fetch(`${baseUrl}/workspace-artifacts/${relativeToken}/sample-report/index.html`)
+  assert.equal(relativeWorkspaceToken.status, 400)
+  assert.match(await relativeWorkspaceToken.text(), /Invalid workspace token/)
+
+  const missingWorkspaceToken = Buffer.from(path.join(os.tmpdir(), 'missing-codex-realtime-preview-workspace'), 'utf8').toString('base64url')
+  const missingWorkspacePreview = await fetch(`${baseUrl}/workspace-artifacts/${missingWorkspaceToken}/sample-report/index.html`)
+  assert.equal(missingWorkspacePreview.status, 404)
+  assert.match(await missingWorkspacePreview.text(), /workspace token does not exist/)
 
   const blockedOrigin = await fetch(`${baseUrl}/api/status`, {
     headers: { Origin: 'https://example.invalid' },

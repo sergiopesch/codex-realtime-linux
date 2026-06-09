@@ -170,7 +170,14 @@ function workspaceToken(workspacePath) {
 }
 
 function workspaceFromToken(token) {
-  return Buffer.from(token, 'base64url').toString('utf8')
+  if (typeof token !== 'string' || !/^[A-Za-z0-9_-]+$/.test(token)) {
+    throw httpError('Invalid workspace token.', { statusCode: 400, code: 'invalid_workspace_token' })
+  }
+  const workspacePath = Buffer.from(token, 'base64url').toString('utf8')
+  if (workspaceToken(workspacePath) !== token) {
+    throw httpError('Invalid workspace token.', { statusCode: 400, code: 'invalid_workspace_token' })
+  }
+  return workspacePath
 }
 
 function isPathInside(parent, child) {
