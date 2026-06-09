@@ -1,6 +1,8 @@
 const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron')
 const { spawn } = require('node:child_process')
+const { createWriteStream, mkdirSync } = require('node:fs')
 const http = require('node:http')
+const os = require('node:os')
 const path = require('node:path')
 
 app.setName('Codex')
@@ -13,7 +15,10 @@ if (process.platform === 'linux') {
 const apiPort = Number(process.env.PORT || 3311)
 const apiUrl = process.env.CODEX_DESKTOP_API_URL || `http://127.0.0.1:${apiPort}`
 const repoRoot = path.join(__dirname, '..')
+const stateDir = path.join(process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local', 'state'), 'codex-realtime-linux')
+const apiLogPath = path.join(stateDir, 'api-server.log')
 let apiProcess = null
+let apiLogStream = null
 
 const openExternalIfAllowed = (url) => {
   try {
@@ -80,6 +85,17 @@ const waitForAppServer = (baseUrl, timeoutMs = 15000) =>
     attempt()
   })
 
+const createApiLogStream = () => {
+  try {
+    mkdirSync(stateDir, { recursive: true })
+    const stream = createWriteStream(apiLogPath, { flags: 'a' })
+    stream.write(`\n[${new Date().toISOString()}] Starting API server from Electron\n`)
+    return stream
+  } catch {
+    return 'ignore'
+  }
+}
+
 const ensureApiServer = async () => {
   if (process.env.VITE_DEV_SERVER_URL) return process.env.VITE_DEV_SERVER_URL
 
@@ -87,10 +103,25 @@ const ensureApiServer = async () => {
     await waitForAppServer(apiUrl, 750)
     return apiUrl
   } catch {
+    apiLogStream = createApiLogStream()
     apiProcess = spawn('node', ['server/index.mjs'], {
       cwd: repoRoot,
       env: { ...process.env, PORT: String(apiPort), NODE_ENV: process.env.NODE_ENV || 'production' },
-      stdio: 'ignore',
+      stdio: ['ignore', apiLogStream, apiLogStream],
+    })
+    apiProcess.once('error', (error) => {
+      if (apiLogStream && apiLogStream !== 'ignore') {
+        apiLogStream.write(`[${new Date().toISOString()}] API server failed to start: ${error.message}\n`)
+        apiLogStream.end()
+        apiLogStream = null
+      }
+    })
+    apiProcess.once('exit', (code, signal) => {
+      if (apiLogStream && apiLogStream !== 'ignore') {
+        apiLogStream.write(`[${new Date().toISOString()}] API server exited with ${signal ? `signal ${signal}` : `code ${code}`}\n`)
+        apiLogStream.end()
+        apiLogStream = null
+      }
     })
     apiProcess.unref()
     await waitForAppServer(apiUrl)

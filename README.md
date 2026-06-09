@@ -65,7 +65,7 @@ npm run install:desktop
 
 The installer builds the renderer, installs the desktop entry at `~/.local/share/applications/codex-realtime-linux.desktop`, installs hicolor app icons, and writes `scripts/launch-desktop.sh`.
 
-After installation, open the app menu and launch **Codex**. The launcher starts Electron directly; Electron starts the local API server and loads the built app from `http://127.0.0.1:3311`. Launcher failures are written to `~/.local/state/codex-realtime-linux/desktop-launch.log`.
+After installation, open the app menu and launch **Codex**. The launcher starts Electron directly; Electron starts the local API server and loads the built app from `http://127.0.0.1:3311`. Launcher failures are written to `~/.local/state/codex-realtime-linux/desktop-launch.log`; API server output from Electron-managed launches is written to `~/.local/state/codex-realtime-linux/api-server.log`.
 
 ## Generated HTML Previews
 
