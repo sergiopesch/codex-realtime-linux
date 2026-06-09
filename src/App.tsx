@@ -888,7 +888,9 @@ function App() {
   const pendingArtifactRef = useRef<ArtifactPlan | null>(null)
   const activeThreadIdRef = useRef<string | null>(null)
   const activeTurnIdRef = useRef<string | null>(null)
+  const activeCodexWorkspaceRef = useRef<string | null>(null)
   const activeSystemScreenRef = useRef<SystemScreen | null>(null)
+  const conversationsByWorkspaceRef = useRef<Record<string, AgentConversation[]>>({})
   const handledRealtimeFunctionCallIdsRef = useRef<Set<string>>(new Set())
   const selectedWorkspaceRef = useRef(initialWorkspacePath)
   const routableWorkspacePathsRef = useRef<Set<string>>(new Set())
@@ -977,21 +979,52 @@ function App() {
     )
   }
 
-  const setActiveCodexTurn = (threadId: string | null, turnId: string | null) => {
+  const setActiveCodexTurn = (threadId: string | null, turnId: string | null, workspacePath?: string) => {
     activeThreadIdRef.current = threadId
     activeTurnIdRef.current = turnId
+    if (workspacePath !== undefined) activeCodexWorkspaceRef.current = workspacePath
+    if (!threadId) activeCodexWorkspaceRef.current = null
     setActiveThreadId(threadId)
     setActiveTurnId(turnId)
   }
 
   const markCodexConversationReady = useCallback((threadId: string | null) => {
     if (!threadId) return
+    const updatedAt = new Date().toISOString()
+    const workspacePath =
+      activeCodexWorkspaceRef.current ||
+      Object.entries(conversationsByWorkspaceRef.current).find(([, conversations]) =>
+        conversations.some((conversation) => conversation.id === threadId),
+      )?.[0] ||
+      ''
+    if (workspacePath) {
+      void api<{ conversation: AgentConversation }>('/api/app-state/conversations', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspacePath, conversationId: threadId, patch: { status: 'ready' } }),
+      })
+        .then((savedConversation) => {
+          setConversationsByWorkspace((current) => ({
+            ...current,
+            [workspacePath]: mergeConversations(current[workspacePath] ?? [], [savedConversation.conversation]),
+          }))
+        })
+        .catch((error: unknown) => {
+          setEvents((current) =>
+            mergeEvents(current, [{
+              method: 'app-state/codex-conversation-status-save-failed',
+              receivedAt: new Date().toISOString(),
+              params: { message: displayErrorMessage(error, 'Failed to save Codex conversation status') },
+            }]),
+          )
+        })
+    }
     setConversationsByWorkspace((current) => {
       const next = { ...current }
       for (const [workspacePath, conversations] of Object.entries(next)) {
         next[workspacePath] = conversations.map((conversation) =>
           conversation.id === threadId
-            ? { ...conversation, status: 'ready', updatedAt: new Date().toISOString() }
+            ? { ...conversation, status: 'ready', updatedAt }
             : conversation,
         )
       }
@@ -1628,13 +1661,21 @@ function App() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ threadId: deleted.codexThreadId }),
         })
-      } else if (deleted?.source === 'local') {
-        const deleteResult = await api<{ state: AppStateResponse }>('/api/app-state/conversations/delete', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ workspacePath, conversationId }),
-        })
-        confirmedConversations = deleteResult.state.conversationsByWorkspace[workspacePath] ?? []
+      }
+      if (deleted?.source === 'local' || deleted?.source === 'codex') {
+        try {
+          const deleteResult = await api<{ state: AppStateResponse }>('/api/app-state/conversations/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ workspacePath, conversationId }),
+          })
+          confirmedConversations = deleteResult.state.conversationsByWorkspace[workspacePath] ?? []
+        } catch (error) {
+          if (deleted.source === 'local') throw error
+          appendEvent('app-state/codex-conversation-delete-failed', {
+            message: displayErrorMessage(error, 'Failed to remove saved Codex conversation fallback'),
+          })
+        }
       }
 
       setConversationsByWorkspace((state) => ({ ...state, [workspacePath]: confirmedConversations }))
@@ -1643,7 +1684,10 @@ function App() {
         if (fallback) {
           openConversationWindow(workspacePath, fallback.id)
         } else {
-          setActiveSystemScreen('settings')
+          setSelectedWorkspace(workspacePath)
+          setSelectedConversationId('')
+          setActiveSystemScreen(null)
+          closeArtifactPreview()
         }
       }
       showNotice('Agent conversation deleted from this workspace.')
@@ -1758,6 +1802,10 @@ function App() {
   useEffect(() => {
     activeTurnIdRef.current = activeTurnId
   }, [activeTurnId])
+
+  useEffect(() => {
+    conversationsByWorkspaceRef.current = conversationsByWorkspace
+  }, [conversationsByWorkspace])
 
   useEffect(() => {
     activeSystemScreenRef.current = activeSystemScreen
@@ -2144,7 +2192,7 @@ function App() {
         const threadId = (result as { thread?: { id?: string } }).thread?.id
         const turnId = (result as { turn?: { id?: string } }).turn?.id
         const artifact = (result as { artifact?: ArtifactPlan | null }).artifact
-        setActiveCodexTurn(threadId ?? null, turnId ?? null)
+        setActiveCodexTurn(threadId ?? null, turnId ?? null, workspacePath)
         setPendingArtifact(artifact ?? null)
 
         if (threadId) {
