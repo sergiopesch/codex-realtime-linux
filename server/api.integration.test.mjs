@@ -480,6 +480,8 @@ test('server only trusts configured loopback API origins', async (t) => {
     headers: { Origin: 'http://127.0.0.1:6006' },
   })
   assert.equal(trustedLoopback.status, 200)
+  assert.equal(trustedLoopback.headers.get('access-control-allow-origin'), 'http://127.0.0.1:6006')
+  assert.equal(trustedLoopback.headers.get('vary'), 'Origin')
 
   const trustedLocalhost = await fetch(`${baseUrl}/api/status`, {
     headers: { Origin: 'http://localhost:6007' },
@@ -490,6 +492,19 @@ test('server only trusts configured loopback API origins', async (t) => {
     headers: { Origin: 'http://[::1]:6008' },
   })
   assert.equal(trustedIpv6Loopback.status, 200)
+
+  const trustedPreflight = await fetch(`${baseUrl}/api/app-state/conversations`, {
+    method: 'OPTIONS',
+    headers: {
+      Origin: 'http://127.0.0.1:6006',
+      'Access-Control-Request-Method': 'POST',
+      'Access-Control-Request-Headers': 'content-type',
+    },
+  })
+  assert.equal(trustedPreflight.status, 204)
+  assert.equal(trustedPreflight.headers.get('access-control-allow-origin'), 'http://127.0.0.1:6006')
+  assert.match(trustedPreflight.headers.get('access-control-allow-methods') ?? '', /POST/)
+  assert.match(trustedPreflight.headers.get('access-control-allow-headers') ?? '', /Content-Type/)
 
   const untrustedRemote = await fetch(`${baseUrl}/api/status`, {
     headers: { Origin: 'https://example.invalid' },

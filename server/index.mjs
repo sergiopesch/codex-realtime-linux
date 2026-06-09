@@ -205,6 +205,20 @@ function guardLocalApiRequests(req, res, next) {
     res.status(403).json({ error: 'Request origin is not allowed.', code: 'origin_not_allowed' })
     return
   }
+  if (origin) {
+    res.set({
+      'Access-Control-Allow-Origin': origin,
+      'Access-Control-Allow-Methods': 'GET,POST,PATCH,PUT,DELETE,OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Max-Age': '600',
+      Vary: 'Origin',
+    })
+  }
+
+  if (req.method === 'OPTIONS') {
+    res.status(204).end()
+    return
+  }
 
   if (apiRouteRequiresJsonBody(req) && !req.is('application/json')) {
     res.status(415).json({ error: 'Content-Type must be application/json.', code: 'json_required' })
