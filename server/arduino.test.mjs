@@ -280,6 +280,34 @@ test('uploadArduinoSketch prefers serial-by-id ports when board metadata is unav
   ])
 })
 
+test('uploadArduinoSketch prefers stable serial-by-id port for a single detected tty board', async () => {
+  const commands = []
+  const run = async (args) => {
+    commands.push(args)
+    return { stdout: `${args[0]} ok`, stderr: '' }
+  }
+
+  const result = await uploadArduinoSketch(
+    { action: 'onboard_led_on' },
+    {
+      run,
+      listPorts: async () => ['/dev/serial/by-id/usb-Arduino_Uno-if00', '/dev/ttyACM0'],
+      listBoards: async () => [{ address: '/dev/ttyACM0', fqbn: 'arduino:avr:uno', boardName: 'Arduino Uno' }],
+    },
+  )
+
+  assert.equal(result.port, '/dev/serial/by-id/usb-Arduino_Uno-if00')
+  assert.equal(result.fqbn, 'arduino:avr:uno')
+  assert.equal(result.boardName, 'Arduino Uno')
+  assert.deepEqual(commands[1].slice(0, 5), [
+    'upload',
+    '-p',
+    '/dev/serial/by-id/usb-Arduino_Uno-if00',
+    '--fqbn',
+    'arduino:avr:uno',
+  ])
+})
+
 test('uploadArduinoSketch bounds compile and upload command output', async () => {
   const run = async (args) => ({
     stdout: `${args[0]} ${'x'.repeat(8_000)}`,

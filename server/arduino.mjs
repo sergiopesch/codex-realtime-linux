@@ -222,6 +222,14 @@ function isSupportedSerialPort(port) {
   return SERIAL_PORT_PATH_PATTERN.test(port) || SERIAL_BY_ID_PATTERN.test(port)
 }
 
+function preferredPortForDetectedBoard(detectedPort, ports) {
+  if (!detectedPort) return null
+  const serialByIdPorts = ports.filter((port) => SERIAL_BY_ID_PATTERN.test(port))
+  const ttyPorts = ports.filter((port) => SERIAL_PORT_PATH_PATTERN.test(port))
+  if (serialByIdPorts.length === 1 && ttyPorts.length === 1 && ttyPorts[0] === detectedPort) return serialByIdPorts[0]
+  return detectedPort
+}
+
 function normalizeDetectedBoard(entry) {
   if (!entry || typeof entry !== 'object') return null
   const candidateFqbn = limitStatusString(entry.fqbn)
@@ -370,7 +378,7 @@ export async function uploadArduinoSketch(
   const autoDetectedBoard = request.port ? null : boards[0]
   const detectedBoard = matchingBoard ?? autoDetectedBoard
   const detectedPort = detectedBoard?.address && isSupportedSerialPort(detectedBoard.address) ? detectedBoard.address : null
-  const port = request.port ?? detectedPort ?? ports[0]
+  const port = request.port ?? preferredPortForDetectedBoard(detectedPort, ports) ?? ports[0]
   if (!port) {
     throw new ArduinoUploadError('No Arduino serial port was found. Plug in the board and try again.', {
       code: 'arduino_port_not_found',
