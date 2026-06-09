@@ -1219,6 +1219,22 @@ test('README documents live release verification for non-automated capabilities'
   assert.match(readme, /does not guess and flash the wrong board/)
 })
 
+test('environment example matches runtime configuration validation', async () => {
+  const envExample = await readFile(path.join(repoRoot, '.env.example'), 'utf8')
+  const mainSource = await readFile(path.join(repoRoot, 'electron', 'main.cjs'), 'utf8')
+  const serverSource = await readFile(path.join(repoRoot, 'server', 'index.mjs'), 'utf8')
+
+  assert.match(envExample, /CODEX_BIN=codex/)
+  assert.match(envExample, /CODEX_APPROVAL_POLICY=on-request/)
+  assert.match(envExample, /use never only for trusted non-interactive workspaces/)
+  assert.match(envExample, /CODEX_REALTIME_NODE_BIN=\/absolute\/path\/to\/node/)
+  assert.match(envExample, /Blank or relative values are ignored/)
+  assert.match(mainSource, /const apiNodeBin = configuredAbsolutePath\(process\.env\.CODEX_REALTIME_NODE_BIN, process\.execPath\)/)
+  assert.match(serverSource, /const CODEX_APPROVAL_POLICY = configuredCodexApprovalPolicy\(process\.env\.CODEX_APPROVAL_POLICY\)/)
+  assert.doesNotMatch(envExample, /CODEX_REALTIME_NODE_BIN=node/)
+  assert.doesNotMatch(envExample, /absolute path or executable name for the Node runtime/)
+})
+
 test('weather upstream responses are timeout and size bounded', async () => {
   const weatherSource = await readFile(path.join(repoRoot, 'server', 'weather.mjs'), 'utf8')
   const appSource = await readFile(path.join(repoRoot, 'src', 'App.tsx'), 'utf8')
