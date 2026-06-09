@@ -1491,9 +1491,10 @@ function normalizeAppState(input) {
     ? firstUniqueBy(input.workspaces.map(normalizeWorkspace).filter(Boolean), (workspace) => workspace.path).slice(0, MAX_LOCAL_WORKSPACES)
     : []
   state.hiddenWorkspacePaths = normalizeWorkspacePathList(input?.hiddenWorkspacePaths, MAX_LOCAL_HIDDEN_WORKSPACES)
+  const savedWorkspacePaths = new Set(state.workspaces.map((workspace) => workspace.path))
+  let normalizedWorkspaceBuckets = 0
 
   if (input?.conversationsByWorkspace && typeof input.conversationsByWorkspace === 'object') {
-    let normalizedWorkspaceBuckets = 0
     for (const [workspacePath, conversations] of Object.entries(input.conversationsByWorkspace)) {
       if (normalizedWorkspaceBuckets >= MAX_LOCAL_WORKSPACE_BUCKETS) break
       const normalizedWorkspacePath = normalizeWorkspacePath(workspacePath)
@@ -1506,11 +1507,19 @@ function normalizeAppState(input) {
             .filter((conversation) => !isEmptyGeneratedVoiceDraft(conversation)),
           (conversation) => conversation.id,
         ).slice(0, MAX_LOCAL_CONVERSATIONS_PER_WORKSPACE)
-        if (normalizedConversations.length > 0) {
+        if (normalizedConversations.length > 0 || savedWorkspacePaths.has(normalizedWorkspacePath)) {
           state.conversationsByWorkspace[normalizedWorkspacePath] = normalizedConversations
           normalizedWorkspaceBuckets += 1
         }
       }
+    }
+  }
+
+  for (const workspacePath of savedWorkspacePaths) {
+    if (normalizedWorkspaceBuckets >= MAX_LOCAL_WORKSPACE_BUCKETS) break
+    if (!state.conversationsByWorkspace[workspacePath]) {
+      state.conversationsByWorkspace[workspacePath] = []
+      normalizedWorkspaceBuckets += 1
     }
   }
 
@@ -2372,7 +2381,7 @@ app.post('/api/app-state/conversations/delete', async (req, res) => {
       if (next.length > 0) {
         state.conversationsByWorkspace[workspacePath] = next
       } else {
-        delete state.conversationsByWorkspace[workspacePath]
+        state.conversationsByWorkspace[workspacePath] = []
       }
     })
     res.json({ state })

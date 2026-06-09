@@ -1224,7 +1224,28 @@ test('server returns normalized app state after mutations', async (t) => {
   const workspaceReAddBody = await workspaceReAdd.json()
   assert.equal(workspaceReAddBody.state.workspaces[0].path, workspacePath)
   assert.equal(workspaceReAddBody.state.hiddenWorkspacePaths.includes(workspacePath), false)
-  assert.equal(workspaceReAddBody.state.conversationsByWorkspace[workspacePath], undefined)
+  assert.deepEqual(workspaceReAddBody.state.conversationsByWorkspace[workspacePath], [])
+
+  const restoredConversationSave = await fetch(`${baseUrl}/api/app-state/conversations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      workspacePath,
+      conversation: { id: 'restored-conversation', title: 'Restored conversation' },
+    }),
+  })
+  assert.equal(restoredConversationSave.status, 200)
+  const restoredConversationBody = await restoredConversationSave.json()
+  assert.equal(restoredConversationBody.state.conversationsByWorkspace[workspacePath].length, 1)
+
+  const restoredConversationDelete = await fetch(`${baseUrl}/api/app-state/conversations/delete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspacePath, conversationId: 'restored-conversation' }),
+  })
+  assert.equal(restoredConversationDelete.status, 200)
+  const restoredConversationDeleteBody = await restoredConversationDelete.json()
+  assert.deepEqual(restoredConversationDeleteBody.state.conversationsByWorkspace[workspacePath], [])
 })
 
 test('server ignores oversized persisted app state and secrets files', async (t) => {
