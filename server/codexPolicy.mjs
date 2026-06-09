@@ -14,11 +14,47 @@ export const PROTECTED_APP_PATHS = [
   '.env*',
 ]
 
-const ARTIFACT_REQUEST_PATTERN =
-  /\b(create|make|build|generate|write|add)\b[\s\S]{0,80}\b(html|page|demo|presentation|slide|slides|file|document|landing page)\b/i
+const ARTIFACT_ACTION_TERMS = [
+  'add',
+  'build',
+  'create',
+  'design',
+  'draft',
+  'generate',
+  'make',
+  'produce',
+  'put together',
+  'write',
+]
+
+const ARTIFACT_OUTPUT_TERMS = [
+  'browser preview',
+  'deck',
+  'demo',
+  'document',
+  'file',
+  'html',
+  'index.html',
+  'landing page',
+  'microsite',
+  'page',
+  'presentation',
+  'report',
+  'slide',
+  'slides',
+  'slideshow',
+  'web page',
+  'webpage',
+]
 
 const EXPLICIT_APP_EDIT_PATTERN =
   /\b(edit|change|modify|update|fix|refactor|redesign|alter|touch)\b[\s\S]{0,100}\b(app source|application source|app shell|this app|the app|ui source|electron app|react app|src\/|server\/|electron\/|index\.html)\b/i
+
+const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+const termPattern = (term) => escapeRegExp(term).replace(/\s+/g, '\\s+')
+
+const containsTerm = (value, terms) => terms.some((term) => new RegExp(`\\b${termPattern(term)}\\b`, 'i').test(value))
 
 const slug = (value) =>
   value
@@ -28,7 +64,7 @@ const slug = (value) =>
     .slice(0, 52) || 'artifact'
 
 export function isArtifactRequest(goal) {
-  return ARTIFACT_REQUEST_PATTERN.test(goal)
+  return containsTerm(goal, ARTIFACT_ACTION_TERMS) && containsTerm(goal, ARTIFACT_OUTPUT_TERMS)
 }
 
 export function hasExplicitAppEditIntent(goal) {

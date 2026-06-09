@@ -14,6 +14,9 @@ test('classifies generated HTML requests as artifact work', () => {
     isArtifactRequest('Create a simple index.html that outlines what the project is about.'),
     true,
   )
+  assert.equal(isArtifactRequest('Can you put together a slideshow from the images in this workspace?'), true)
+  assert.equal(isArtifactRequest('Design a browser preview deck about the attached screenshots.'), true)
+  assert.equal(isArtifactRequest('Produce a microsite report from these project files.'), true)
   assert.equal(isArtifactRequest('Fix the USB watcher bug in the app.'), false)
 })
 
