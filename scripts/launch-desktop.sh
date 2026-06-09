@@ -28,11 +28,15 @@ if [ -z "$xdg_state_home" ] || [ "${xdg_state_home#/}" = "$xdg_state_home" ]; th
 fi
 state_dir="$xdg_state_home/codex-realtime-linux"
 mkdir -p "$state_dir"
+chmod 700 "$state_dir" 2>/dev/null || true
 desktop_log="$state_dir/desktop-launch.log"
 max_log_bytes=1048576
 if [ -f "$desktop_log" ] && [ "$(wc -c < "$desktop_log" 2>/dev/null || echo 0)" -gt "$max_log_bytes" ]; then
   mv -f "$desktop_log" "$desktop_log.1"
+  chmod 600 "$desktop_log.1" 2>/dev/null || true
 fi
+: >> "$desktop_log"
+chmod 600 "$desktop_log" 2>/dev/null || true
 exec >> "$desktop_log" 2>&1
 
 electron_bin="./node_modules/electron/dist/electron"

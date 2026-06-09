@@ -3,7 +3,7 @@ require('dotenv/config')
 const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron')
 const { spawn } = require('node:child_process')
 const { randomUUID } = require('node:crypto')
-const { closeSync, mkdirSync, openSync, readFileSync, renameSync, statSync, writeSync } = require('node:fs')
+const { chmodSync, closeSync, mkdirSync, openSync, readFileSync, renameSync, statSync, writeSync } = require('node:fs')
 const http = require('node:http')
 const os = require('node:os')
 const path = require('node:path')
@@ -232,9 +232,11 @@ const waitForAppServer = (baseUrl, timeoutMs = 15000, expectedDesktopServerToken
 
 const createApiLogFd = () => {
   try {
-    mkdirSync(stateDir, { recursive: true })
+    mkdirSync(stateDir, { recursive: true, mode: 0o700 })
+    chmodSync(stateDir, 0o700)
     rotateLogFile(apiLogPath)
-    const fd = openSync(apiLogPath, 'a')
+    const fd = openSync(apiLogPath, 'a', 0o600)
+    chmodSync(apiLogPath, 0o600)
     writeSync(fd, `\n[${new Date().toISOString()}] Starting API server from Electron with ${apiNodeBin}\n`)
     return fd
   } catch {
@@ -246,6 +248,7 @@ const rotateLogFile = (logPath) => {
   try {
     if (statSync(logPath).size <= maxLogBytes) return
     renameSync(logPath, `${logPath}.1`)
+    chmodSync(`${logPath}.1`, 0o600)
   } catch {
     // Missing or unrotatable logs must not block app startup.
   }

@@ -199,6 +199,7 @@ OPENAI_USAGE_GBP_RATE_API=https://api.frankfurter.app/latest?from=USD&to=GBP
 - The built app shell is served with browser safety headers: a CSP limited to app assets, local API calls, and OpenAI Realtime calls; no-sniff and no-referrer headers; anti-framing headers; and permissions policy that allows microphone/display capture only for the app itself. Generated artifact previews use a stricter separate CSP that blocks network/API connections.
 - The server persists this client's local workspace/thread state to `CODEX_REALTIME_STATE_PATH`, defaulting to `~/.local/state/codex-realtime-linux/app-state.json`; overrides must be absolute paths, the state directory is tightened to `0700`, and writes are synced before atomic rename.
 - The server persists Settings-saved API secrets to `CODEX_REALTIME_SECRETS_PATH`, defaulting to `~/.config/codex-realtime-linux/secrets.json`; overrides must be absolute paths, the secrets directory is tightened to `0700`, writes are synced before atomic rename, and malformed or oversized saved keys are ignored on load.
+- The app-menu launcher and Electron API supervisor write startup logs under `~/.local/state/codex-realtime-linux/` with a user-only `0700` directory and `0600` log files before redirecting process output.
 - Removing a workspace in the app clears that workspace and its saved local conversation buckets from this client's sidebar state; it does not delete the local folder.
 - `src/App.tsx` is the Electron renderer UI.
 - `src/App.css` defines the compact dark desktop layout.
