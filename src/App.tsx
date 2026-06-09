@@ -1135,7 +1135,8 @@ function App() {
   }
 
   const createConversation = async (targetWorkspacePath?: string) => {
-    const workspacePath = targetWorkspacePath || selectedWorkspace || workspaceRoots[0]?.workspacePath || initialWorkspacePath
+    const requestedWorkspacePath = normalizeAbsoluteLocalWorkspacePath(targetWorkspacePath ?? selectedWorkspace)
+    const workspacePath = workspaceRoots.some((root) => root.workspacePath === requestedWorkspacePath) ? requestedWorkspacePath : ''
     if (!workspacePath) {
       showNotice('Add or select a workspace before starting a voice build.')
       return

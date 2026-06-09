@@ -50,8 +50,17 @@ test('renderer labels identity and voice context from runtime workspace state', 
     appSource,
     /const accountHandle = status\?\.realtimeUser\?\.name \|\| basenameFromWorkspacePath\(selectedWorkspace\) \|\| 'local'/,
   )
+  assert.match(
+    appSource,
+    /const requestedWorkspacePath = normalizeAbsoluteLocalWorkspacePath\(targetWorkspacePath \?\? selectedWorkspace\)/,
+  )
+  assert.match(
+    appSource,
+    /const workspacePath = workspaceRoots\.some\(\(root\) => root\.workspacePath === requestedWorkspacePath\) \? requestedWorkspacePath : ''/,
+  )
   assert.doesNotMatch(appSource, /selectedWorkspace\.split\('\/'\)\.filter\(Boolean\)\[1\]/)
   assert.doesNotMatch(appSource, /workspaceRoots\[0\]\?\.workspace\.name\s+\?\?\s+'No workspace'/)
+  assert.doesNotMatch(appSource, /workspaceRoots\[0\]\?\.workspacePath/)
 })
 
 test('public assets do not include fixed demo presentation routes', async () => {
@@ -302,7 +311,8 @@ test('Codex task routes require explicit user goals and IDs before app-server ca
   assert.match(appSource, /appStateData\.workspaces \?\? \[\]\)\.filter\(\(workspace\) =>\s+isAbsoluteLocalWorkspacePath\(workspacePathFor\(workspace\)\)/)
   assert.match(appSource, /const refreshArtifacts = useCallback\(async \(workspacePath = selectedWorkspaceRef\.current, init\?: RequestInit\)/)
   assert.match(appSource, /const data = await fetchGeneratedArtifacts\(workspacePath, init\)/)
-  assert.match(appSource, /const workspacePath = targetWorkspacePath \|\| selectedWorkspace \|\| workspaceRoots\[0\]\?\.workspacePath \|\| initialWorkspacePath/)
+  assert.match(appSource, /const requestedWorkspacePath = normalizeAbsoluteLocalWorkspacePath\(targetWorkspacePath \?\? selectedWorkspace\)/)
+  assert.match(appSource, /const workspacePath = workspaceRoots\.some\(\(root\) => root\.workspacePath === requestedWorkspacePath\) \? requestedWorkspacePath : ''/)
   assert.doesNotMatch(appSource, /fallbackWorkspaces/)
   assert.doesNotMatch(appSource, /runtimeFallbackWorkspaces/)
   assert.doesNotMatch(appSource, /selectedWorkspaceRef\.current \|\| status\?\.appRoot/)
