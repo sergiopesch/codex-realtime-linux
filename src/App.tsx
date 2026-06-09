@@ -234,6 +234,12 @@ type ArtifactPlan = {
   workspacePath: string
 }
 
+type PendingVisualContext = {
+  source: string
+  summary: string
+  sessionId: number | null
+}
+
 type DirectoryPickerWindow = Window & {
   showDirectoryPicker?: () => Promise<{ name?: string }>
 }
@@ -876,7 +882,7 @@ function App() {
   const screenStreamRef = useRef<MediaStream | null>(null)
   const screenEndedTrackRef = useRef<MediaStreamTrack | null>(null)
   const screenEndedHandlerRef = useRef<(() => void) | null>(null)
-  const pendingVisualContextRef = useRef<{ source: string; summary: string }[]>([])
+  const pendingVisualContextRef = useRef<PendingVisualContext[]>([])
   const pendingArtifactRef = useRef<ArtifactPlan | null>(null)
   const activeThreadIdRef = useRef<string | null>(null)
   const activeTurnIdRef = useRef<string | null>(null)
@@ -1282,9 +1288,11 @@ function App() {
   const flushPendingVisualContext = () => {
     const pending = pendingVisualContextRef.current.splice(0)
     if (pending.length === 0) return
+    const currentSessionId = voiceSessionIdRef.current
     const injected = []
     const retained = []
     for (const item of pending) {
+      if (item.sessionId != null && item.sessionId !== currentSessionId) continue
       if (injectVisualContextIntoRealtime(item.source, item.summary, false)) injected.push(item)
       else retained.push(item)
     }
@@ -1296,23 +1304,49 @@ function App() {
   }
 
   const analyzeAndAttachVisualContext = async (imageDataUrl: string, source: string) => {
+    const startedVoiceSessionId = voiceSessionIdRef.current
+    const startedDuringVoiceSession = voiceStateRef.current !== 'idle'
     setActivity('Voice router', 'Vision context')
     const context = await api<VisualContextResponse>('/api/vision/context', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ imageDataUrl, source }),
     })
-    setVisualContextLabel(context.source)
-    const injected = injectVisualContextIntoRealtime(context.source, context.summary)
-    if (!injected) {
+    const canUseCurrentOrFutureSession =
+      !startedDuringVoiceSession || voiceSessionIdRef.current === startedVoiceSessionId
+    const injected = canUseCurrentOrFutureSession && injectVisualContextIntoRealtime(context.source, context.summary)
+    const queued = !injected && canUseCurrentOrFutureSession
+    if (queued) {
+      const queuedSessionId = startedDuringVoiceSession ? startedVoiceSessionId : null
       pendingVisualContextRef.current = [
-        ...pendingVisualContextRef.current.filter((item) => item.source !== context.source),
-        { source: context.source, summary: context.summary },
+        ...pendingVisualContextRef.current.filter((item) => item.source !== context.source || item.sessionId !== queuedSessionId),
+        {
+          source: context.source,
+          summary: context.summary,
+          sessionId: queuedSessionId,
+        },
       ].slice(-4)
     }
-    appendEvent('context/visual-attached', { source: context.source, model: context.model, injected })
-    setActivity('Voice router', 'Vision context', injected ? 'Realtime updated' : 'Ready for voice')
-    showNotice(injected ? `${context.source} attached to Realtime.` : `${context.source} analyzed. Start voice to use it live.`)
+    if (injected || queued) setVisualContextLabel(context.source)
+    appendEvent('context/visual-attached', {
+      source: context.source,
+      model: context.model,
+      injected,
+      queued,
+      staleVoiceSession: !canUseCurrentOrFutureSession,
+    })
+    setActivity(
+      'Voice router',
+      'Vision context',
+      injected ? 'Realtime updated' : queued ? 'Ready for voice' : 'Voice session ended',
+    )
+    showNotice(
+      injected
+        ? `${context.source} attached to Realtime.`
+        : queued
+          ? `${context.source} analyzed. Start voice to use it live.`
+          : `${context.source} analyzed after voice ended. Attach it again when you want to use it.`,
+    )
     return context
   }
 
