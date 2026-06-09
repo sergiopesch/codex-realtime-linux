@@ -227,9 +227,27 @@ type DesktopWindow = Window & {
 }
 
 const initialWorkspacePath = ''
+const DEFAULT_API_TIMEOUT_MS = 130_000
+const REALTIME_CONNECTION_TIMEOUT_MS = 30_000
 
-const api = async <T,>(path: string, init?: RequestInit): Promise<T> => {
-  const response = await fetch(path, init)
+const fetchWithTimeout = async (input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = DEFAULT_API_TIMEOUT_MS) => {
+  const controller = new AbortController()
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs)
+
+  try {
+    return await fetch(input, { ...init, signal: controller.signal })
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error(`Request timed out after ${Math.round(timeoutMs / 1000)} seconds.`, { cause: error })
+    }
+    throw error
+  } finally {
+    window.clearTimeout(timeout)
+  }
+}
+
+const api = async <T,>(path: string, init?: RequestInit, options?: { timeoutMs?: number }): Promise<T> => {
+  const response = await fetchWithTimeout(path, init, options?.timeoutMs)
   if (!response.ok) {
     const text = await response.text()
     let message: string
@@ -1495,31 +1513,31 @@ function App() {
       const offer = await pc.createOffer()
       await pc.setLocalDescription(offer)
 
-      const tokenResponse = await fetch('/api/realtime/token', { method: 'POST' })
-      const tokenData = await tokenResponse.json().catch(() => ({}))
-      if (!tokenResponse.ok) {
-        throw new Error(
-          typeof tokenData?.error === 'string'
-            ? tokenData.error
-            : 'Failed to create Realtime client secret.',
-        )
-      }
+      const tokenData = await api<Record<string, unknown>>(
+        '/api/realtime/token',
+        { method: 'POST' },
+        { timeoutMs: REALTIME_CONNECTION_TIMEOUT_MS },
+      )
       const ephemeralKey =
         typeof tokenData?.value === 'string'
           ? tokenData.value
-          : typeof tokenData?.client_secret?.value === 'string'
-            ? tokenData.client_secret.value
+          : typeof (tokenData?.client_secret as { value?: unknown } | undefined)?.value === 'string'
+            ? (tokenData.client_secret as { value: string }).value
             : ''
       if (!ephemeralKey) throw new Error('Realtime client secret response did not include a token.')
 
-      const answerResponse = await fetch('https://api.openai.com/v1/realtime/calls', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${ephemeralKey}`,
-          'Content-Type': 'application/sdp',
+      const answerResponse = await fetchWithTimeout(
+        'https://api.openai.com/v1/realtime/calls',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${ephemeralKey}`,
+            'Content-Type': 'application/sdp',
+          },
+          body: offer.sdp,
         },
-        body: offer.sdp,
-      })
+        REALTIME_CONNECTION_TIMEOUT_MS,
+      )
       if (!answerResponse.ok) throw new Error(await answerResponse.text())
 
       await pc.setRemoteDescription({ type: 'answer', sdp: await answerResponse.text() })

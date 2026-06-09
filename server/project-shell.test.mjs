@@ -162,6 +162,12 @@ test('electron shell keeps renderer isolation and external navigation guarded', 
 test('realtime voice sessions reset transcript state and clean up media resources', async () => {
   const appSource = await readFile(path.join(repoRoot, 'src', 'App.tsx'), 'utf8')
 
+  assert.match(appSource, /const DEFAULT_API_TIMEOUT_MS = 130_000/)
+  assert.match(appSource, /const REALTIME_CONNECTION_TIMEOUT_MS = 30_000/)
+  assert.match(appSource, /const fetchWithTimeout = async/)
+  assert.match(appSource, /Request timed out after/)
+  assert.match(appSource, /await api<Record<string, unknown>>\(/)
+  assert.match(appSource, /fetchWithTimeout\(\s+'https:\/\/api\.openai\.com\/v1\/realtime\/calls'/)
   assert.match(appSource, /const cleanupVoiceSession = \(\) =>/)
   assert.match(appSource, /const microphoneStreamRef = useRef<MediaStream \| null>\(null\)/)
   assert.match(appSource, /microphoneStream\?\.getTracks\(\)\.forEach\(\(track\) => track\.stop\(\)\)/)
