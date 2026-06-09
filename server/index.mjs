@@ -49,6 +49,7 @@ const MAX_CONVERSATION_TRACES = 40
 const MAX_CONVERSATION_TRANSCRIPT_LINES = 200
 const MAX_USAGE_BUCKETS = 20
 const MAX_USAGE_BUCKET_LABEL_LENGTH = 120
+const MAX_ADMIN_WORKSPACES = 20
 const MAX_CODEX_NOTIFICATIONS = 160
 const MAX_EVENT_METHOD_LENGTH = 160
 const MAX_EVENT_STRING_LENGTH = 2_000
@@ -823,6 +824,16 @@ function normalizeWorkspace(input) {
   }
 }
 
+function normalizeAdminWorkspace(input) {
+  const id = normalizeBoundedString(input?.id, '', MAX_CONVERSATION_ID_LENGTH)
+  if (!id) return null
+  return {
+    id,
+    name: normalizeBoundedString(input?.name, id, MAX_CONVERSATION_TITLE_LENGTH),
+    status: normalizeBoundedString(input?.status ?? input?.archived, 'admin-api', 40),
+  }
+}
+
 function normalizeStringList(values, maxItems, maxLength) {
   if (!Array.isArray(values)) return []
   return values
@@ -1552,7 +1563,11 @@ app.post('/api/app-state/conversations/delete', async (req, res) => {
 app.get('/api/workspaces', async (_req, res) => {
   try {
     const projects = await openaiGet('/organization/projects?limit=20')
-    res.json({ source: 'admin-api', data: projects.data ?? projects })
+    const data = (Array.isArray(projects.data) ? projects.data : [])
+      .map(normalizeAdminWorkspace)
+      .filter(Boolean)
+      .slice(0, MAX_ADMIN_WORKSPACES)
+    res.json({ source: 'admin-api', data })
   } catch (error) {
     res.json({
       source: OPENAI_ADMIN_KEY ? 'admin-api-error' : 'missing-admin-key',
