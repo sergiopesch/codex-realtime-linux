@@ -1191,20 +1191,33 @@ app.get('/api/weather/current', handleCurrentWeather)
 app.post('/api/weather/current', handleCurrentWeather)
 
 app.get('/api/usb/events', async (req, res) => {
-  const scan = req.query.scan === 'true'
-  if (scan) await usbMonitor.scanSerialDevices()
-  res.json({
-    status: usbMonitor.status(),
-    data: usbMonitor.events,
-  })
+  try {
+    const scan = req.query.scan === 'true'
+    if (scan) await usbMonitor.scanSerialDevices()
+    res.json({
+      status: usbMonitor.status(),
+      data: usbMonitor.events,
+    })
+  } catch (error) {
+    sendJsonError(res, error, {
+      fallbackStatus: 502,
+      fallbackMessage: 'Failed to read USB events.',
+      fallbackCode: 'usb_events_failed',
+    })
+  }
 })
 
 app.get('/api/arduino/status', async (_req, res) => {
-  res.json({
-    cli: await getArduinoCliStatus(),
-    boards: await listArduinoBoards(),
-    ports: await listSerialPorts(),
-  })
+  try {
+    const [cli, boards, ports] = await Promise.all([getArduinoCliStatus(), listArduinoBoards(), listSerialPorts()])
+    res.json({ cli, boards, ports })
+  } catch (error) {
+    sendJsonError(res, error, {
+      fallbackStatus: 502,
+      fallbackMessage: 'Failed to read Arduino status.',
+      fallbackCode: 'arduino_status_failed',
+    })
+  }
 })
 
 app.post('/api/arduino/upload', async (req, res) => {
