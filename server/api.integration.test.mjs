@@ -284,6 +284,38 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   assert.equal(malformedJson.status, 400)
   assert.equal((await readJson(malformedJson)).code, 'invalid_json')
 
+  const nonObjectWorkspaceSave = await fetch(`${baseUrl}/api/app-state/workspaces`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '[]',
+  })
+  assert.equal(nonObjectWorkspaceSave.status, 400)
+  assert.equal((await readJson(nonObjectWorkspaceSave)).code, 'invalid_workspace_path')
+
+  const nonObjectConversationSave = await fetch(`${baseUrl}/api/app-state/conversations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '[]',
+  })
+  assert.equal(nonObjectConversationSave.status, 400)
+  assert.equal((await readJson(nonObjectConversationSave)).code, 'invalid_workspace_path')
+
+  const nonObjectConversationPatch = await fetch(`${baseUrl}/api/app-state/conversations`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: '[]',
+  })
+  assert.equal(nonObjectConversationPatch.status, 400)
+  assert.equal((await readJson(nonObjectConversationPatch)).code, 'invalid_request')
+
+  const nonObjectConversationDelete = await fetch(`${baseUrl}/api/app-state/conversations/delete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '[]',
+  })
+  assert.equal(nonObjectConversationDelete.status, 400)
+  assert.equal((await readJson(nonObjectConversationDelete)).code, 'invalid_request')
+
   const missingTaskWorkspace = await fetch(`${baseUrl}/api/codex/task`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

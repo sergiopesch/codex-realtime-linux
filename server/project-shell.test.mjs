@@ -409,6 +409,7 @@ test('persisted workspaces and conversations require absolute workspace paths', 
   assert.match(serverSource, /fallbackCode: 'usb_events_failed'/)
   assert.match(serverSource, /fallbackCode: 'arduino_status_failed'/)
   assert.match(serverSource, /const \[cli, boards, ports\] = await Promise\.all\(\[getArduinoCliStatus\(\), listArduinoBoards\(\), listSerialPorts\(\)\]\)/)
+  assert.match(serverSource, /function normalizeObject\(value\) \{\s+return value && typeof value === 'object' && !Array\.isArray\(value\) \? value : \{\}\s+\}/)
   assert.match(serverSource, /function normalizeWorkspacePath/)
   assert.match(serverSource, /path\.isAbsolute\(workspacePath\)/)
   assert.match(serverSource, /function normalizeWorkspacePathList\(values, maxItems\)/)
@@ -424,7 +425,8 @@ test('persisted workspaces and conversations require absolute workspace paths', 
   assert.match(serverSource, /if \(!normalizedWorkspacePath \|\| state\.conversationsByWorkspace\[normalizedWorkspacePath\]\) continue/)
   assert.match(serverSource, /normalizedWorkspaceBuckets \+= 1/)
   assert.match(serverSource, /firstUniqueBy\([\s\S]*\(conversation\) => conversation\.id,[\s\S]*\)\.slice\(0, MAX_LOCAL_CONVERSATIONS_PER_WORKSPACE\)/)
-  assert.match(serverSource, /next\[index\] = normalizeConversation\(\{[\s\S]*\.\.\.conversations\[index\],[\s\S]*\.\.\.req\.body\.patch,[\s\S]*id: conversations\[index\]\.id,[\s\S]*workspacePath,[\s\S]*updatedAt: new Date\(\)\.toISOString\(\),[\s\S]*\}, workspacePath\)/)
+  assert.match(serverSource, /const patch = normalizeObject\(body\.patch\)/)
+  assert.match(serverSource, /next\[index\] = normalizeConversation\(\{[\s\S]*\.\.\.conversations\[index\],[\s\S]*\.\.\.patch,[\s\S]*id: conversations\[index\]\.id,[\s\S]*workspacePath,[\s\S]*updatedAt: new Date\(\)\.toISOString\(\),[\s\S]*\}, workspacePath\)/)
   assert.doesNotMatch(serverSource, /Object\.entries\(input\.conversationsByWorkspace\)\.slice\(0, MAX_LOCAL_WORKSPACE_BUCKETS\)/)
   assert.match(serverSource, /\.slice\(0, MAX_LOCAL_CONVERSATIONS_PER_WORKSPACE\)/)
   assert.match(serverSource, /state\.hiddenWorkspacePaths = state\.hiddenWorkspacePaths\.filter\(\(item\) => item !== workspacePath\)/)
@@ -437,16 +439,21 @@ test('persisted workspaces and conversations require absolute workspace paths', 
   assert.match(serverSource, /name: normalizeBoundedString\(input\?\.name, id, MAX_CONVERSATION_TITLE_LENGTH\)/)
   assert.match(serverSource, /\.map\(normalizeAdminWorkspace\)\s+\.filter\(Boolean\)\s+\.slice\(0, MAX_ADMIN_WORKSPACES\)/)
   assert.doesNotMatch(serverSource, /data: projects\.data \?\? projects/)
-  assert.match(serverSource, /workspacePath = await requireWorkspaceDirectory\(req\.body\.workspacePath \|\| req\.body\.conversation\?\.workspacePath, 'workspacePath'\)/)
-  assert.match(serverSource, /workspacePath = await requireWorkspaceDirectory\(req\.body\.workspacePath, 'workspacePath'\)/)
+  assert.match(serverSource, /const body = normalizeObject\(req\.body\)/)
+  assert.match(serverSource, /const conversationInput = normalizeObject\(body\.conversation\)/)
+  assert.match(serverSource, /workspacePath = await requireWorkspaceDirectory\(body\.workspacePath \|\| conversationInput\.workspacePath, 'workspacePath'\)/)
+  assert.match(serverSource, /workspacePath = await requireWorkspaceDirectory\(body\.workspacePath, 'workspacePath'\)/)
   assert.match(
     serverSource,
-    /app\.post\('\/api\/app-state\/conversations\/delete'[\s\S]*workspacePath = await requireWorkspaceDirectory\(req\.body\.workspacePath, 'workspacePath'\)/,
+    /app\.post\('\/api\/app-state\/conversations\/delete'[\s\S]*const body = normalizeObject\(req\.body\)[\s\S]*workspacePath = await requireWorkspaceDirectory\(body\.workspacePath, 'workspacePath'\)/,
   )
   assert.doesNotMatch(
     serverSource,
     /app\.post\('\/api\/app-state\/conversations\/delete'[\s\S]*const workspacePath = normalizeWorkspacePath\(req\.body\.workspacePath\)/,
   )
+  assert.doesNotMatch(serverSource, /req\.body\.workspacePath/)
+  assert.doesNotMatch(serverSource, /req\.body\.conversation/)
+  assert.doesNotMatch(serverSource, /req\.body\.patch/)
   assert.match(serverSource, /workspacePath must be an absolute local path/)
   assert.match(serverSource, /conversationId was not found in this workspace/)
   assert.match(serverSource, /conversation_not_found/)

@@ -1236,6 +1236,10 @@ function normalizeBoundedString(value, fallback = '', maxLength = 1_000) {
   return `${text.slice(0, Math.max(0, maxLength - 3))}...`
 }
 
+function normalizeObject(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : {}
+}
+
 function normalizeWorkspacePath(value) {
   const workspacePath = normalizeString(value)
   return workspacePath && path.isAbsolute(workspacePath) ? path.resolve(workspacePath) : ''
@@ -2046,14 +2050,16 @@ app.get('/api/app-state', async (_req, res) => {
 })
 
 app.post('/api/app-state/workspaces', async (req, res) => {
+  const body = normalizeObject(req.body)
+  const workspaceInput = normalizeObject(body.workspace ?? body)
   let workspacePath
   try {
-    workspacePath = await requireWorkspaceDirectory((req.body.workspace ?? req.body)?.path || (req.body.workspace ?? req.body)?.id, 'workspacePath')
+    workspacePath = await requireWorkspaceDirectory(workspaceInput.path || workspaceInput.id, 'workspacePath')
   } catch (error) {
     sendJsonError(res, error, { fallbackStatus: 400, fallbackMessage: 'Invalid workspace path.' })
     return
   }
-  const workspace = normalizeWorkspace({ ...(req.body.workspace ?? req.body), id: workspacePath, path: workspacePath })
+  const workspace = normalizeWorkspace({ ...workspaceInput, id: workspacePath, path: workspacePath })
 
   try {
     const { state } = await mutateAppState(async (state) => {
@@ -2072,7 +2078,8 @@ app.post('/api/app-state/workspaces', async (req, res) => {
 })
 
 app.post('/api/app-state/workspaces/delete', async (req, res) => {
-  const workspacePath = normalizeWorkspacePath(req.body.workspacePath)
+  const body = normalizeObject(req.body)
+  const workspacePath = normalizeWorkspacePath(body.workspacePath)
   if (!workspacePath) {
     sendJsonError(
       res,
@@ -2102,15 +2109,17 @@ app.post('/api/app-state/workspaces/delete', async (req, res) => {
 })
 
 app.post('/api/app-state/conversations', async (req, res) => {
+  const body = normalizeObject(req.body)
+  const conversationInput = normalizeObject(body.conversation)
   let workspacePath
   try {
-    workspacePath = await requireWorkspaceDirectory(req.body.workspacePath || req.body.conversation?.workspacePath, 'workspacePath')
+    workspacePath = await requireWorkspaceDirectory(body.workspacePath || conversationInput.workspacePath, 'workspacePath')
   } catch (error) {
     sendJsonError(res, error, { fallbackStatus: 400, fallbackMessage: 'Invalid workspace path.' })
     return
   }
 
-  const conversation = normalizeConversation(req.body.conversation, workspacePath)
+  const conversation = normalizeConversation(conversationInput, workspacePath)
   try {
     const { state } = await mutateAppState(async (state) => {
       const current = state.conversationsByWorkspace[workspacePath] ?? []
@@ -2127,7 +2136,9 @@ app.post('/api/app-state/conversations', async (req, res) => {
 })
 
 app.patch('/api/app-state/conversations', async (req, res) => {
-  const conversationId = normalizeString(req.body.conversationId)
+  const body = normalizeObject(req.body)
+  const patch = normalizeObject(body.patch)
+  const conversationId = normalizeString(body.conversationId)
   if (!conversationId) {
     sendJsonError(
       res,
@@ -2142,7 +2153,7 @@ app.patch('/api/app-state/conversations', async (req, res) => {
 
   let workspacePath
   try {
-    workspacePath = await requireWorkspaceDirectory(req.body.workspacePath, 'workspacePath')
+    workspacePath = await requireWorkspaceDirectory(body.workspacePath, 'workspacePath')
   } catch (error) {
     sendJsonError(res, error, { fallbackStatus: 400, fallbackMessage: 'Invalid workspace path.' })
     return
@@ -2163,7 +2174,7 @@ app.patch('/api/app-state/conversations', async (req, res) => {
       const next = [...conversations]
       next[index] = normalizeConversation({
         ...conversations[index],
-        ...req.body.patch,
+        ...patch,
         id: conversations[index].id,
         workspacePath,
         updatedAt: new Date().toISOString(),
@@ -2183,7 +2194,8 @@ app.patch('/api/app-state/conversations', async (req, res) => {
 })
 
 app.post('/api/app-state/conversations/delete', async (req, res) => {
-  const conversationId = normalizeString(req.body.conversationId)
+  const body = normalizeObject(req.body)
+  const conversationId = normalizeString(body.conversationId)
   if (!conversationId) {
     sendJsonError(
       res,
@@ -2198,7 +2210,7 @@ app.post('/api/app-state/conversations/delete', async (req, res) => {
 
   let workspacePath
   try {
-    workspacePath = await requireWorkspaceDirectory(req.body.workspacePath, 'workspacePath')
+    workspacePath = await requireWorkspaceDirectory(body.workspacePath, 'workspacePath')
   } catch (error) {
     sendJsonError(res, error, { fallbackStatus: 400, fallbackMessage: 'Invalid workspace path.' })
     return
