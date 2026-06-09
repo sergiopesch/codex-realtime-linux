@@ -190,6 +190,7 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   const token = Buffer.from(path.resolve(workspacePath), 'utf8').toString('base64url')
   const preview = await fetch(`${baseUrl}/workspace-artifacts/${token}/sample-report/index.html`)
   assert.equal(preview.status, 200)
+  assert.match(preview.headers.get('content-type') ?? '', /^text\/html\b/)
   assert.equal(preview.headers.get('x-content-type-options'), 'nosniff')
   assert.equal(preview.headers.get('referrer-policy'), 'no-referrer')
   assert.equal(preview.headers.get('cache-control'), 'no-store')
@@ -236,10 +237,15 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   const symlinkedWorkspacePreview = await fetch(`${baseUrl}/workspace-artifacts/${symlinkedWorkspaceToken}/linked-report/index.html`)
   assert.equal(symlinkedWorkspacePreview.status, 403)
 
-  const oversizedPreviewFile = path.join(artifactDir, 'huge-preview.bin')
+  await writeFile(path.join(artifactDir, 'unsafe-preview.bin'), 'not a browser preview asset')
+  const unsupportedPreview = await fetch(`${baseUrl}/workspace-artifacts/${token}/sample-report/unsafe-preview.bin`)
+  assert.equal(unsupportedPreview.status, 415)
+  assert.match(await unsupportedPreview.text(), /Unsupported artifact preview file type/)
+
+  const oversizedPreviewFile = path.join(artifactDir, 'huge-preview.html')
   await writeFile(oversizedPreviewFile, '')
   await truncate(oversizedPreviewFile, 26 * 1024 * 1024)
-  const oversizedPreview = await fetch(`${baseUrl}/workspace-artifacts/${token}/sample-report/huge-preview.bin`)
+  const oversizedPreview = await fetch(`${baseUrl}/workspace-artifacts/${token}/sample-report/huge-preview.html`)
   assert.equal(oversizedPreview.status, 413)
 
   const invalidToken = await fetch(`${baseUrl}/workspace-artifacts/not-a-workspace-token/sample-report/index.html`)

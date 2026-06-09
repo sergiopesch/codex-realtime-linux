@@ -90,6 +90,32 @@ const MAX_ARTIFACT_NAME_LENGTH = 120
 const MAX_ARTIFACT_TITLE_LENGTH = 180
 const MAX_ARTIFACT_PREVIEW_PATH_LENGTH = 1024
 const MAX_ARTIFACT_PREVIEW_FILE_BYTES = 25 * 1024 * 1024
+const ARTIFACT_PREVIEW_CONTENT_TYPES = new Map([
+  ['.html', 'text/html; charset=utf-8'],
+  ['.htm', 'text/html; charset=utf-8'],
+  ['.css', 'text/css; charset=utf-8'],
+  ['.js', 'text/javascript; charset=utf-8'],
+  ['.mjs', 'text/javascript; charset=utf-8'],
+  ['.json', 'application/json; charset=utf-8'],
+  ['.txt', 'text/plain; charset=utf-8'],
+  ['.md', 'text/markdown; charset=utf-8'],
+  ['.csv', 'text/csv; charset=utf-8'],
+  ['.png', 'image/png'],
+  ['.jpg', 'image/jpeg'],
+  ['.jpeg', 'image/jpeg'],
+  ['.gif', 'image/gif'],
+  ['.webp', 'image/webp'],
+  ['.avif', 'image/avif'],
+  ['.svg', 'image/svg+xml'],
+  ['.ico', 'image/x-icon'],
+  ['.woff', 'font/woff'],
+  ['.woff2', 'font/woff2'],
+  ['.mp3', 'audio/mpeg'],
+  ['.wav', 'audio/wav'],
+  ['.ogg', 'audio/ogg'],
+  ['.mp4', 'video/mp4'],
+  ['.webm', 'video/webm'],
+])
 const MAX_WORKSPACE_TOKEN_LENGTH = 8192
 const MAX_USAGE_BUCKETS = 20
 const MAX_USAGE_BUCKET_LABEL_LENGTH = 120
@@ -424,6 +450,10 @@ function isSafeArtifactName(value) {
 function isSafeArtifactPreviewPath(value) {
   if (typeof value !== 'string' || !value || value.length > MAX_ARTIFACT_PREVIEW_PATH_LENGTH || value.includes('\0')) return false
   return value.split('/').every((segment) => segment && segment !== '.' && segment !== '..' && !segment.startsWith('.'))
+}
+
+function artifactPreviewContentType(filePath) {
+  return ARTIFACT_PREVIEW_CONTENT_TYPES.get(path.extname(filePath).toLowerCase()) ?? ''
 }
 
 function isIgnorableArtifactEntryError(error) {
@@ -2337,6 +2367,11 @@ app.get(/^\/workspace-artifacts\/([^/]+)\/([^/]+)\/(.+)$/, async (req, res) => {
       res.status(404).send('Not found')
       return
     }
+    const contentType = artifactPreviewContentType(filePath)
+    if (!contentType) {
+      res.status(415).send('Unsupported artifact preview file type')
+      return
+    }
     const workspacePath = await requireWorkspaceDirectory(workspaceFromToken(token), 'workspace token')
     const artifactsDir = path.join(workspacePath, GENERATED_ARTIFACT_DIR)
     const artifactRoot = path.join(workspacePath, GENERATED_ARTIFACT_DIR, artifactName)
@@ -2399,6 +2434,7 @@ app.get(/^\/workspace-artifacts\/([^/]+)\/([^/]+)\/(.+)$/, async (req, res) => {
     }
 
     setArtifactPreviewHeaders(res)
+    res.set('Content-Type', contentType)
     res.sendFile(realRequestedPath, (error) => {
       if (!error || res.headersSent) return
       res.status(error.statusCode || 404).send('Not found')
