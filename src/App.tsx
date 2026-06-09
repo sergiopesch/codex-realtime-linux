@@ -2386,12 +2386,13 @@ function App() {
         const turnId = safeCodexEntityId(taskTurn.id)
         const artifact = safeArtifactPlan(taskResult.artifact, workspacePath)
         if (!threadId) throw new Error('Codex task response did not include a valid thread id.')
+        if (!turnId) throw new Error('Codex task response did not include a valid turn id.')
         result = {
           thread: { id: threadId },
-          ...(turnId ? { turn: { id: turnId } } : {}),
+          turn: { id: turnId },
           artifact,
         }
-        setActiveCodexTurn(threadId, turnId || null, workspacePath)
+        setActiveCodexTurn(threadId, turnId, workspacePath)
         setPendingArtifact(artifact)
 
         if (threadId) {
