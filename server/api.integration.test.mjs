@@ -373,6 +373,14 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   assert.equal(nonObjectConversationDelete.status, 400)
   assert.equal((await readJson(nonObjectConversationDelete)).code, 'invalid_request')
 
+  const nonObjectWeatherPost = await fetch(`${baseUrl}/api/weather/current`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '[]',
+  })
+  assert.equal(nonObjectWeatherPost.status, 400)
+  assert.equal((await readJson(nonObjectWeatherPost)).code, 'invalid_request')
+
   const nonObjectCodexArchive = await fetch(`${baseUrl}/api/codex/thread/archive`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1285,6 +1293,14 @@ test('visual context route validates image payloads before requiring upstream cr
     CODEX_USE_OPENAI_API_KEY: 'false',
   })
 
+  const nonObjectImage = await fetch(`${baseUrl}/api/vision/context`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '[]',
+  })
+  assert.equal(nonObjectImage.status, 400)
+  assert.equal((await readJson(nonObjectImage)).code, 'invalid_request')
+
   const invalidImage = await fetch(`${baseUrl}/api/vision/context`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1328,6 +1344,14 @@ test('visual context route validates image payloads before requiring upstream cr
 
 test('settings OpenAI key route returns stable json validation errors', async (t) => {
   const { baseUrl } = await startTestServer(t)
+
+  const nonObjectKey = await fetch(`${baseUrl}/api/settings/openai-key`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '[]',
+  })
+  assert.equal(nonObjectKey.status, 400)
+  assert.equal((await readJson(nonObjectKey)).code, 'invalid_request')
 
   const missingKey = await fetch(`${baseUrl}/api/settings/openai-key`, {
     method: 'POST',

@@ -1814,10 +1814,10 @@ async function openaiGet(path, key = OPENAI_ADMIN_KEY) {
 }
 
 async function handleCurrentWeather(req, res) {
-  const location = req.method === 'GET' ? req.query.location : req.body?.location
-  const units = req.method === 'GET' ? req.query.units : req.body?.units
-
   try {
+    const body = req.method === 'GET' ? null : requireObjectBody(req.body, 'Weather request')
+    const location = req.method === 'GET' ? req.query.location : body.location
+    const units = req.method === 'GET' ? req.query.units : body.units
     const weather = await getCurrentWeather(location, { units })
     res.json(weather)
   } catch (error) {
@@ -1826,9 +1826,10 @@ async function handleCurrentWeather(req, res) {
       return
     }
 
-    res.status(500).json({
-      error: responseErrorMessage(error, 'Failed to fetch current weather.'),
-      code: 'weather_request_failed',
+    sendJsonError(res, error, {
+      fallbackStatus: 500,
+      fallbackMessage: 'Failed to fetch current weather.',
+      fallbackCode: 'weather_request_failed',
     })
   }
 }
@@ -1902,10 +1903,11 @@ app.post('/api/realtime/token', async (_req, res) => {
 
 app.post('/api/vision/context', async (req, res) => {
   try {
+    const body = requireObjectBody(req.body, 'Visual context request')
     const context = await analyzeVisualContext({
-      imageDataUrl: req.body?.imageDataUrl,
-      source: req.body?.source,
-      prompt: req.body?.prompt,
+      imageDataUrl: body.imageDataUrl,
+      source: body.source,
+      prompt: body.prompt,
     })
     res.json({
       model: VISION_MODEL,
@@ -1969,7 +1971,8 @@ app.post('/api/arduino/upload', async (req, res) => {
 
 app.post('/api/settings/openai-key', async (req, res) => {
   try {
-    const apiKey = typeof req.body?.apiKey === 'string' ? req.body.apiKey.trim() : ''
+    const body = requireObjectBody(req.body, 'OpenAI key settings request')
+    const apiKey = typeof body.apiKey === 'string' ? body.apiKey.trim() : ''
     if (!apiKey) {
       throw httpError('apiKey is required', { statusCode: 400, code: 'api_key_required' })
     }
