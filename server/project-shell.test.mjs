@@ -217,6 +217,7 @@ test('electron shell keeps renderer isolation and external navigation guarded', 
 
 test('realtime voice sessions reset transcript state and clean up media resources', async () => {
   const appSource = await readFile(path.join(repoRoot, 'src', 'App.tsx'), 'utf8')
+  const serverSource = await readFile(path.join(repoRoot, 'server', 'index.mjs'), 'utf8')
 
   assert.match(appSource, /const DEFAULT_API_TIMEOUT_MS = 130_000/)
   assert.match(appSource, /const REALTIME_CONNECTION_TIMEOUT_MS = 30_000/)
@@ -234,6 +235,8 @@ test('realtime voice sessions reset transcript state and clean up media resource
   assert.match(appSource, /\['failed', 'disconnected', 'closed'\]\.includes\(pc\.connectionState\)/)
   assert.match(appSource, /No microphone audio track was available\./)
   assert.match(appSource, /Realtime voice data channel failed/)
+  assert.match(serverSource, /acknowledge the device briefly before returning to the user/)
+  assert.doesNotMatch(serverSource, /playful joke/)
 })
 
 test('screen context capture stops display streams after a frame is analyzed', async () => {

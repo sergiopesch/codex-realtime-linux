@@ -308,7 +308,7 @@ function realtimeSessionConfig() {
       'Uploading code changes the connected board firmware; confirm the target behaviour conversationally if the request is ambiguous.',
       ...userContextInstructions,
       REALTIME_PERSONA,
-      'When USB context says an Arduino was connected, immediately acknowledge it with one brief playful joke before returning to the user.',
+      'When USB context says an Arduino was connected, acknowledge the device briefly before returning to the user.',
       'Stay conversational: acknowledge briefly, ask one focused question only when the request is ambiguous, and keep the user oriented while Codex works.',
     ].join(' '),
     audio: {
