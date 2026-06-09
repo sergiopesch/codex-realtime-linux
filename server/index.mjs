@@ -37,6 +37,10 @@ const UPSTREAM_FETCH_TIMEOUT_MS =
     : 20_000
 const JSON_BODY_LIMIT = process.env.CODEX_REALTIME_JSON_LIMIT ?? '25mb'
 const MAX_VISUAL_CONTEXT_DATA_URL_BYTES = 12 * 1024 * 1024
+const MAX_VISUAL_CONTEXT_SOURCE_LENGTH = 160
+const MAX_VISUAL_CONTEXT_PROMPT_LENGTH = 1_500
+const DEFAULT_VISUAL_CONTEXT_PROMPT =
+  'Focus on UI state, visible errors, design issues, code clues, and what Codex should know before acting.'
 const CONFIGURED_CODEX_RPC_TIMEOUT_MS = Number(process.env.CODEX_RPC_TIMEOUT_MS)
 const CODEX_RPC_TIMEOUT_MS =
   Number.isFinite(CONFIGURED_CODEX_RPC_TIMEOUT_MS) && CONFIGURED_CODEX_RPC_TIMEOUT_MS > 0
@@ -465,6 +469,9 @@ function extractResponseText(response) {
 }
 
 async function analyzeVisualContext({ imageDataUrl, source, prompt }) {
+  const sourceLabel = normalizeBoundedString(source, 'attached image', MAX_VISUAL_CONTEXT_SOURCE_LENGTH)
+  const promptText = normalizeBoundedString(prompt, DEFAULT_VISUAL_CONTEXT_PROMPT, MAX_VISUAL_CONTEXT_PROMPT_LENGTH)
+
   if (typeof imageDataUrl !== 'string' || !imageDataUrl.startsWith('data:image/')) {
     throw httpError('imageDataUrl must be a data:image URL.', {
       statusCode: 400,
@@ -504,8 +511,8 @@ async function analyzeVisualContext({ imageDataUrl, source, prompt }) {
               type: 'input_text',
               text: [
                 'Analyze this visual context for a voice-first Codex coding session.',
-                `Source: ${source || 'attached image'}.`,
-                prompt || 'Focus on UI state, visible errors, design issues, code clues, and what Codex should know before acting.',
+                `Source: ${sourceLabel}.`,
+                promptText,
                 'Return a concise, factual summary in 1-3 sentences. Do not invent unseen details.',
               ].join(' '),
             },
@@ -531,7 +538,10 @@ async function analyzeVisualContext({ imageDataUrl, source, prompt }) {
     throw new Error(message)
   }
 
-  return extractResponseText(data) || 'Visual context was attached, but no summary was returned.'
+  return {
+    source: sourceLabel,
+    summary: extractResponseText(data) || 'Visual context was attached, but no summary was returned.',
+  }
 }
 
 class CodexRpc {
@@ -690,6 +700,12 @@ const emptyAppState = () => ({
 
 function normalizeString(value, fallback = '') {
   return typeof value === 'string' && value.trim() ? value.trim() : fallback
+}
+
+function normalizeBoundedString(value, fallback = '', maxLength = 1_000) {
+  const text = normalizeString(value, fallback).replace(/\s+/g, ' ')
+  if (text.length <= maxLength) return text
+  return `${text.slice(0, Math.max(0, maxLength - 3))}...`
 }
 
 function normalizeWorkspacePath(value) {
@@ -1052,15 +1068,15 @@ app.post('/api/realtime/token', async (_req, res) => {
 
 app.post('/api/vision/context', async (req, res) => {
   try {
-    const summary = await analyzeVisualContext({
+    const context = await analyzeVisualContext({
       imageDataUrl: req.body?.imageDataUrl,
       source: req.body?.source,
       prompt: req.body?.prompt,
     })
     res.json({
       model: VISION_MODEL,
-      summary,
-      source: req.body?.source ?? 'visual context',
+      summary: context.summary,
+      source: context.source,
     })
   } catch (error) {
     sendJsonError(res, error, { fallbackStatus: 502, fallbackMessage: 'Visual context analysis failed.' })

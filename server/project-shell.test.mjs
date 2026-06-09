@@ -217,6 +217,17 @@ test('upstream OpenAI and usage fetches are timeout bounded', async () => {
 
   assert.match(serverSource, /const UPSTREAM_FETCH_TIMEOUT_MS =/)
   assert.match(serverSource, /const MAX_VISUAL_CONTEXT_DATA_URL_BYTES =/)
+  assert.match(serverSource, /const MAX_VISUAL_CONTEXT_SOURCE_LENGTH = 160/)
+  assert.match(serverSource, /const MAX_VISUAL_CONTEXT_PROMPT_LENGTH = 1_500/)
+  assert.match(serverSource, /function normalizeBoundedString\(value, fallback = '', maxLength = 1_000\)/)
+  assert.match(
+    serverSource,
+    /const sourceLabel = normalizeBoundedString\(source, 'attached image', MAX_VISUAL_CONTEXT_SOURCE_LENGTH\)/,
+  )
+  assert.match(
+    serverSource,
+    /const promptText = normalizeBoundedString\(prompt, DEFAULT_VISUAL_CONTEXT_PROMPT, MAX_VISUAL_CONTEXT_PROMPT_LENGTH\)/,
+  )
   assert.match(serverSource, /function upstreamSignal\(\)/)
   assert.match(serverSource, /AbortSignal\.timeout\(UPSTREAM_FETCH_TIMEOUT_MS\)/)
   assert.match(serverSource, /Buffer\.byteLength\(imageDataUrl, 'utf8'\) > MAX_VISUAL_CONTEXT_DATA_URL_BYTES/)
@@ -225,6 +236,8 @@ test('upstream OpenAI and usage fetches are timeout bounded', async () => {
   assert.match(serverSource, /\/v1\/responses'[\s\S]*signal: upstreamSignal\(\)/)
   assert.match(serverSource, /fetch\(GBP_RATE_API, \{ signal: upstreamSignal\(\) \}\)/)
   assert.match(serverSource, /fetch\(`https:\/\/api\.openai\.com\/v1\$\{path\}`,[\s\S]*signal: upstreamSignal\(\)/)
+  assert.match(serverSource, /source: context\.source/)
+  assert.doesNotMatch(serverSource, /source: req\.body\?\.source \?\? 'visual context'/)
 })
 
 test('Arduino explicit-port uploads do not borrow unrelated detected board metadata', async () => {
