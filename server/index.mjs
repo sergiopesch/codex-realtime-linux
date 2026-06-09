@@ -582,6 +582,17 @@ function goalForWorkspace(cwd, goal, artifactPlan = null) {
   return goalWithWorkspaceGuard(goal, artifactPlan)
 }
 
+function publicArtifactPlan(artifactPlan) {
+  if (!artifactPlan) return null
+  return {
+    directoryName: artifactPlan.directoryName,
+    relativeDir: artifactPlan.relativeDir,
+    relativePath: artifactPlan.relativePath,
+    workspacePath: artifactPlan.workspacePath,
+    url: artifactPlan.url,
+  }
+}
+
 async function listGeneratedArtifacts(workspacePath) {
   const resolvedWorkspacePath = path.resolve(workspacePath)
   const artifactsDir = path.join(resolvedWorkspacePath, GENERATED_ARTIFACT_DIR)
@@ -1931,7 +1942,7 @@ app.post('/api/codex/task', async (req, res) => {
       input: [{ type: 'text', text: goalForWorkspace(cwd, goal, artifactPlan) }],
     })
     const turnId = normalizeCodexEntityId(turnResult.turn, 'turn')
-    res.json({ thread: { id: threadId }, turn: { id: turnId }, artifact: artifactPlan })
+    res.json({ thread: { id: threadId }, turn: { id: turnId }, artifact: publicArtifactPlan(artifactPlan) })
   } catch (error) {
     sendJsonError(res, error, { fallbackStatus: 502, fallbackMessage: 'Failed to start Codex task.' })
   }
