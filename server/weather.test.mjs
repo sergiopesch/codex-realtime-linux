@@ -57,6 +57,40 @@ test('getCurrentWeather rejects invalid locations before calling upstream servic
   )
 })
 
+test('getCurrentWeather normalizes whitespace in location queries before upstream lookup', async () => {
+  const requests = []
+  const fetchImpl = async (url) => {
+    requests.push(String(url))
+
+    if (String(url).startsWith('https://geocoding-api.open-meteo.com/')) {
+      return Response.json({
+        results: [
+          {
+            name: 'New York',
+            admin1: 'New York',
+            country: 'United States',
+            latitude: 40.7128,
+            longitude: -74.006,
+          },
+        ],
+      })
+    }
+
+    return Response.json({
+      current: {
+        temperature_2m: 22.1,
+      },
+    })
+  }
+
+  const weather = await getCurrentWeather('  New\n   York\t ', { fetchImpl })
+  const geocodingUrl = new URL(requests[0])
+
+  assert.equal(geocodingUrl.searchParams.get('name'), 'New York')
+  assert.equal(weather.query, 'New York')
+  assert.match(weather.summary, /New York, United States/i)
+})
+
 test('getCurrentWeather rejects invalid units before calling upstream services', async () => {
   let requests = 0
   const fetchImpl = async () => {

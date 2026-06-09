@@ -51,14 +51,21 @@ export class WeatherServiceError extends Error {
 }
 
 function normalizeLocationQuery(location) {
-  if (typeof location !== 'string' || location.trim().length < 2) {
+  if (typeof location !== 'string') {
     throw new WeatherServiceError('Provide a location with at least 2 characters.', {
       code: 'weather_invalid_location',
       status: 400,
     })
   }
 
-  const query = location.trim()
+  const query = location.trim().replace(/\s+/g, ' ')
+  if (query.length < 2) {
+    throw new WeatherServiceError('Provide a location with at least 2 characters.', {
+      code: 'weather_invalid_location',
+      status: 400,
+    })
+  }
+
   if (query.length > MAX_LOCATION_QUERY_LENGTH) {
     throw new WeatherServiceError('Location is too long.', {
       code: 'weather_invalid_location',

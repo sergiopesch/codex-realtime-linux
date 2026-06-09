@@ -225,6 +225,7 @@ Automated tests cover routing, persistence, preview policy, API guards, and buil
 ## Weather Check
 
 Open `Settings` in the app, enter a location, and use `Get weather` to verify the feature in the UI.
+Location queries are trimmed, internal whitespace-normalized, and bounded before the Open-Meteo lookup.
 
 You can also hit the local API directly after `npm run dev`:
 
