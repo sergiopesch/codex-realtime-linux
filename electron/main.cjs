@@ -59,6 +59,7 @@ const openExternalIfAllowed = (url) => {
   try {
     const parsed = new URL(url)
     if (!['http:', 'https:', 'mailto:'].includes(parsed.protocol)) return
+    if (trustedRendererOrigins.has(parsed.origin)) return
     shell.openExternal(url)
   } catch {
     // Ignore invalid external URLs from renderer content.
@@ -181,6 +182,15 @@ const isTrustedRendererEvent = (event) => {
   }
 }
 
+const isAppShellNavigation = (url, appOrigin) => {
+  try {
+    const parsed = new URL(url)
+    return parsed.origin === appOrigin && ['/', '/index.html'].includes(parsed.pathname) && !parsed.search
+  } catch {
+    return false
+  }
+}
+
 const ensureApiServer = async () => {
   if (devServerUrl) return devServerUrl
 
@@ -250,13 +260,15 @@ const createWindow = async () => {
     const appUrl = await ensureApiServer()
     const appOrigin = new URL(appUrl).origin
     win.webContents.on('will-navigate', (event, url) => {
+      let sameAppOrigin = false
       try {
-        if (new URL(url).origin === appOrigin) return
+        sameAppOrigin = new URL(url).origin === appOrigin
+        if (isAppShellNavigation(url, appOrigin)) return
       } catch {
         // Invalid navigations are blocked below.
       }
       event.preventDefault()
-      openExternalIfAllowed(url)
+      if (!sameAppOrigin) openExternalIfAllowed(url)
     })
     await win.loadURL(appUrl)
   } catch (error) {
