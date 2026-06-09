@@ -1,6 +1,7 @@
 const GEOCODING_API_URL = 'https://geocoding-api.open-meteo.com/v1/search'
 const WEATHER_API_URL = 'https://api.open-meteo.com/v1/forecast'
 const DEFAULT_TIMEOUT_MS = 8000
+const MAX_TIMEOUT_MS = 120_000
 const MAX_LOCATION_QUERY_LENGTH = 160
 const MAX_LOCATION_LABEL_LENGTH = 160
 const MAX_TIMEZONE_LENGTH = 120
@@ -77,8 +78,17 @@ function normalizeUnits(units) {
   })
 }
 
+function normalizeTimeoutMs(value) {
+  const timeoutMs = Number(value ?? DEFAULT_TIMEOUT_MS)
+  return Number.isInteger(timeoutMs) && timeoutMs >= 1_000 && timeoutMs <= MAX_TIMEOUT_MS ? timeoutMs : DEFAULT_TIMEOUT_MS
+}
+
 function weatherCodeLabel(code) {
   return WEATHER_CODE_LABELS.get(code) ?? 'Current conditions unavailable'
+}
+
+function normalizedWeatherCode(value) {
+  return Number.isInteger(value) ? value : null
 }
 
 function boundedString(value, fallback = '', maxLength = 1_000) {
@@ -222,7 +232,7 @@ export async function getCurrentWeather(locationQuery, options = {}) {
   const location = normalizeLocationQuery(locationQuery)
   const unitsMode = normalizeUnits(options.units)
   const fetchImpl = options.fetchImpl ?? fetch
-  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
+  const timeoutMs = normalizeTimeoutMs(options.timeoutMs)
 
   const geocodingUrl = new URL(GEOCODING_API_URL)
   geocodingUrl.searchParams.set('name', location)
@@ -269,6 +279,7 @@ export async function getCurrentWeather(locationQuery, options = {}) {
       status: 502,
     })
   }
+  const weatherCode = normalizedWeatherCode(current.weather_code)
 
   const normalized = {
     source: 'open-meteo',
@@ -296,8 +307,8 @@ export async function getCurrentWeather(locationQuery, options = {}) {
       apparentTemperature: formatNumber(current.apparent_temperature),
       relativeHumidity: formatNumber(current.relative_humidity_2m),
       windSpeed: formatNumber(current.wind_speed_10m),
-      weatherCode: typeof current.weather_code === 'number' ? current.weather_code : null,
-      condition: weatherCodeLabel(current.weather_code),
+      weatherCode,
+      condition: weatherCodeLabel(weatherCode),
       isDay: current.is_day === 1 ? true : current.is_day === 0 ? false : null,
     },
   }

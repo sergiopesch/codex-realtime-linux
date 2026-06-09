@@ -74,6 +74,37 @@ test('getCurrentWeather rejects invalid units before calling upstream services',
   assert.equal(requests, 0)
 })
 
+test('getCurrentWeather normalizes invalid timeout options', async () => {
+  const requests = []
+  const fetchImpl = async (url, init) => {
+    requests.push({ url: String(url), signal: init?.signal })
+
+    if (String(url).startsWith('https://geocoding-api.open-meteo.com/')) {
+      return Response.json({
+        results: [
+          {
+            name: 'Berlin',
+            latitude: 52.52,
+            longitude: 13.41,
+          },
+        ],
+      })
+    }
+
+    return Response.json({
+      current: {
+        temperature_2m: 19.4,
+      },
+    })
+  }
+
+  const weather = await getCurrentWeather('Berlin', { timeoutMs: -1, fetchImpl })
+
+  assert.equal(weather.current.temperature, 19.4)
+  assert.equal(requests.length, 2)
+  assert.ok(requests.every((request) => request.signal instanceof AbortSignal))
+})
+
 test('getCurrentWeather bounds upstream labels and summaries', async () => {
   const longLabel = 'L'.repeat(400)
   const fetchImpl = async (url) => {
@@ -227,6 +258,34 @@ test('getCurrentWeather rejects malformed current temperatures', async () => {
       error.status === 502 &&
       error.code === 'weather_missing_current_conditions',
   )
+})
+
+test('getCurrentWeather ignores malformed weather codes', async () => {
+  const fetchImpl = async (url) => {
+    if (String(url).startsWith('https://geocoding-api.open-meteo.com/')) {
+      return Response.json({
+        results: [
+          {
+            name: 'Broken code',
+            latitude: 52.52,
+            longitude: 13.41,
+          },
+        ],
+      })
+    }
+
+    return Response.json({
+      current: {
+        temperature_2m: 19.4,
+        weather_code: Number.NaN,
+      },
+    })
+  }
+
+  const weather = await getCurrentWeather('Broken code', { fetchImpl })
+
+  assert.equal(weather.current.weatherCode, null)
+  assert.equal(weather.current.condition, 'Current conditions unavailable')
 })
 
 test('getCurrentWeather converts network failures into a graceful upstream error', async () => {
