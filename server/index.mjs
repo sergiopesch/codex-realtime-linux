@@ -22,15 +22,17 @@ const ENV_CODEX_API_KEY = process.env.CODEX_API_KEY
 const CODEX_FORCE_API_KEY_AUTH = process.env.CODEX_FORCE_API_KEY_AUTH === 'true'
 const CODEX_BIN = process.env.CODEX_BIN ?? 'codex'
 const DESKTOP_SERVER_TOKEN = process.env.CODEX_DESKTOP_SERVER_TOKEN ?? ''
-const CODEX_MODEL = process.env.CODEX_MODEL ?? 'gpt-5.4'
-const REALTIME_MODEL = process.env.REALTIME_MODEL ?? 'gpt-realtime-2'
-const REALTIME_VOICE = process.env.REALTIME_VOICE ?? 'cedar'
-const REALTIME_USER_NAME = process.env.REALTIME_USER_NAME ?? os.userInfo().username
-const REALTIME_USER_LOCATION = process.env.REALTIME_USER_LOCATION ?? ''
-const REALTIME_PERSONA =
-  process.env.REALTIME_PERSONA ??
-  'Speak naturally, stay technically sharp, keep replies concise, and route concrete work to Codex tools.'
-const VISION_MODEL = process.env.VISION_MODEL ?? CODEX_MODEL
+const MAX_RUNTIME_CONFIG_STRING_LENGTH = 240
+const MAX_RUNTIME_PERSONA_LENGTH = 2_000
+const DEFAULT_REALTIME_PERSONA = 'Speak naturally, stay technically sharp, keep replies concise, and route concrete work to Codex tools.'
+const CODEX_MODEL = configuredRuntimeString(process.env.CODEX_MODEL, 'gpt-5.4')
+const REALTIME_MODEL = configuredRuntimeString(process.env.REALTIME_MODEL, 'gpt-realtime-2')
+const REALTIME_VOICE = configuredRuntimeString(process.env.REALTIME_VOICE, 'cedar')
+const REALTIME_TRANSCRIPTION_MODEL = configuredRuntimeString(process.env.REALTIME_TRANSCRIPTION_MODEL, 'gpt-4o-mini-transcribe')
+const REALTIME_USER_NAME = configuredRuntimeString(process.env.REALTIME_USER_NAME, os.userInfo().username)
+const REALTIME_USER_LOCATION = configuredRuntimeString(process.env.REALTIME_USER_LOCATION, '')
+const REALTIME_PERSONA = configuredRuntimeString(process.env.REALTIME_PERSONA, DEFAULT_REALTIME_PERSONA, MAX_RUNTIME_PERSONA_LENGTH)
+const VISION_MODEL = configuredRuntimeString(process.env.VISION_MODEL, CODEX_MODEL)
 const DEFAULT_USAGE_PERIOD_DAYS = 30
 const MAX_USAGE_PERIOD_DAYS = 90
 const USAGE_PERIOD_DAYS = configuredInteger(process.env.OPENAI_USAGE_PERIOD_DAYS, {
@@ -169,6 +171,13 @@ function configuredJsonBodyLimit(value, fallback = DEFAULT_JSON_BODY_LIMIT) {
   const multiplier = unit === 'mb' ? 1024 * 1024 : unit === 'kb' ? 1024 : 1
   const bytes = amount * multiplier
   return Number.isInteger(amount) && amount > 0 && bytes <= MAX_JSON_BODY_LIMIT_BYTES ? `${amount}${unit}` : fallback
+}
+
+function configuredRuntimeString(value, fallback, maxLength = MAX_RUNTIME_CONFIG_STRING_LENGTH) {
+  const text = typeof value === 'string' && value.trim() ? value.trim().replace(/\s+/g, ' ') : fallback
+  if (typeof text !== 'string') return ''
+  if (text.length <= maxLength) return text
+  return `${text.slice(0, Math.max(0, maxLength - 3))}...`
 }
 
 function configuredAbsolutePath(value, fallback) {
@@ -656,7 +665,7 @@ function realtimeSessionConfig() {
     audio: {
       input: {
         transcription: {
-          model: process.env.REALTIME_TRANSCRIPTION_MODEL ?? 'gpt-4o-mini-transcribe',
+          model: REALTIME_TRANSCRIPTION_MODEL,
         },
       },
       output: { voice: REALTIME_VOICE },
