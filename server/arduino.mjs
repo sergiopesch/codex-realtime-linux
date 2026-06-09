@@ -247,6 +247,13 @@ function boardAddressForRequestedPort(requestedPort, ports) {
   return ttyPorts.length === 1 ? ttyPorts[0] : requestedPort
 }
 
+function hasSingleSerialTargetCandidate(ports) {
+  if (ports.length <= 1) return true
+  const serialByIdPorts = ports.filter((port) => SERIAL_BY_ID_PATTERN.test(port))
+  const ttyPorts = ports.filter((port) => SERIAL_PORT_PATH_PATTERN.test(port))
+  return serialByIdPorts.length === 1 && ttyPorts.length === 1
+}
+
 function normalizeDetectedBoard(entry) {
   if (!entry || typeof entry !== 'object') return null
   const candidateFqbn = limitStatusString(entry.fqbn)
@@ -430,6 +437,17 @@ export async function uploadArduinoSketch(
         serialPorts: ports,
         detectedBoards: uploadableBoards,
         hint: 'Pass a specific /dev/ttyACM*, /dev/ttyUSB*, or /dev/serial/by-id/* port to avoid uploading to the wrong board.',
+      },
+    })
+  }
+  if (!request.port && uploadableBoards.length === 0 && !hasSingleSerialTargetCandidate(ports)) {
+    throw new ArduinoUploadError('Multiple serial ports were detected, but no Arduino board metadata identified a single upload target. Choose an explicit serial port before uploading.', {
+      code: 'arduino_ambiguous_port',
+      status: 409,
+      details: {
+        serialPorts: ports,
+        detectedBoards: boards,
+        hint: 'Pass a specific /dev/ttyACM*, /dev/ttyUSB*, or /dev/serial/by-id/* port so the app does not guess which serial device to flash.',
       },
     })
   }

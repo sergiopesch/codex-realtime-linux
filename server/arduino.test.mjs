@@ -535,6 +535,25 @@ test('uploadArduinoSketch requires an explicit port when multiple boards are det
   )
 })
 
+test('uploadArduinoSketch requires an explicit port when multiple serial ports lack board metadata', async () => {
+  await assert.rejects(
+    () => uploadArduinoSketch(
+      { action: 'onboard_led_blink' },
+      {
+        listPorts: async () => ['/dev/ttyACM0', '/dev/ttyUSB0'],
+        listBoards: async () => [],
+      },
+    ),
+    (error) =>
+      error instanceof ArduinoUploadError &&
+      error.status === 409 &&
+      error.code === 'arduino_ambiguous_port' &&
+      error.details.serialPorts.length === 2 &&
+      error.details.detectedBoards.length === 0 &&
+      /does not guess/.test(error.details.hint),
+  )
+})
+
 test('uploadArduinoSketch does not borrow another board FQBN for an explicit port', async () => {
   const commands = []
   const run = async (args) => {
