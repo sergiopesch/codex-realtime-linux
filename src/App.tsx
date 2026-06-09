@@ -249,10 +249,12 @@ const REALTIME_CONNECTION_TIMEOUT_MS = 30_000
 const MAX_REALTIME_SDP_RESPONSE_LENGTH = 120_000
 const MAX_REALTIME_EVENT_MESSAGE_LENGTH = 120_000
 const MAX_REALTIME_FUNCTION_ARGUMENTS_LENGTH = 80_000
+const MAX_REALTIME_TOOL_TEXT_LENGTH = 8_000
 const MAX_REALTIME_TRANSCRIPT_LINES = 80
 const MAX_REALTIME_TRANSCRIPT_ID_LENGTH = 240
 const MAX_REALTIME_TRANSCRIPT_TEXT_LENGTH = 8_000
 const MAX_UI_CONVERSATIONS_PER_WORKSPACE = 80
+const MAX_UI_CONVERSATION_TITLE_LENGTH = 180
 const MAX_UI_ERROR_MESSAGE_LENGTH = 500
 const MAX_UI_NOTICE_LENGTH = 320
 const MAX_UI_ACTIVITY_LENGTH = 120
@@ -471,6 +473,13 @@ const savedConversationPayload = (conversation: AgentConversation) => ({
 const boundedPlainString = (value: unknown, fallback = '', maxLength = 1_000) => {
   const text = typeof value === 'string' && value ? value : fallback
   return text.length > maxLength ? `${text.slice(0, Math.max(0, maxLength - 3))}...` : text
+}
+
+const requireRealtimeToolText = (value: unknown, label: string, maxLength = MAX_REALTIME_TOOL_TEXT_LENGTH) => {
+  if (typeof value !== 'string' || !value.trim()) throw new Error(`${label} is required.`)
+  const text = value.trim()
+  if (text.length > maxLength) throw new Error(`${label} is too long.`)
+  return text
 }
 
 const boundedRealtimeTranscriptId = (value: unknown) =>
@@ -1730,10 +1739,7 @@ function App() {
 
       if (item.name === 'codex_start_task') {
         setActivity('Voice router', 'Codex starting')
-        if (typeof payload.goal !== 'string' || !payload.goal.trim()) {
-          throw new Error('A concrete Codex goal is required before routing work.')
-        }
-        const goal = payload.goal.trim()
+        const goal = requireRealtimeToolText(payload.goal, 'A concrete Codex goal')
         const workspacePath = selectedRoutableWorkspacePath(payload.cwd)
         setDismissedArtifact(null)
         result = await api('/api/codex/task', {
@@ -1753,7 +1759,7 @@ function App() {
         if (threadId) {
           const title =
             typeof payload.title === 'string' && payload.title.trim()
-              ? payload.title.trim()
+              ? boundedPlainString(payload.title.trim(), '', MAX_UI_CONVERSATION_TITLE_LENGTH)
               : titleFromGoal(goal)
           const routedConversation: AgentConversation = {
             id: threadId,
@@ -1782,13 +1788,11 @@ function App() {
 
       if (item.name === 'codex_steer_task' && activeThreadIdRef.current) {
         setActivity('Voice router', 'Codex steering')
-        if (typeof payload.instruction !== 'string' || !payload.instruction.trim()) {
-          throw new Error('A steering instruction is required.')
-        }
+        const instruction = requireRealtimeToolText(payload.instruction, 'A steering instruction')
         result = await api('/api/codex/steer', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ threadId: activeThreadIdRef.current, instruction: payload.instruction.trim() }),
+          body: JSON.stringify({ threadId: activeThreadIdRef.current, instruction }),
         })
       } else if (item.name === 'codex_steer_task') {
         result = { error: 'No active Codex task is available to steer. Start a task first.' }
