@@ -1801,7 +1801,6 @@ app.post('/api/settings/openai-key', async (req, res) => {
     res.json({
       realtime: true,
       openAiKeySource: getOpenAiKeySource(),
-      secretsPath: SECRETS_PATH,
     })
   } catch (error) {
     sendJsonError(res, error, { fallbackStatus: 502, fallbackMessage: 'Failed to save OpenAI API key.', fallbackCode: 'openai_key_save_failed' })
