@@ -1,6 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { classifyUsbDevice, eventSummary, parseUdevProperties, UsbDeviceMonitor } from './usb.mjs'
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
+import { classifyUsbDevice, eventSummary, parseUdevProperties, readSerialById, UsbDeviceMonitor } from './usb.mjs'
 
 test('parseUdevProperties parses udev monitor property blocks', () => {
   const properties = parseUdevProperties(`
@@ -79,6 +82,20 @@ test('classifyUsbDevice does not treat unrelated USB devices as Arduino boards',
 
   assert.equal(device.isSerialTty, false)
   assert.equal(device.isArduinoLike, false)
+})
+
+test('readSerialById ignores unsafe or non-serial by-id entries', async (t) => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'codex-usb-by-id-'))
+  t.after(() => rm(tempDir, { recursive: true, force: true }))
+
+  const byIdDir = path.join(tempDir, 'by-id')
+  await mkdir(byIdDir, { recursive: true })
+  await writeFile(path.join(byIdDir, 'plain-file'), 'not a symlink')
+  await symlink('/dev/null', path.join(byIdDir, 'usb-Arduino_Uno_123-if00'))
+  await symlink('/dev/null', path.join(byIdDir, 'usb-Arduino Uno unsafe-if00'))
+  await symlink('../ttyS0', path.join(byIdDir, 'usb-Serial_TTY_S0-if00'))
+
+  assert.deepEqual(await readSerialById(byIdDir), [])
 })
 
 test('UsbDeviceMonitor records complete add events from streamed udev chunks', () => {

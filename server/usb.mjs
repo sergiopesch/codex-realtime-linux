@@ -14,6 +14,7 @@ const MAX_USB_STATUS_ERROR_LENGTH = 500
 const MAX_SERIAL_BY_ID_SCAN_ENTRIES = 400
 const MAX_SERIAL_BY_ID_DEVICES = 80
 const SERIAL_TTY_PATTERN = /^\/dev\/tty(?:ACM|USB)\d+$/
+const SERIAL_BY_ID_NAME_PATTERN = /^[a-zA-Z0-9._:+-]+$/
 const ARDUINO_VENDOR_IDS = new Set(['2341', '2a03', '1b4f'])
 const SERIAL_ADAPTER_VENDOR_IDS = new Set(['1a86', '10c4', '0403'])
 const ARDUINO_TEXT_PATTERNS = [
@@ -245,10 +246,12 @@ export async function readSerialById(serialByIdDir = DEFAULT_SERIAL_BY_ID_DIR) {
     for await (const entry of directory) {
       scannedEntries += 1
       if (scannedEntries > MAX_SERIAL_BY_ID_SCAN_ENTRIES || devices.length >= MAX_SERIAL_BY_ID_DEVICES) break
+      if (!entry.isSymbolicLink() || !SERIAL_BY_ID_NAME_PATTERN.test(entry.name)) continue
       const linkPath = path.join(serialByIdDir, entry.name)
       try {
         const target = await readlink(linkPath)
         const devname = path.resolve(serialByIdDir, target)
+        if (!SERIAL_TTY_PATTERN.test(devname)) continue
         const info = await stat(devname)
         if (!info.isCharacterDevice()) continue
         const cleaned = entry.name.replace(/^usb-/, '').replace(/-if\d+-port\d+$/i, '')
