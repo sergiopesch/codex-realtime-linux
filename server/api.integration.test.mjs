@@ -1322,6 +1322,59 @@ test('server ignores oversized persisted app state and secrets files', async (t)
   assert.equal(status.openAiKeySource, 'missing')
 })
 
+test('server recovers app state from backup before mutating state', async (t) => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-state-backup-'))
+  t.after(() => rm(tempDir, { recursive: true, force: true }))
+  const statePath = path.join(tempDir, 'state.json')
+  const secretsPath = path.join(tempDir, 'secrets.json')
+  const workspacePath = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-state-backup-workspace-'))
+  t.after(() => rm(workspacePath, { recursive: true, force: true }))
+
+  await writeFile(statePath, '{"workspaces":')
+  await writeFile(
+    `${statePath}.bak`,
+    JSON.stringify({
+      workspaces: [{ id: workspacePath, path: workspacePath, name: 'Recovered workspace' }],
+      conversationsByWorkspace: {
+        [workspacePath]: [
+          { id: 'keep-1', title: 'Keep 1', status: 'draft', source: 'local', prompt: '', response: '', traces: [], transcript: [] },
+          { id: 'delete-me', title: 'Delete me', status: 'draft', source: 'local', prompt: '', response: '', traces: [], transcript: [] },
+          { id: 'keep-2', title: 'Keep 2', status: 'ready', source: 'local', prompt: 'hello', response: '', traces: [], transcript: [] },
+        ],
+      },
+    }),
+  )
+
+  const { baseUrl } = await startTestServer(t, {
+    CODEX_REALTIME_STATE_PATH: statePath,
+    CODEX_REALTIME_SECRETS_PATH: secretsPath,
+  })
+
+  const recoveredState = await (await fetch(`${baseUrl}/api/app-state`)).json()
+  assert.deepEqual(
+    recoveredState.conversationsByWorkspace[workspacePath].map((conversation) => conversation.id),
+    ['keep-1', 'delete-me', 'keep-2'],
+  )
+
+  const response = await fetch(`${baseUrl}/api/app-state/conversations/delete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspacePath, conversationId: 'delete-me' }),
+  })
+  assert.equal(response.status, 200)
+  const body = await response.json()
+  assert.deepEqual(
+    body.state.conversationsByWorkspace[workspacePath].map((conversation) => conversation.id),
+    ['keep-1', 'keep-2'],
+  )
+
+  const rewrittenState = JSON.parse(await readFile(statePath, 'utf8'))
+  assert.deepEqual(
+    rewrittenState.conversationsByWorkspace[workspacePath].map((conversation) => conversation.id),
+    ['keep-1', 'keep-2'],
+  )
+})
+
 test('server ignores malformed persisted settings secrets', async (t) => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-malformed-secrets-'))
   t.after(() => rm(tempDir, { recursive: true, force: true }))

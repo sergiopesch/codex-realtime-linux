@@ -150,6 +150,7 @@ const DEFAULT_STATE_PATH = path.join(os.homedir(), '.local', 'state', 'codex-rea
 const DEFAULT_SECRETS_PATH = path.join(os.homedir(), '.config', 'codex-realtime-linux', 'secrets.json')
 const STATE_PATH = configuredAbsolutePath(process.env.CODEX_REALTIME_STATE_PATH, DEFAULT_STATE_PATH)
 const SECRETS_PATH = configuredAbsolutePath(process.env.CODEX_REALTIME_SECRETS_PATH, DEFAULT_SECRETS_PATH)
+const STATE_BACKUP_PATH = `${STATE_PATH}.bak`
 const OPENAI_SAFETY_IDENTIFIER =
   normalizeOpenAiSafetyIdentifier(process.env.OPENAI_SAFETY_IDENTIFIER) || defaultOpenAiSafetyIdentifier()
 
@@ -1532,11 +1533,30 @@ function normalizeAppState(input) {
   return state
 }
 
+async function readNormalizedAppStateFile(filePath) {
+  const details = await stat(filePath)
+  if (details.size > MAX_APP_STATE_FILE_BYTES) throw new Error('Saved app state file is too large.')
+  return normalizeAppState(JSON.parse(await readFile(filePath, 'utf8')))
+}
+
+async function backupReadableAppState() {
+  try {
+    const currentState = await readNormalizedAppStateFile(STATE_PATH)
+    await writeJsonFileAtomic(STATE_BACKUP_PATH, currentState, { dirMode: 0o700, fileMode: 0o600 })
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      codex.recordNotification({
+        method: 'app-state/backup-skipped',
+        receivedAt: new Date().toISOString(),
+        params: { message: error.message },
+      })
+    }
+  }
+}
+
 async function readAppState() {
   try {
-    const details = await stat(STATE_PATH)
-    if (details.size > MAX_APP_STATE_FILE_BYTES) throw new Error('Saved app state file is too large.')
-    return normalizeAppState(JSON.parse(await readFile(STATE_PATH, 'utf8')))
+    return await readNormalizedAppStateFile(STATE_PATH)
   } catch (error) {
     if (error.code !== 'ENOENT') {
       codex.recordNotification({
@@ -1545,12 +1565,30 @@ async function readAppState() {
         params: { message: error.message },
       })
     }
+    try {
+      const backupState = await readNormalizedAppStateFile(STATE_BACKUP_PATH)
+      codex.recordNotification({
+        method: 'app-state/recovered-from-backup',
+        receivedAt: new Date().toISOString(),
+        params: { message: error.message },
+      })
+      return backupState
+    } catch (backupError) {
+      if (backupError.code !== 'ENOENT') {
+        codex.recordNotification({
+          method: 'app-state/backup-read-error',
+          receivedAt: new Date().toISOString(),
+          params: { message: backupError.message },
+        })
+      }
+    }
     return emptyAppState()
   }
 }
 
 async function writeAppState(state) {
   const normalizedState = normalizeAppState(state)
+  await backupReadableAppState()
   await writeJsonFileAtomic(STATE_PATH, normalizedState, { dirMode: 0o700, fileMode: 0o600 })
   return normalizedState
 }
