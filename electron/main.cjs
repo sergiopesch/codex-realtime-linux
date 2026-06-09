@@ -67,7 +67,7 @@ const openExternalIfAllowed = (url) => {
     const parsed = new URL(url)
     if (!['http:', 'https:', 'mailto:'].includes(parsed.protocol)) return
     if (trustedRendererOrigins.has(parsed.origin)) return
-    shell.openExternal(url)
+    void shell.openExternal(url).catch(() => {})
   } catch {
     // Ignore invalid external URLs from renderer content.
   }

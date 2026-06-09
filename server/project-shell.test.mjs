@@ -765,6 +765,7 @@ test('electron shell keeps renderer isolation and external navigation guarded', 
   assert.match(mainSource, /setWindowOpenHandler/)
   assert.match(mainSource, /openExternalIfAllowed/)
   assert.match(mainSource, /if \(trustedRendererOrigins\.has\(parsed\.origin\)\) return/)
+  assert.match(mainSource, /void shell\.openExternal\(url\)\.catch\(\(\) => \{\}\)/)
   assert.match(mainSource, /const isAppShellNavigation = \(url, appOrigin\) =>/)
   assert.match(mainSource, /\['\/', '\/index\.html'\]\.includes\(parsed\.pathname\) && !parsed\.search/)
   assert.match(mainSource, /new URL\(url\)\.origin === appOrigin/)
