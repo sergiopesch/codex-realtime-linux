@@ -992,6 +992,7 @@ test('USB serial-by-id scans are bounded', async () => {
 
   assert.match(usbSource, /const MAX_SERIAL_BY_ID_SCAN_ENTRIES = 400/)
   assert.match(usbSource, /const MAX_SERIAL_BY_ID_DEVICES = 80/)
+  assert.match(usbSource, /const MAX_USB_EVENT_BUFFER_LENGTH = 64 \* 1024/)
   assert.match(usbSource, /const ARDUINO_VENDOR_IDS = new Set\(\['2341', '2a03', '1b4f'\]\)/)
   assert.match(usbSource, /const SERIAL_ADAPTER_VENDOR_IDS = new Set\(\['1a86', '10c4', '0403'\]\)/)
   assert.ok(usbSource.includes("const SERIAL_BY_ID_NAME_PATTERN = /^[a-zA-Z0-9._:+-]+$/"))
@@ -999,6 +1000,9 @@ test('USB serial-by-id scans are bounded', async () => {
   assert.match(usbSource, /isSerialTty && \(hasKnownSerialAdapterVendor \|\| hasSerialAdapterHints\)/)
   assert.match(usbSource, /import \{ randomUUID \} from 'node:crypto'/)
   assert.match(usbSource, /id: randomUUID\(\)/)
+  assert.match(usbSource, /this\.buffer\.length > MAX_USB_EVENT_BUFFER_LENGTH/)
+  assert.match(usbSource, /this\.buffer = this\.buffer\.slice\(-MAX_USB_EVENT_BUFFER_LENGTH\)/)
+  assert.match(usbSource, /USB monitor emitted an oversized incomplete event\./)
   assert.match(usbSource, /directory = await opendir\(serialByIdDir\)/)
   assert.match(usbSource, /scannedEntries > MAX_SERIAL_BY_ID_SCAN_ENTRIES \|\| devices\.length >= MAX_SERIAL_BY_ID_DEVICES/)
   assert.match(usbSource, /!entry\.isSymbolicLink\(\) \|\| !SERIAL_BY_ID_NAME_PATTERN\.test\(entry\.name\)/)

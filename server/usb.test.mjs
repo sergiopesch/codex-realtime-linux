@@ -147,3 +147,13 @@ test('UsbDeviceMonitor bounds status error text before exposing it', () => {
   assert.equal(monitor.status().error.length <= 500, true)
   assert.equal(monitor.status().error.endsWith('...'), true)
 })
+
+test('UsbDeviceMonitor bounds incomplete streamed event buffers', () => {
+  const monitor = new UsbDeviceMonitor({ spawnImpl: () => null })
+
+  monitor.consume(`ACTION=add\n${'x'.repeat(80 * 1024)}`)
+
+  assert.equal(monitor.buffer.length, 64 * 1024)
+  assert.equal(monitor.events.length, 0)
+  assert.equal(monitor.status().error, 'USB monitor emitted an oversized incomplete event.')
+})

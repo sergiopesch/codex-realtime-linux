@@ -11,6 +11,7 @@ const MAX_USB_RAW_PROPERTIES = 40
 const MAX_USB_RAW_KEY_LENGTH = 80
 const MAX_USB_RAW_VALUE_LENGTH = 500
 const MAX_USB_STATUS_ERROR_LENGTH = 500
+const MAX_USB_EVENT_BUFFER_LENGTH = 64 * 1024
 const MAX_SERIAL_BY_ID_SCAN_ENTRIES = 400
 const MAX_SERIAL_BY_ID_DEVICES = 80
 const SERIAL_TTY_PATTERN = /^\/dev\/tty(?:ACM|USB)\d+$/
@@ -184,6 +185,10 @@ export class UsbDeviceMonitor {
 
   consume(text) {
     this.buffer += text
+    if (this.buffer.length > MAX_USB_EVENT_BUFFER_LENGTH) {
+      this.buffer = this.buffer.slice(-MAX_USB_EVENT_BUFFER_LENGTH)
+      this.error = boundedStatusError('USB monitor emitted an oversized incomplete event.')
+    }
     const chunks = this.buffer.split(/\n\s*\n/)
     this.buffer = chunks.pop() ?? ''
     for (const chunk of chunks) {
