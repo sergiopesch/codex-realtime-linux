@@ -1728,7 +1728,7 @@ function App() {
         } else {
           setSelectedWorkspace('')
           setSelectedConversationId('')
-          setActiveSystemScreen('settings')
+          setActiveSystemScreen(null)
         }
         closeArtifactPreview()
       }

@@ -80,6 +80,16 @@ test('renderer labels identity and voice context from runtime workspace state', 
   assert.doesNotMatch(appSource, /workspaceRoots\[0\]\?\.workspacePath/)
 })
 
+test('renderer keeps empty workspace navigation on the voice surface', async () => {
+  const appSource = await readFile(path.join(repoRoot, 'src', 'App.tsx'), 'utf8')
+
+  assert.match(
+    appSource,
+    /if \(normalizeAbsoluteLocalWorkspacePath\(selectedWorkspace\) === targetWorkspacePath\) \{[\s\S]*setSelectedWorkspace\(''\)[\s\S]*setSelectedConversationId\(''\)[\s\S]*setActiveSystemScreen\(null\)[\s\S]*closeArtifactPreview\(\)/,
+  )
+  assert.doesNotMatch(appSource, /setActiveSystemScreen\('settings'\)/)
+})
+
 test('public assets do not include fixed demo presentation routes', async () => {
   const publicEntries = await readdir(path.join(repoRoot, 'public'), { recursive: true })
   const publicPaths = publicEntries.map((entry) => entry.toString())
