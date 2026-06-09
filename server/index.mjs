@@ -1477,6 +1477,15 @@ async function mutateAppState(updater) {
   return mutation
 }
 
+function normalizeEpochSecondsTimestamp(value, fallback = new Date().toISOString()) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback
+  const timestamp = value * 1000
+  if (!Number.isFinite(timestamp)) return fallback
+  const date = new Date(timestamp)
+  const dateTime = date.getTime()
+  return Number.isFinite(dateTime) ? date.toISOString() : fallback
+}
+
 function threadToConversation(thread) {
   const preview = normalizeBoundedString(thread?.preview, '', MAX_CONVERSATION_TEXT_LENGTH)
   const title = normalizeBoundedString(
@@ -1484,7 +1493,7 @@ function threadToConversation(thread) {
     normalizeBoundedString(thread?.preview, 'Codex conversation', MAX_CONVERSATION_TITLE_LENGTH),
     MAX_CONVERSATION_TITLE_LENGTH,
   )
-  const updatedAt = typeof thread?.updatedAt === 'number' ? new Date(thread.updatedAt * 1000).toISOString() : new Date().toISOString()
+  const updatedAt = normalizeEpochSecondsTimestamp(thread?.updatedAt)
   const status = thread?.status?.type === 'active' ? 'running' : 'ready'
   const statusType = normalizeBoundedString(thread?.status?.type, 'ready', 40)
   const threadId = normalizeBoundedString(thread?.id, `codex-${updatedAt}`, MAX_CONVERSATION_ID_LENGTH)

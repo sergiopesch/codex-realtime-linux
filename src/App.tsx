@@ -1679,7 +1679,10 @@ function App() {
       }
 
       setConversationsByWorkspace((state) => ({ ...state, [workspacePath]: confirmedConversations }))
-      if (selectedConversationId === conversationId) {
+      const deletedActiveConversation = selectedConversationId === conversationId
+      const deletedWorkspaceWasSelected = normalizeAbsoluteLocalWorkspacePath(selectedWorkspace) === normalizeAbsoluteLocalWorkspacePath(workspacePath)
+      const workspaceIsEmptyAfterDelete = confirmedConversations.length === 0
+      if (deletedActiveConversation) {
         const fallback = confirmedConversations[0]
         if (fallback) {
           openConversationWindow(workspacePath, fallback.id)
@@ -1689,6 +1692,11 @@ function App() {
           setActiveSystemScreen(null)
           closeArtifactPreview()
         }
+      } else if (deletedWorkspaceWasSelected && workspaceIsEmptyAfterDelete) {
+        setSelectedWorkspace(workspacePath)
+        setSelectedConversationId('')
+        setActiveSystemScreen(null)
+        closeArtifactPreview()
       }
       showNotice('Agent conversation deleted from this workspace.')
     } catch (error) {
@@ -3038,7 +3046,10 @@ function App() {
                               type="button"
                               className="agent-thread-delete"
                               aria-label={`Delete ${conversation.title}`}
-                              onClick={() => void deleteConversation(workspacePath, conversation.id)}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                void deleteConversation(workspacePath, conversation.id)
+                              }}
                             >
                               <Trash2 size={12} />
                             </button>

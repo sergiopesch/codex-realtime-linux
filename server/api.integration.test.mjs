@@ -97,6 +97,18 @@ const responses = {
   initialize: {},
   'thread/start': { thread: { id: 'thread-ok' } },
   'turn/start': { turn: { id: 'turn-ok' } },
+  'thread/list': {
+    data: [
+      {
+        id: 'thread-large-time',
+        name: 'Malformed timestamp',
+        preview: 'Timestamp should not break history.',
+        cwd: process.env.FAKE_CODEX_THREAD_CWD,
+        updatedAt: 1e20,
+        status: { type: 'complete' },
+      },
+    ],
+  },
 }
 
 createInterface({ input: process.stdin }).on('line', (line) => {
@@ -560,6 +572,7 @@ test('codex task returns public artifact metadata for external workspace artifac
     CODEX_APPROVAL_POLICY: 'never',
     CODEX_USE_OPENAI_API_KEY: 'false',
     FAKE_CODEX_RPC_LOG: logPath,
+    FAKE_CODEX_THREAD_CWD: workspacePath,
   })
 
   const task = await fetch(`${baseUrl}/api/codex/task`, {
@@ -603,6 +616,14 @@ test('codex task returns public artifact metadata for external workspace artifac
   assert.match(turnText, new RegExp(escapedRelativePath))
   assert.match(turnText, /User goal:\nCreate an HTML presentation about this workspace\./)
   assert.doesNotMatch(turnText, /absoluteDir|absolutePath/)
+
+  const threads = await fetch(`${baseUrl}/api/codex/threads?limit=10&cwd=${encodeURIComponent(workspacePath)}`)
+  assert.equal(threads.status, 200)
+  const threadsBody = await threads.json()
+  assert.equal(threadsBody.conversations.length, 1)
+  assert.equal(threadsBody.conversations[0].id, 'thread-large-time')
+  assert.equal(threadsBody.conversations[0].workspacePath, workspacePath)
+  assert.match(threadsBody.conversations[0].updatedAt, /^\d{4}-\d{2}-\d{2}T/)
 })
 
 test('server returns json errors for oversized API request bodies', async (t) => {
