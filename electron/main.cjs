@@ -40,6 +40,10 @@ const configuredAbsoluteDir = (value, fallback) => {
   const candidate = typeof value === 'string' && value.trim() ? value.trim() : fallback
   return path.isAbsolute(candidate) ? path.resolve(candidate) : fallback
 }
+const configuredAbsolutePath = (value, fallback) => {
+  const candidate = typeof value === 'string' && value.trim() ? value.trim() : fallback
+  return path.isAbsolute(candidate) ? path.resolve(candidate) : fallback
+}
 const apiPort = configuredPort(process.env.PORT)
 const apiUrl = configuredLocalHttpOrigin(process.env.CODEX_DESKTOP_API_URL, `http://127.0.0.1:${apiPort}`)
 const devServerUrl = configuredLocalHttpOrigin(process.env.VITE_DEV_SERVER_URL, '')
@@ -47,8 +51,8 @@ const trustedRendererOrigins = new Set([
   new URL(apiUrl).origin,
   ...(devServerUrl ? [new URL(devServerUrl).origin] : []),
 ])
-const apiNodeBin = process.env.CODEX_REALTIME_NODE_BIN || process.execPath
-const apiNodeUsesElectronRuntime = !process.env.CODEX_REALTIME_NODE_BIN
+const apiNodeBin = configuredAbsolutePath(process.env.CODEX_REALTIME_NODE_BIN, process.execPath)
+const apiNodeUsesElectronRuntime = apiNodeBin === process.execPath
 const desktopServerToken = randomUUID()
 const repoRoot = path.join(__dirname, '..')
 const stateHome = configuredAbsoluteDir(process.env.XDG_STATE_HOME, path.join(os.homedir(), '.local', 'state'))

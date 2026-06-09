@@ -104,7 +104,7 @@ The app starts Codex through `codex app-server` by default. If your standalone d
 CODEX_BIN=/absolute/path/to/codex
 ```
 
-The desktop app starts the local API server through the Electron runtime by default. If you need to force a separate Node runtime, set it explicitly:
+The desktop app starts the local API server through the Electron runtime by default. If you need to force a separate Node runtime, set it explicitly. The override must be an absolute path; blank or relative values are ignored so app-menu launches do not depend on a desktop shell `PATH`:
 
 ```bash
 CODEX_REALTIME_NODE_BIN=/absolute/path/to/node
