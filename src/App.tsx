@@ -411,6 +411,31 @@ const getUserMediaWithTimeout = async (constraints: MediaStreamConstraints, time
   }
 }
 
+const getDisplayMediaWithTimeout = async (options: DisplayMediaStreamOptions, timeoutMs = VISUAL_CONTEXT_CAPTURE_TIMEOUT_MS) => {
+  let timedOut = false
+  let timeoutId: number | null = null
+  const mediaPromise = navigator.mediaDevices.getDisplayMedia(options)
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => {
+      timedOut = true
+      reject(new Error(`Screen share permission timed out after ${Math.round(timeoutMs / 1000)} seconds.`))
+    }, timeoutMs)
+  })
+
+  try {
+    return await Promise.race([mediaPromise, timeoutPromise])
+  } catch (error) {
+    if (timedOut) {
+      mediaPromise
+        .then((stream) => stream.getTracks().forEach((track) => track.stop()))
+        .catch(() => {})
+    }
+    throw error
+  } finally {
+    if (timeoutId != null) window.clearTimeout(timeoutId)
+  }
+}
+
 const waitForVisualContextStep = async <T,>(promise: Promise<T>, label: string) => {
   let timeoutId: number | null = null
   const timeoutPromise = new Promise<never>((_, reject) => {
@@ -2858,7 +2883,7 @@ function App() {
     setLastError(null)
     let stream: MediaStream | null = null
     try {
-      stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false })
+      stream = await getDisplayMediaWithTimeout({ video: true, audio: false })
       screenStreamRef.current = stream
       setScreenShared(true)
       const videoTrack = stream.getVideoTracks()[0] ?? null
