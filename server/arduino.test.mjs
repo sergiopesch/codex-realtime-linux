@@ -152,6 +152,24 @@ test('invalid ARDUINO_DEFAULT_FQBN falls back to a safe Uno target', async () =>
   }
 })
 
+test('invalid ARDUINO_CLI_PATH falls back to the bundled CLI path', async () => {
+  const previousCliPath = process.env.ARDUINO_CLI_PATH
+  process.env.ARDUINO_CLI_PATH = 'relative/arduino-cli'
+  try {
+    const module = await import(`./arduino.mjs?invalid-cli-path-${Date.now()}`)
+    const status = await module.getArduinoCliStatus({
+      run: async () => ({ stdout: 'Version 1.0.0', stderr: '' }),
+    })
+
+    assert.equal(status.available, true)
+    assert.equal(status.command, path.join(process.cwd(), 'bin', 'arduino-cli'))
+    assert.notEqual(status.command, 'relative/arduino-cli')
+  } finally {
+    if (previousCliPath === undefined) delete process.env.ARDUINO_CLI_PATH
+    else process.env.ARDUINO_CLI_PATH = previousCliPath
+  }
+})
+
 test('listSerialPorts returns ttyACM and ttyUSB devices', async (t) => {
   const devDir = await mkdtemp(path.join(os.tmpdir(), 'codex-arduino-dev-'))
   t.after(() => rm(devDir, { recursive: true, force: true }))

@@ -13,7 +13,6 @@ const DEFAULT_FQBN =
     ? CONFIGURED_DEFAULT_FQBN
     : 'arduino:avr:uno'
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const ARDUINO_CLI_PATH = process.env.ARDUINO_CLI_PATH || path.join(REPO_ROOT, 'bin', 'arduino-cli')
 const DEFAULT_SKETCH_NAME = 'CodexRealtimeSketch'
 const SKETCH_NAME_PATTERN = /^[a-zA-Z][a-zA-Z0-9_]{0,48}$/
 const MAX_SKETCH_BYTES = 64 * 1024
@@ -21,6 +20,7 @@ const MAX_COMMAND_CAPTURE_CHARS = 16_000
 const MAX_COMMAND_OUTPUT_CHARS = 4_000
 const MAX_STATUS_FIELD_CHARS = 500
 const MAX_SERIAL_PORT_SCAN_ENTRIES = 400
+const MAX_ARDUINO_CLI_PATH_LENGTH = 500
 const COMMAND_TIMEOUT_KILL_GRACE_MS = 2_000
 const DEFAULT_SERIAL_BY_ID_DIR = '/dev/serial/by-id'
 const MAX_SERIAL_BY_ID_SCAN_ENTRIES = 400
@@ -29,6 +29,9 @@ const SERIAL_PORT_PATTERN = /^tty(?:ACM|USB)\d+$/
 const SERIAL_PORT_PATH_PATTERN = /^\/dev\/tty(?:ACM|USB)\d+$/
 const SERIAL_BY_ID_NAME_PATTERN = /^[a-zA-Z0-9._:+-]+$/
 const SERIAL_BY_ID_PATTERN = /^\/dev\/serial\/by-id\/[a-zA-Z0-9._:+-]+$/
+const DEFAULT_ARDUINO_CLI_PATH = path.join(REPO_ROOT, 'bin', 'arduino-cli')
+const ARDUINO_CLI_PATH = configuredArduinoCliPath(process.env.ARDUINO_CLI_PATH, DEFAULT_ARDUINO_CLI_PATH)
+const ARDUINO_CLI_PATH_WAS_CONFIGURED = ARDUINO_CLI_PATH !== DEFAULT_ARDUINO_CLI_PATH
 
 export class ArduinoUploadError extends Error {
   constructor(message, { code = 'arduino_error', status = 500, details } = {}) {
@@ -38,6 +41,19 @@ export class ArduinoUploadError extends Error {
     this.status = status
     this.details = sanitizeDiagnosticDetails(details)
   }
+}
+
+function configuredArduinoCliPath(value, fallback) {
+  if (typeof value !== 'string' || !value.trim()) return fallback
+  const candidate = value.trim()
+  if (
+    candidate.length > MAX_ARDUINO_CLI_PATH_LENGTH ||
+    /[\u0000-\u001f\u007f]/.test(candidate) ||
+    !path.isAbsolute(candidate)
+  ) {
+    return fallback
+  }
+  return path.resolve(candidate)
 }
 
 function limitDiagnosticString(value) {
@@ -361,7 +377,7 @@ async function runArduinoCli(args, options = {}) {
   try {
     return await runCommand(ARDUINO_CLI_PATH, args, options)
   } catch (error) {
-    if (process.env.ARDUINO_CLI_PATH || error?.code !== 'arduino_cli_missing') throw error
+    if (ARDUINO_CLI_PATH_WAS_CONFIGURED || error?.code !== 'arduino_cli_missing') throw error
     return runCommand('arduino-cli', args, options)
   }
 }

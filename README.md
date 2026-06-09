@@ -258,7 +258,7 @@ curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.
 ./bin/arduino-cli core install arduino:avr
 ```
 
-The app automatically looks for `./bin/arduino-cli`; set `ARDUINO_CLI_PATH` if it is installed somewhere else. Set `ARDUINO_DEFAULT_FQBN` to change the default board target:
+The app automatically looks for `./bin/arduino-cli`; set `ARDUINO_CLI_PATH` if it is installed somewhere else. The override must be an absolute path; blank, relative, overlong, or control-character values are ignored so app-menu launches still fall back to the bundled CLI and then PATH. Set `ARDUINO_DEFAULT_FQBN` to change the default board target:
 
 ```bash
 ARDUINO_CLI_PATH=/absolute/path/to/arduino-cli
