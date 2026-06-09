@@ -545,7 +545,7 @@ async function readUpstreamJson(response, fallbackMessage = 'Upstream response w
   try {
     return text ? JSON.parse(text) : {}
   } catch {
-    return { error: fallbackMessage }
+    throw new Error(fallbackMessage)
   }
 }
 

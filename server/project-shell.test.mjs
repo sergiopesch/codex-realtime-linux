@@ -756,6 +756,8 @@ test('upstream OpenAI and usage fetches are timeout bounded', async () => {
   assert.match(serverSource, /await reader\.cancel\(\)\.catch\(\(\) => \{\}\)/)
   assert.match(serverSource, /async function readUpstreamJson\(response, fallbackMessage = 'Upstream response was not JSON\.'\)/)
   assert.match(serverSource, /return text \? JSON\.parse\(text\) : \{\}/)
+  assert.match(serverSource, /throw new Error\(fallbackMessage\)/)
+  assert.doesNotMatch(serverSource, /return \{ error: fallbackMessage \}/)
   assert.match(serverSource, /const MAX_USAGE_BUCKETS = 20/)
   assert.match(serverSource, /const MAX_USAGE_BUCKET_LABEL_LENGTH = 120/)
   assert.match(serverSource, /const MAX_USAGE_CURRENCY_LENGTH = 12/)

@@ -571,6 +571,43 @@ test('server exposes desktop launch metadata when managed by Electron', async (t
   assert.equal(body.codexApprovalPolicy, 'on-request')
 })
 
+test('usage route surfaces malformed OpenAI admin JSON as a clean error', async (t) => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-openai-fetch-mock-'))
+  t.after(() => rm(tempDir, { recursive: true, force: true }))
+  const fetchMockPath = path.join(tempDir, 'mock-openai-fetch.mjs')
+  await writeFile(
+    fetchMockPath,
+    `const realFetch = globalThis.fetch
+
+globalThis.fetch = async (url, init) => {
+  const href = String(url)
+  if (href.startsWith('https://api.openai.com/v1/organization/costs')) {
+    return new Response('{not json', { status: 200, headers: { 'Content-Type': 'application/json' } })
+  }
+  if (href.startsWith('https://api.openai.com/v1/organization/usage/completions')) {
+    return Response.json({ data: [] })
+  }
+  return realFetch(url, init)
+}
+`,
+  )
+
+  const { baseUrl } = await startTestServer(t, {
+    NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import ${fetchMockPath}`.trim(),
+    OPENAI_ADMIN_KEY: 'sk-admin-test',
+    OPENAI_USAGE_GBP_RATE: '0.8',
+  })
+
+  const spend = await fetch(`${baseUrl}/api/spend`)
+  assert.equal(spend.status, 200)
+  const body = await spend.json()
+  assert.equal(body.source, 'admin-api-error')
+  assert.match(body.error, /Upstream response was not JSON/)
+  assert.equal(body.data.totalCostGbp, null)
+  assert.deepEqual(body.data.costBuckets, [])
+  assert.deepEqual(body.data.tokenBuckets, [])
+})
+
 test('server only trusts configured loopback API origins', async (t) => {
   const { baseUrl } = await startTestServer(t, {
     CODEX_REALTIME_ALLOWED_ORIGINS: [
