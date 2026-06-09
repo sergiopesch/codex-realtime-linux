@@ -327,6 +327,16 @@ async function writeLocalSecrets(nextSecrets) {
   localSecrets = nextSecrets
 }
 
+async function mutateLocalSecrets(updater) {
+  const mutation = localSecretsMutation.then(async () => {
+    const nextSecrets = normalizeLocalSecrets(await updater(localSecrets))
+    await writeLocalSecrets(nextSecrets)
+    return nextSecrets
+  })
+  localSecretsMutation = mutation.catch(() => {})
+  return mutation
+}
+
 function getOpenAiApiKey() {
   return ENV_OPENAI_API_KEY || localSecrets.openaiApiKey
 }
@@ -1122,6 +1132,7 @@ class CodexRpc {
 
 const codex = new CodexRpc()
 let appStateMutation = Promise.resolve()
+let localSecretsMutation = Promise.resolve()
 
 const emptyAppState = () => ({
   version: 1,
@@ -1712,7 +1723,7 @@ app.post('/api/settings/openai-key', async (req, res) => {
     }
 
     await createRealtimeClientSecret(apiKey)
-    await writeLocalSecrets({ ...localSecrets, openaiApiKey: apiKey })
+    await mutateLocalSecrets((secrets) => ({ ...secrets, openaiApiKey: apiKey }))
     res.json({
       realtime: true,
       openAiKeySource: getOpenAiKeySource(),
@@ -1725,8 +1736,10 @@ app.post('/api/settings/openai-key', async (req, res) => {
 
 app.delete('/api/settings/openai-key', async (_req, res) => {
   try {
-    const { openaiApiKey: _removed, ...nextSecrets } = localSecrets
-    await writeLocalSecrets(nextSecrets)
+    await mutateLocalSecrets((secrets) => {
+      const { openaiApiKey: _removed, ...nextSecrets } = secrets
+      return nextSecrets
+    })
     res.json({
       realtime: Boolean(getOpenAiApiKey()),
       openAiKeySource: getOpenAiKeySource(),
