@@ -70,6 +70,7 @@ const MAX_EVENT_STRING_LENGTH = 2_000
 const MAX_EVENT_ARRAY_ITEMS = 20
 const MAX_EVENT_OBJECT_KEYS = 30
 const MAX_EVENT_DEPTH = 4
+const MAX_CODEX_RPC_LINE_LENGTH = 120_000
 const MAX_ERROR_MESSAGE_LENGTH = 500
 const CONFIGURED_CODEX_RPC_TIMEOUT_MS = Number(process.env.CODEX_RPC_TIMEOUT_MS)
 const CODEX_RPC_TIMEOUT_MS =
@@ -763,6 +764,18 @@ class CodexRpc {
   }
 
   #handleLine(line) {
+    if (line.length > MAX_CODEX_RPC_LINE_LENGTH) {
+      this.recordNotification({
+        method: 'app-server/oversized-line',
+        params: {
+          length: line.length,
+          maxLength: MAX_CODEX_RPC_LINE_LENGTH,
+          at: new Date().toISOString(),
+        },
+      })
+      return
+    }
+
     let message
     try {
       message = JSON.parse(line)
