@@ -333,12 +333,12 @@ const savedConversationPayload = (conversation: AgentConversation) => ({
 })
 
 const eventKey = (event: EventRecord) => `${event.method ?? 'event'}::${event.receivedAt ?? ''}`
-const workspacePathFor = (workspace: Workspace) => workspace.path ?? workspace.id
 const normalizeAbsoluteLocalWorkspacePath = (workspacePath: string) => {
   const trimmed = workspacePath.trim()
   if (!trimmed.startsWith('/')) return trimmed
   return trimmed.replace(/\/+$/g, '') || '/'
 }
+const workspacePathFor = (workspace: Workspace) => normalizeAbsoluteLocalWorkspacePath(workspace.path ?? workspace.id)
 const isAbsoluteLocalWorkspacePath = (workspacePath: string) => normalizeAbsoluteLocalWorkspacePath(workspacePath).startsWith('/')
 
 const realtimeFunctionCallItem = (message: Record<string, unknown>): RealtimeFunctionCallItem | null => {
@@ -447,11 +447,12 @@ function App() {
   const hasDesktopWindowControls = Boolean((window as DesktopWindow).desktopWindow)
   const workspaceSource = useMemo(() => {
     const seen = new Set<string>()
+    const hiddenPaths = new Set(hiddenWorkspacePaths.map(normalizeAbsoluteLocalWorkspacePath))
 
     return [...userWorkspaces, ...workspaces].filter((workspace) => {
       const workspacePath = workspacePathFor(workspace)
       if (!isAbsoluteLocalWorkspacePath(workspacePath)) return false
-      if (hiddenWorkspacePaths.includes(workspacePath)) return false
+      if (hiddenPaths.has(workspacePath)) return false
       if (seen.has(workspacePath)) return false
       seen.add(workspacePath)
       return true
@@ -514,13 +515,13 @@ function App() {
 
   const selectedRoutableWorkspacePath = (requestedCwd: unknown) => {
     const selected = selectedWorkspaceRef.current
-    if (!selected) {
+    const normalizedSelected = normalizeAbsoluteLocalWorkspacePath(selected)
+    if (!normalizedSelected) {
       throw new Error('Select a workspace before routing work to Codex.')
     }
-    if (!routableWorkspacePathsRef.current.has(selected)) {
+    if (!routableWorkspacePathsRef.current.has(normalizedSelected)) {
       throw new Error('The selected workspace is not available for Codex routing.')
     }
-    const normalizedSelected = normalizeAbsoluteLocalWorkspacePath(selected)
     const normalizedRequestedCwd =
       typeof requestedCwd === 'string' && requestedCwd.trim()
         ? normalizeAbsoluteLocalWorkspacePath(requestedCwd)
@@ -528,7 +529,7 @@ function App() {
     if (normalizedRequestedCwd && normalizedRequestedCwd !== normalizedSelected) {
       throw new Error('Realtime requested a workspace that is not currently selected. Select that workspace first.')
     }
-    return selected
+    return normalizedSelected
   }
 
   const updateTranscriptLine = (
@@ -930,14 +931,14 @@ function App() {
 
   const addWorkspaceFromFolder = async ({ name: rawName, path: rawPath }: { name: string; path?: string }) => {
     const name = rawName.trim() || 'New workspace'
-    const workspacePath = rawPath?.trim() ?? ''
-    if (!workspacePath) {
+    const workspacePath = normalizeAbsoluteLocalWorkspacePath(rawPath ?? '')
+    if (!isAbsoluteLocalWorkspacePath(workspacePath)) {
       setLastError('A real local folder path is required. Launch the desktop app and use Add workspace from there.')
       return
     }
     const workspace = { id: workspacePath, name, path: workspacePath }
 
-    setUserWorkspaces((current) => [workspace, ...current])
+    setUserWorkspaces((current) => [workspace, ...current.filter((item) => workspacePathFor(item) !== workspacePath)])
     setConversationsByWorkspace((current) => ({ ...current, [workspacePath]: current[workspacePath] ?? [] }))
     setCollapsedWorkspaces((current) => current.filter((item) => item !== workspacePath))
     setSelectedWorkspace(workspacePath)
@@ -1032,13 +1033,14 @@ function App() {
   }
 
   const removeWorkspaceFromApp = async (workspacePath: string) => {
-    const nextWorkspace = workspaceRoots.find((root) => root.workspacePath !== workspacePath)
+    const targetWorkspacePath = normalizeAbsoluteLocalWorkspacePath(workspacePath)
+    const nextWorkspace = workspaceRoots.find((root) => root.workspacePath !== targetWorkspacePath)
 
-    setHiddenWorkspacePaths((current) => [...new Set([...current, workspacePath])])
-    setUserWorkspaces((current) => current.filter((workspace) => (workspace.path ?? workspace.id) !== workspacePath))
-    setCollapsedWorkspaces((current) => current.filter((item) => item !== workspacePath))
+    setHiddenWorkspacePaths((current) => [...new Set([...current.map(normalizeAbsoluteLocalWorkspacePath), targetWorkspacePath])])
+    setUserWorkspaces((current) => current.filter((workspace) => workspacePathFor(workspace) !== targetWorkspacePath))
+    setCollapsedWorkspaces((current) => current.filter((item) => normalizeAbsoluteLocalWorkspacePath(item) !== targetWorkspacePath))
 
-    if (selectedWorkspace === workspacePath) {
+    if (normalizeAbsoluteLocalWorkspacePath(selectedWorkspace) === targetWorkspacePath) {
       if (nextWorkspace) {
         setSelectedWorkspace(nextWorkspace.workspacePath)
         setSelectedConversationId(nextWorkspace.conversations[0]?.id ?? '')
@@ -1056,7 +1058,7 @@ function App() {
       await api('/api/app-state/workspaces/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workspacePath }),
+        body: JSON.stringify({ workspacePath: targetWorkspacePath }),
       })
     } catch (error) {
       setLastError(error instanceof Error ? error.message : 'Failed to remove workspace')
@@ -1137,7 +1139,7 @@ function App() {
         const savedWorkspaces = (appStateData.workspaces ?? []).filter((workspace) =>
           isAbsoluteLocalWorkspacePath(workspacePathFor(workspace)),
         )
-        const hiddenPaths = appStateData.hiddenWorkspacePaths ?? []
+        const hiddenPaths = (appStateData.hiddenWorkspacePaths ?? []).map(normalizeAbsoluteLocalWorkspacePath)
         const savedConversationState = appStateData.conversationsByWorkspace ?? {}
         const visibleRoots = roots.filter((workspace) => !hiddenPaths.includes(workspacePathFor(workspace)))
         const visibleSavedWorkspaces = savedWorkspaces.filter((workspace) => !hiddenPaths.includes(workspacePathFor(workspace)))
@@ -1151,7 +1153,7 @@ function App() {
         setStatus(statusData)
         setWorkspaces(localWorkspaceData)
         setUserWorkspaces(savedWorkspaces)
-        setHiddenWorkspacePaths(appStateData.hiddenWorkspacePaths ?? [])
+        setHiddenWorkspacePaths(hiddenPaths)
         setSpend(spendData)
         setWeatherLocationInput((current) =>
           current.trim() || !statusData.defaultWeatherLocation ? current : statusData.defaultWeatherLocation ?? '',
