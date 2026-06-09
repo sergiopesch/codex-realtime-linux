@@ -2,7 +2,7 @@ import 'dotenv/config'
 import express from 'express'
 import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { chmod, mkdir, opendir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, open, opendir, readFile, realpath, rename, rm, stat } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { createInterface } from 'node:readline'
@@ -251,12 +251,18 @@ async function writeJsonFileAtomic(filePath, value, { dirMode, fileMode } = {}) 
     path.dirname(filePath),
     `.${path.basename(filePath)}.${process.pid}.${randomUUID()}.tmp`,
   )
+  let fileHandle
   try {
-    await writeFile(tempPath, `${JSON.stringify(value, null, 2)}\n`, fileMode ? { mode: fileMode } : undefined)
+    fileHandle = await open(tempPath, fileMode ? 'wx' : 'w', fileMode)
+    await fileHandle.writeFile(`${JSON.stringify(value, null, 2)}\n`)
+    await fileHandle.sync()
+    await fileHandle.close()
+    fileHandle = null
     if (fileMode) await chmod(tempPath, fileMode)
     await rename(tempPath, filePath)
     if (fileMode) await chmod(filePath, fileMode)
   } catch (error) {
+    if (fileHandle) await fileHandle.close().catch(() => {})
     try {
       await rm(tempPath, { force: true })
     } catch {
