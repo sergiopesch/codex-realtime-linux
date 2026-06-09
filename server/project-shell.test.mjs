@@ -608,6 +608,8 @@ test('realtime voice sessions reset transcript state and clean up media resource
   assert.doesNotMatch(appSource, /setLastError\(error instanceof Error \? error\.message :/)
   assert.doesNotMatch(appSource, /const message = error instanceof Error \? error\.message :/)
   assert.match(appSource, /seenUsbEventIdsRef\.current\.size > MAX_SEEN_USB_EVENT_IDS/)
+  assert.match(appSource, /\(finiteTimestamp\(a\.receivedAt\) \?\? 0\) - \(finiteTimestamp\(b\.receivedAt\) \?\? 0\)/)
+  assert.doesNotMatch(appSource, /new Date\(a\.receivedAt\)\.getTime\(\) - new Date\(b\.receivedAt\)\.getTime\(\)/)
   assert.match(appSource, /const retainedIds = new Set\(data\.data\.map\(\(event\) => event\.id\)\.slice\(0, MAX_SEEN_USB_EVENT_IDS\)\)/)
   assert.match(appSource, /seenUsbEventIdsRef\.current = retainedIds/)
   assert.match(appSource, /const pollCodexEvents = async \(\) => \{/)

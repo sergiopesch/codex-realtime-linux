@@ -1455,7 +1455,7 @@ function App() {
 
         const unseen = data.data
           .filter((event) => !seenUsbEventIdsRef.current.has(event.id))
-          .sort((a, b) => new Date(a.receivedAt).getTime() - new Date(b.receivedAt).getTime())
+          .sort((a, b) => (finiteTimestamp(a.receivedAt) ?? 0) - (finiteTimestamp(b.receivedAt) ?? 0))
 
         for (const event of unseen) {
           seenUsbEventIdsRef.current.add(event.id)
