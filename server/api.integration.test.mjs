@@ -110,6 +110,13 @@ const responses = {
         status: { type: 'complete' },
         debugPayload: 'x'.repeat(5_000),
       },
+      {
+        name: 'Missing id',
+        preview: 'History rows without stable ids should not become sidebar conversations.',
+        cwd: process.env.FAKE_CODEX_THREAD_CWD,
+        updatedAt: 1710000000,
+        status: { type: 'complete' },
+      },
     ],
   },
 }
@@ -770,8 +777,9 @@ test('codex task returns public artifact metadata for external workspace artifac
   assert.equal(threadsBody.conversations[0].id, 'thread-large-time')
   assert.equal(threadsBody.conversations[0].workspacePath, workspacePath)
   assert.match(threadsBody.conversations[0].updatedAt, /^\d{4}-\d{2}-\d{2}T/)
-  assert.equal(threadsBody.data.length, 1)
+  assert.equal(threadsBody.data.length, 2)
   assert.equal(threadsBody.data[0].debugPayload.length, 1000)
+  assert.equal(threadsBody.conversations.some((conversation) => /^codex-\d{4}-/.test(conversation.id)), false)
 })
 
 test('codex app-source tasks require an explicit environment opt-in', async (t) => {

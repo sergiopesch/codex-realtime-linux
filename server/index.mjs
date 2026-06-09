@@ -1561,6 +1561,8 @@ function normalizeEpochSecondsTimestamp(value, fallback = new Date().toISOString
 }
 
 function threadToConversation(thread) {
+  const threadId = normalizeBoundedString(thread?.id, '', MAX_CONVERSATION_ID_LENGTH)
+  if (!threadId) return null
   const preview = normalizeBoundedString(thread?.preview, '', MAX_CONVERSATION_TEXT_LENGTH)
   const title = normalizeBoundedString(
     thread?.name,
@@ -1570,7 +1572,6 @@ function threadToConversation(thread) {
   const updatedAt = normalizeEpochSecondsTimestamp(thread?.updatedAt)
   const status = thread?.status?.type === 'active' ? 'running' : 'ready'
   const statusType = normalizeBoundedString(thread?.status?.type, 'ready', 40)
-  const threadId = normalizeBoundedString(thread?.id, `codex-${updatedAt}`, MAX_CONVERSATION_ID_LENGTH)
   const workspacePath = normalizeBoundedString(normalizeWorkspacePath(thread?.cwd), '', MAX_CONVERSATION_TEXT_LENGTH)
   const traces = [workspacePath ? `Workspace: ${workspacePath}` : '', statusType ? `Status: ${statusType}` : '']
 
@@ -1598,7 +1599,7 @@ function normalizeCodexThreadListResponse(result) {
   return {
     ...response,
     data: Array.isArray(response.data) ? response.data : [],
-    conversations: threads.map(threadToConversation),
+    conversations: threads.map(threadToConversation).filter(Boolean),
   }
 }
 
