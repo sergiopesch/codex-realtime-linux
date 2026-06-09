@@ -605,6 +605,68 @@ test('uploadArduinoSketch compiles and uploads through arduino-cli', async () =>
   assert.deepEqual(uploadCommand.slice(0, 5), ['upload', '-p', '/dev/ttyACM0', '--fqbn', 'arduino:avr:uno'])
 })
 
+test('uploadArduinoSketch reports compile phase failures with target context', async () => {
+  const commands = []
+  const run = async (args) => {
+    commands.push(args)
+    throw new ArduinoUploadError('arduino-cli failed with exit code 1. Missing AVR core.', {
+      code: 'arduino_cli_failed',
+      status: 502,
+      details: { stderr: 'platform arduino:avr is not installed' },
+    })
+  }
+
+  await assert.rejects(
+    () => uploadArduinoSketch(
+      { action: 'onboard_led_blink', port: '/dev/ttyACM0', fqbn: 'arduino:avr:uno' },
+      { run, listPorts: async () => ['/dev/ttyACM0'], listBoards: async () => [] },
+    ),
+    (error) =>
+      error instanceof ArduinoUploadError &&
+      error.status === 502 &&
+      error.code === 'arduino_cli_failed' &&
+      /Arduino compile failed/.test(error.message) &&
+      error.details.phase === 'compile' &&
+      error.details.port === '/dev/ttyACM0' &&
+      error.details.fqbn === 'arduino:avr:uno' &&
+      error.details.cause.stderr === 'platform arduino:avr is not installed',
+  )
+  assert.deepEqual(commands.map((command) => command[0]), ['compile'])
+})
+
+test('uploadArduinoSketch reports upload phase failures with compile diagnostics', async () => {
+  const commands = []
+  const run = async (args) => {
+    commands.push(args)
+    if (args[0] === 'upload') {
+      throw new ArduinoUploadError('arduino-cli failed with exit code 1. Programmer is not responding.', {
+        code: 'arduino_cli_failed',
+        status: 502,
+        details: { stderr: 'avrdude: stk500_recv(): programmer is not responding' },
+      })
+    }
+    return { stdout: 'compile ok', stderr: 'compile warning' }
+  }
+
+  await assert.rejects(
+    () => uploadArduinoSketch(
+      { action: 'onboard_led_blink', port: '/dev/ttyACM0', fqbn: 'arduino:avr:uno' },
+      { run, listPorts: async () => ['/dev/ttyACM0'], listBoards: async () => [] },
+    ),
+    (error) =>
+      error instanceof ArduinoUploadError &&
+      error.status === 502 &&
+      error.code === 'arduino_cli_failed' &&
+      /Arduino upload failed/.test(error.message) &&
+      error.details.phase === 'upload' &&
+      error.details.port === '/dev/ttyACM0' &&
+      error.details.compile.stdout === 'compile ok' &&
+      error.details.compile.stderr === 'compile warning' &&
+      error.details.cause.stderr === 'avrdude: stk500_recv(): programmer is not responding',
+  )
+  assert.deepEqual(commands.map((command) => command[0]), ['compile', 'upload'])
+})
+
 test('uploadArduinoSketch uses detected board FQBN when no FQBN is supplied', async () => {
   const commands = []
   const run = async (args) => {

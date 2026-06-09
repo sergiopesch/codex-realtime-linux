@@ -320,6 +320,28 @@ function summarizeCommandOutput(stdout, stderr) {
     .slice(0, 700)
 }
 
+function commandPhaseError(error, phase, context) {
+  const original =
+    error instanceof ArduinoUploadError
+      ? error
+      : new ArduinoUploadError(error instanceof Error ? error.message : 'Arduino command failed.', {
+          code: 'arduino_cli_failed',
+          status: 502,
+          details: error instanceof Error ? error.message : String(error),
+        })
+  const messagePrefix = phase === 'compile' ? 'Arduino compile failed' : 'Arduino upload failed'
+
+  return new ArduinoUploadError(`${messagePrefix}: ${original.message}`, {
+    code: original.code,
+    status: original.status,
+    details: {
+      phase,
+      ...context,
+      cause: original.details ?? original.message,
+    },
+  })
+}
+
 export function runCommand(command, args, { spawnImpl = spawn, timeoutMs = 120_000, killGraceMs = COMMAND_TIMEOUT_KILL_GRACE_MS } = {}) {
   return new Promise((resolve, reject) => {
     let proc
@@ -547,8 +569,33 @@ export async function uploadArduinoSketch(
     await mkdir(sketchDir, { recursive: true })
     await writeFile(sketchPath, request.sketch, { flag: 'wx' })
 
-    const compile = await run(['compile', '--fqbn', fqbn, sketchDir])
-    const upload = await run(['upload', '-p', port, '--fqbn', fqbn, sketchDir])
+    const commandContext = {
+      port,
+      fqbn,
+      sketchName: request.sketchName,
+      boardName: detectedBoard?.boardName ?? null,
+      serialPorts: ports,
+      detectedBoards: boards,
+    }
+    let compile
+    try {
+      compile = await run(['compile', '--fqbn', fqbn, sketchDir])
+    } catch (error) {
+      throw commandPhaseError(error, 'compile', commandContext)
+    }
+
+    let upload
+    try {
+      upload = await run(['upload', '-p', port, '--fqbn', fqbn, sketchDir])
+    } catch (error) {
+      throw commandPhaseError(error, 'upload', {
+        ...commandContext,
+        compile: {
+          stdout: limitDiagnosticString(compile.stdout ?? ''),
+          stderr: limitDiagnosticString(compile.stderr ?? ''),
+        },
+      })
+    }
 
     return {
       action: request.action,
