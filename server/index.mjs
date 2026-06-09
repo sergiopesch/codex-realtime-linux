@@ -1,7 +1,7 @@
 import 'dotenv/config'
 import express from 'express'
 import { spawn } from 'node:child_process'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { chmod, mkdir, open, opendir, readFile, realpath, rename, rm, stat } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -96,6 +96,7 @@ const MAX_EVENT_DEPTH = 4
 const MAX_OPENAI_API_KEY_LENGTH = 1_000
 const MAX_CODEX_RPC_LINE_LENGTH = 120_000
 const MAX_ERROR_MESSAGE_LENGTH = 500
+const MAX_OPENAI_SAFETY_IDENTIFIER_LENGTH = 128
 const DEFAULT_CODEX_RPC_TIMEOUT_MS = 120_000
 const MAX_CODEX_RPC_TIMEOUT_MS = 600_000
 const CODEX_RPC_TIMEOUT_MS = configuredInteger(process.env.CODEX_RPC_TIMEOUT_MS, {
@@ -107,6 +108,8 @@ const DEFAULT_STATE_PATH = path.join(os.homedir(), '.local', 'state', 'codex-rea
 const DEFAULT_SECRETS_PATH = path.join(os.homedir(), '.config', 'codex-realtime-linux', 'secrets.json')
 const STATE_PATH = configuredAbsolutePath(process.env.CODEX_REALTIME_STATE_PATH, DEFAULT_STATE_PATH)
 const SECRETS_PATH = configuredAbsolutePath(process.env.CODEX_REALTIME_SECRETS_PATH, DEFAULT_SECRETS_PATH)
+const OPENAI_SAFETY_IDENTIFIER =
+  normalizeOpenAiSafetyIdentifier(process.env.OPENAI_SAFETY_IDENTIFIER) || defaultOpenAiSafetyIdentifier()
 
 let localSecrets = {}
 
@@ -237,6 +240,27 @@ async function loadLocalSecrets() {
 function isPlausibleOpenAiApiKey(value) {
   const apiKey = typeof value === 'string' ? value.trim() : ''
   return apiKey.startsWith('sk-') && apiKey.length <= MAX_OPENAI_API_KEY_LENGTH
+}
+
+function defaultOpenAiSafetyIdentifier() {
+  const source = [
+    'codex-realtime-linux',
+    os.hostname(),
+    os.userInfo().username,
+    os.homedir(),
+    SECRETS_PATH,
+  ].join('\0')
+  const digest = createHash('sha256').update(source).digest('hex').slice(0, 32)
+  return `codex-realtime-linux-${digest}`
+}
+
+function normalizeOpenAiSafetyIdentifier(value) {
+  const text = normalizeString(value)
+  if (!text) return ''
+  return text
+    .replace(/[^A-Za-z0-9._:-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, MAX_OPENAI_SAFETY_IDENTIFIER_LENGTH)
 }
 
 function normalizeLocalSecrets(value) {
@@ -670,7 +694,7 @@ async function createRealtimeClientSecret(openAiApiKey) {
     headers: {
       Authorization: `Bearer ${openAiApiKey}`,
       'Content-Type': 'application/json',
-      'OpenAI-Safety-Identifier': process.env.OPENAI_SAFETY_IDENTIFIER ?? 'local-codex-realtime-user',
+      'OpenAI-Safety-Identifier': OPENAI_SAFETY_IDENTIFIER,
     },
     body: JSON.stringify({
       expires_after: { anchor: 'created_at', seconds: 600 },

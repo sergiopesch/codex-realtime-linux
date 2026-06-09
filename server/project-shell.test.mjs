@@ -170,7 +170,7 @@ test('persisted workspaces and conversations require absolute workspace paths', 
   assert.match(serverSource, /const SECRETS_PATH = configuredAbsolutePath\(process\.env\.CODEX_REALTIME_SECRETS_PATH, DEFAULT_SECRETS_PATH\)/)
   assert.match(serverSource, /function configuredAbsolutePath\(value, fallback\)/)
   assert.match(serverSource, /path\.isAbsolute\(candidate\) \? path\.resolve\(candidate\) : fallback/)
-  assert.match(serverSource, /import \{ randomUUID \} from 'node:crypto'/)
+  assert.match(serverSource, /import \{ createHash, randomUUID \} from 'node:crypto'/)
   assert.match(serverSource, /function isPlausibleOpenAiApiKey\(value\)/)
   assert.match(serverSource, /apiKey\.startsWith\('sk-'\) && apiKey\.length <= MAX_OPENAI_API_KEY_LENGTH/)
   assert.match(serverSource, /function normalizeLocalSecrets\(value\)/)
@@ -452,6 +452,7 @@ test('renderer loads Codex thread history only for explicit saved workspaces', a
 test('upstream OpenAI and usage fetches are timeout bounded', async () => {
   const serverSource = await readFile(path.join(repoRoot, 'server', 'index.mjs'), 'utf8')
 
+  assert.match(serverSource, /import \{ createHash, randomUUID \} from 'node:crypto'/)
   assert.match(serverSource, /const DEFAULT_UPSTREAM_FETCH_TIMEOUT_MS = 20_000/)
   assert.match(serverSource, /const MAX_UPSTREAM_FETCH_TIMEOUT_MS = 120_000/)
   assert.match(serverSource, /const UPSTREAM_FETCH_TIMEOUT_MS = configuredInteger\(process\.env\.UPSTREAM_FETCH_TIMEOUT_MS/)
@@ -462,6 +463,13 @@ test('upstream OpenAI and usage fetches are timeout bounded', async () => {
   assert.match(serverSource, /const MAX_VISUAL_CONTEXT_SOURCE_LENGTH = 160/)
   assert.match(serverSource, /const MAX_VISUAL_CONTEXT_PROMPT_LENGTH = 1_500/)
   assert.match(serverSource, /const MAX_VISUAL_CONTEXT_SUMMARY_LENGTH = 4_000/)
+  assert.match(serverSource, /const MAX_OPENAI_SAFETY_IDENTIFIER_LENGTH = 128/)
+  assert.match(
+    serverSource,
+    /const OPENAI_SAFETY_IDENTIFIER =\s+normalizeOpenAiSafetyIdentifier\(process\.env\.OPENAI_SAFETY_IDENTIFIER\) \|\| defaultOpenAiSafetyIdentifier\(\)/,
+  )
+  assert.match(serverSource, /function defaultOpenAiSafetyIdentifier\(\)[\s\S]*createHash\('sha256'\)\.update\(source\)\.digest\('hex'\)\.slice\(0, 32\)/)
+  assert.match(serverSource, /function normalizeOpenAiSafetyIdentifier\(value\)[\s\S]*MAX_OPENAI_SAFETY_IDENTIFIER_LENGTH/)
   assert.match(serverSource, /const SUPPORTED_VISUAL_CONTEXT_DATA_URL_TYPES = new Set\(\['image\/jpeg', 'image\/png', 'image\/webp', 'image\/gif'\]\)/)
   assert.match(serverSource, /function normalizeBoundedString\(value, fallback = '', maxLength = 1_000\)/)
   assert.match(serverSource, /function visualContextDataUrlType\(value\)/)
@@ -513,6 +521,8 @@ test('upstream OpenAI and usage fetches are timeout bounded', async () => {
   assert.match(serverSource, /Buffer\.byteLength\(imageDataUrl, 'utf8'\) > MAX_VISUAL_CONTEXT_DATA_URL_BYTES/)
   assert.match(serverSource, /visual_context_too_large/)
   assert.match(serverSource, /client_secrets'[\s\S]*signal: upstreamSignal\(\)/)
+  assert.match(serverSource, /'OpenAI-Safety-Identifier': OPENAI_SAFETY_IDENTIFIER/)
+  assert.doesNotMatch(serverSource, /local-codex-realtime-user/)
   assert.match(serverSource, /readUpstreamJson\(response, 'Realtime token response was not JSON\.'\)/)
   assert.match(serverSource, /\/v1\/responses'[\s\S]*signal: upstreamSignal\(\)/)
   assert.match(serverSource, /readUpstreamJson\(response, 'Vision response was not JSON\.'\)/)
@@ -705,6 +715,8 @@ test('README documents live release verification for non-automated capabilities'
   assert.match(readme, /They do not prove microphone permissions, speaker output, app-menu launch behavior, screen capture permissions, or physical Arduino upload success/)
   assert.match(readme, /desktop-launch\.log/)
   assert.match(readme, /api-server\.log/)
+  assert.match(readme, /OPENAI_SAFETY_IDENTIFIER=/)
+  assert.match(readme, /stable anonymized value from this local installation/)
   assert.match(readme, /curl -s http:\/\/127\.0\.0\.1:3311\/api\/status/)
   assert.match(readme, /public\/agent-files\//)
   assert.match(readme, /symlink escapes and malformed preview folders are not surfaced to the UI/)

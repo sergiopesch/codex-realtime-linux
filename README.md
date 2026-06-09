@@ -141,7 +141,10 @@ REALTIME_VOICE=cedar
 REALTIME_USER_NAME=
 REALTIME_USER_LOCATION=
 REALTIME_PERSONA=
+OPENAI_SAFETY_IDENTIFIER=
 ```
+
+Realtime client-secret requests include an OpenAI safety identifier. If `OPENAI_SAFETY_IDENTIFIER` is unset, the server derives a stable anonymized value from this local installation instead of sending a fixed global identifier or the raw OS username.
 
 The local API accepts app requests from the desktop origin and Vite dev origins only. To trust another local development origin, add it explicitly. Extra origins must be root `http://localhost`, `http://127.0.0.1`, or `http://[::1]` origins; non-loopback URLs, paths, credentials, query strings, and hashes are ignored:
 
