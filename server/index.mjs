@@ -1773,6 +1773,17 @@ app.patch('/api/app-state/conversations', async (req, res) => {
     state.conversationsByWorkspace[workspacePath] = next
     return next.find((conversation) => conversation.id === conversationId) ?? null
   })
+  if (!result) {
+    sendJsonError(
+      res,
+      httpError('conversationId was not found in this workspace', {
+        statusCode: 404,
+        code: 'conversation_not_found',
+      }),
+      { fallbackStatus: 404, fallbackCode: 'conversation_not_found' },
+    )
+    return
+  }
   res.json({ conversation: result, state })
 })
 

@@ -278,6 +278,14 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   assert.equal(missingPatchId.status, 400)
   assert.equal((await readJson(missingPatchId)).code, 'invalid_request')
 
+  const missingPatchConversation = await fetch(`${baseUrl}/api/app-state/conversations`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspacePath, conversationId: 'missing-conversation', patch: { title: 'No target' } }),
+  })
+  assert.equal(missingPatchConversation.status, 404)
+  assert.equal((await readJson(missingPatchConversation)).code, 'conversation_not_found')
+
   const invalidConversationDelete = await fetch(`${baseUrl}/api/app-state/conversations/delete`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
