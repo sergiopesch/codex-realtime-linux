@@ -255,6 +255,7 @@ const MAX_REALTIME_SDP_RESPONSE_LENGTH = 120_000
 const MAX_REALTIME_EVENT_MESSAGE_LENGTH = 120_000
 const MAX_REALTIME_FUNCTION_ARGUMENTS_LENGTH = 80_000
 const MAX_REALTIME_TOOL_TEXT_LENGTH = 8_000
+const MAX_HANDLED_REALTIME_FUNCTION_CALL_IDS = 240
 const MAX_REALTIME_TRANSCRIPT_LINES = 80
 const MAX_REALTIME_TRANSCRIPT_ID_LENGTH = 240
 const MAX_REALTIME_TRANSCRIPT_TEXT_LENGTH = 8_000
@@ -485,6 +486,17 @@ const requireRealtimeToolText = (value: unknown, label: string, maxLength = MAX_
   const text = value.trim()
   if (text.length > maxLength) throw new Error(`${label} is too long.`)
   return text
+}
+
+const rememberRealtimeFunctionCallId = (seenIds: Set<string>, callId: string) => {
+  if (seenIds.has(callId)) return false
+  seenIds.add(callId)
+  if (seenIds.size > MAX_HANDLED_REALTIME_FUNCTION_CALL_IDS) {
+    const retainedIds = [...seenIds].slice(-MAX_HANDLED_REALTIME_FUNCTION_CALL_IDS)
+    seenIds.clear()
+    retainedIds.forEach((id) => seenIds.add(id))
+  }
+  return true
 }
 
 const boundedRealtimeTranscriptId = (value: unknown) =>
@@ -1768,11 +1780,10 @@ function App() {
       return
     }
     const callId = item.call_id.trim()
-    if (handledRealtimeFunctionCallIdsRef.current.has(callId)) {
+    if (!rememberRealtimeFunctionCallId(handledRealtimeFunctionCallIdsRef.current, callId)) {
       appendEvent('realtime/function-call-duplicate-ignored', { name: item.name, callId })
       return
     }
-    handledRealtimeFunctionCallIdsRef.current.add(callId)
 
     setActivity('Voice router', item.name ?? 'Tool call')
 
