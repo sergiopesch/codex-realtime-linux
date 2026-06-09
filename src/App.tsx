@@ -2111,7 +2111,12 @@ function App() {
             })
             return
           }
-          message = JSON.parse(event.data)
+          const parsedMessage: unknown = JSON.parse(event.data)
+          if (!parsedMessage || typeof parsedMessage !== 'object' || Array.isArray(parsedMessage)) {
+            appendEvent('realtime/message-unreadable')
+            return
+          }
+          message = parsedMessage as Record<string, unknown>
         } catch {
           appendEvent('realtime/message-unreadable')
           return
