@@ -416,6 +416,7 @@ test('server exposes desktop launch metadata when managed by Electron', async (t
 
   const status = await fetch(`${baseUrl}/api/status`)
   assert.equal(status.status, 200)
+  assert.equal(status.headers.has('x-powered-by'), false)
   const body = await status.json()
   assert.equal(body.desktopServer.token, 'test-desktop-token')
   assert.equal(Number.isInteger(body.desktopServer.pid), true)

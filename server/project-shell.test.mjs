@@ -460,6 +460,7 @@ test('local API rejects untrusted origins and non-json mutation bodies', async (
   assert.doesNotMatch(serverSource, /const JSON_BODY_LIMIT = process\.env\.CODEX_REALTIME_JSON_LIMIT \?\? '25mb'/)
   assert.match(serverSource, /function guardLocalApiRequests/)
   assert.match(serverSource, /function handleJsonBodyError/)
+  assert.match(serverSource, /app\.disable\('x-powered-by'\)/)
   assert.match(serverSource, /origin_not_allowed/)
   assert.match(serverSource, /Content-Type must be application\/json/)
   assert.match(serverSource, /json_required/)

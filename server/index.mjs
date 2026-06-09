@@ -118,6 +118,7 @@ const OPENAI_SAFETY_IDENTIFIER =
 let localSecrets = {}
 
 const app = express()
+app.disable('x-powered-by')
 const usbMonitor = new UsbDeviceMonitor()
 const localApiHostnames = new Set(['localhost', '127.0.0.1', '[::1]'])
 const DEFAULT_API_ORIGINS = [
