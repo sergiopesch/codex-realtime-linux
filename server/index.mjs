@@ -53,6 +53,14 @@ const MAX_LOCAL_WORKSPACES = 40
 const MAX_LOCAL_HIDDEN_WORKSPACES = 80
 const MAX_LOCAL_WORKSPACE_BUCKETS = 40
 const MAX_LOCAL_CONVERSATIONS_PER_WORKSPACE = 80
+const LEGACY_DRAFT_PROMPT = 'Describe the next build step out loud.'
+const LEGACY_DRAFT_RESPONSE = 'This agent conversation is ready for realtime voice direction.'
+const LEGACY_DRAFT_TRACES = ['Workspace selected', 'Voice direction pending', 'Codex execution ready']
+const LEGACY_DRAFT_TRANSCRIPT = [
+  { speaker: 'user', text: 'Create a new agent conversation for this workspace.' },
+  { speaker: 'codex', text: 'Ready. Start voice and describe the build goal.' },
+]
+const LEGACY_DRAFT_TITLE_PATTERN = /^Voice build (\d+)$/
 const MAX_APP_STATE_FILE_BYTES = 2 * 1024 * 1024
 const MAX_SECRETS_FILE_BYTES = 64 * 1024
 const MAX_GENERATED_ARTIFACTS = 40
@@ -966,6 +974,41 @@ function normalizeTranscript(input) {
     .slice(0, MAX_CONVERSATION_TRANSCRIPT_LINES)
 }
 
+function equalStringList(values, expected) {
+  return values.length === expected.length && values.every((value, index) => value === expected[index])
+}
+
+function equalTranscript(values, expected) {
+  return (
+    values.length === expected.length &&
+    values.every((value, index) => value.speaker === expected[index].speaker && value.text === expected[index].text)
+  )
+}
+
+function stripLegacyDraftScaffolding(conversation) {
+  if (
+    conversation.source !== 'local' ||
+    conversation.status !== 'draft' ||
+    conversation.codexThreadId ||
+    conversation.prompt !== LEGACY_DRAFT_PROMPT ||
+    conversation.response !== LEGACY_DRAFT_RESPONSE ||
+    !equalStringList(conversation.traces, LEGACY_DRAFT_TRACES) ||
+    !equalTranscript(conversation.transcript, LEGACY_DRAFT_TRANSCRIPT)
+  ) {
+    return conversation
+  }
+
+  const legacyTitle = LEGACY_DRAFT_TITLE_PATTERN.exec(conversation.title)
+  return {
+    ...conversation,
+    title: legacyTitle ? `Voice conversation ${legacyTitle[1]}` : conversation.title,
+    prompt: '',
+    response: '',
+    traces: [],
+    transcript: [],
+  }
+}
+
 function normalizeConversation(input, workspacePath) {
   const title = normalizeBoundedString(input?.title, 'Untitled conversation', MAX_CONVERSATION_TITLE_LENGTH)
   const id = normalizeBoundedString(
@@ -975,7 +1018,7 @@ function normalizeConversation(input, workspacePath) {
   )
   const status = ['draft', 'ready', 'running'].includes(input?.status) ? input.status : 'draft'
 
-  return {
+  return stripLegacyDraftScaffolding({
     id,
     title,
     age: normalizeBoundedString(input?.age, 'saved', 40),
@@ -988,7 +1031,7 @@ function normalizeConversation(input, workspacePath) {
     codexThreadId: normalizeBoundedString(input?.codexThreadId, '', MAX_CONVERSATION_ID_LENGTH) || null,
     createdAt: typeof input?.createdAt === 'string' ? input.createdAt : new Date().toISOString(),
     updatedAt: typeof input?.updatedAt === 'string' ? input.updatedAt : new Date().toISOString(),
-  }
+  })
 }
 
 function normalizeAppState(input) {

@@ -309,8 +309,20 @@ test('server bounds persisted app state loaded from disk', async (t) => {
   }))
   const conversations = Array.from({ length: 100 }, (_, index) => ({
     id: `conversation-${index}`,
-    title: `Conversation ${index}`,
-    transcript: [{ speaker: 'user', text: 'hello' }],
+    title: index === 0 ? 'Voice build 7' : `Conversation ${index}`,
+    prompt: index === 0 ? 'Describe the next build step out loud.' : '',
+    response: index === 0 ? 'This agent conversation is ready for realtime voice direction.' : '',
+    traces: index === 0 ? ['Workspace selected', 'Voice direction pending', 'Codex execution ready'] : [],
+    status: index === 0 ? 'draft' : undefined,
+    source: index === 0 ? 'local' : undefined,
+    codexThreadId: index === 0 ? null : undefined,
+    transcript:
+      index === 0
+        ? [
+            { speaker: 'user', text: 'Create a new agent conversation for this workspace.' },
+            { speaker: 'codex', text: 'Ready. Start voice and describe the build goal.' },
+          ]
+        : [{ speaker: 'user', text: 'hello' }],
   }))
   await writeFile(
     statePath,
@@ -333,6 +345,12 @@ test('server bounds persisted app state loaded from disk', async (t) => {
   assert.equal(state.hiddenWorkspacePaths.length, 80)
   assert.equal(Object.keys(state.conversationsByWorkspace).length, 40)
   assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id].length, 80)
+  assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id][0].title, 'Voice conversation 7')
+  assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id][0].prompt, '')
+  assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id][0].response, '')
+  assert.deepEqual(state.conversationsByWorkspace[manyWorkspaces[0].id][0].traces, [])
+  assert.deepEqual(state.conversationsByWorkspace[manyWorkspaces[0].id][0].transcript, [])
+  assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id][1].transcript[0].text, 'hello')
 })
 
 test('server ignores oversized persisted app state and secrets files', async (t) => {
