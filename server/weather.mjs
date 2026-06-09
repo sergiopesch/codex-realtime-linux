@@ -102,6 +102,14 @@ function finiteNumber(value) {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
+function isValidLatitude(value) {
+  return typeof value === 'number' && Number.isFinite(value) && value >= -90 && value <= 90
+}
+
+function isValidLongitude(value) {
+  return typeof value === 'number' && Number.isFinite(value) && value >= -180 && value <= 180
+}
+
 async function readBoundedResponseText(response, stage) {
   if (!response.body) return ''
 
@@ -227,7 +235,7 @@ export async function getCurrentWeather(locationQuery, options = {}) {
 
   const latitude = finiteNumber(resolvedLocation?.latitude)
   const longitude = finiteNumber(resolvedLocation?.longitude)
-  if (!resolvedLocation?.name || latitude == null || longitude == null) {
+  if (!resolvedLocation?.name || !isValidLatitude(latitude) || !isValidLongitude(longitude)) {
     throw new WeatherServiceError(`No weather location matched "${location}".`, {
       code: 'weather_location_not_found',
       status: 404,

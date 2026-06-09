@@ -157,6 +157,31 @@ test('getCurrentWeather rejects malformed upstream coordinates', async () => {
   )
 })
 
+test('getCurrentWeather rejects out-of-range upstream coordinates before forecast lookup', async () => {
+  let requests = 0
+  const fetchImpl = async () => {
+    requests += 1
+    return Response.json({
+      results: [
+        {
+          name: 'Broken place',
+          latitude: 999,
+          longitude: -999,
+        },
+      ],
+    })
+  }
+
+  await assert.rejects(
+    () => getCurrentWeather('Broken place', { fetchImpl }),
+    (error) =>
+      error instanceof WeatherServiceError &&
+      error.status === 404 &&
+      error.code === 'weather_location_not_found',
+  )
+  assert.equal(requests, 1)
+})
+
 test('getCurrentWeather rejects malformed current temperatures', async () => {
   const fetchImpl = async (url) => {
     if (String(url).startsWith('https://geocoding-api.open-meteo.com/')) {
