@@ -257,6 +257,7 @@ const MAX_UI_EVENT_OBJECT_KEYS = 30
 const MAX_UI_EVENT_DEPTH = 6
 const MAX_SEEN_USB_EVENT_IDS = 240
 const MAX_VISUAL_CONTEXT_IMAGE_FILE_BYTES = 12 * 1024 * 1024
+const VISUAL_CONTEXT_CAPTURE_TIMEOUT_MS = 10_000
 const SUPPORTED_VISUAL_CONTEXT_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
 const ARDUINO_UPLOAD_ACTIONS = new Set<ArduinoUploadAction>([
   'onboard_led_on',
@@ -318,6 +319,21 @@ const getUserMediaWithTimeout = async (constraints: MediaStreamConstraints, time
         .catch(() => {})
     }
     throw error
+  } finally {
+    if (timeoutId != null) window.clearTimeout(timeoutId)
+  }
+}
+
+const waitForVisualContextStep = async <T,>(promise: Promise<T>, label: string) => {
+  let timeoutId: number | null = null
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => {
+      reject(new Error(`${label} timed out while preparing visual context.`))
+    }, VISUAL_CONTEXT_CAPTURE_TIMEOUT_MS)
+  })
+
+  try {
+    return await Promise.race([promise, timeoutPromise])
   } finally {
     if (timeoutId != null) window.clearTimeout(timeoutId)
   }
@@ -888,7 +904,7 @@ function App() {
     const image = new Image()
     try {
       image.src = objectUrl
-      await image.decode()
+      await waitForVisualContextStep(image.decode(), 'Image decoding')
       return imageToJpegDataUrl(image, image.naturalWidth, image.naturalHeight)
     } finally {
       URL.revokeObjectURL(objectUrl)
@@ -900,11 +916,14 @@ function App() {
     video.srcObject = stream
     video.muted = true
     try {
-      await new Promise<void>((resolve) => {
-        if (video.videoWidth > 0) resolve()
-        else video.onloadedmetadata = () => resolve()
-      })
-      await video.play()
+      await waitForVisualContextStep(
+        new Promise<void>((resolve) => {
+          if (video.videoWidth > 0) resolve()
+          else video.onloadedmetadata = () => resolve()
+        }),
+        'Screen metadata',
+      )
+      await waitForVisualContextStep(video.play(), 'Screen playback')
       await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()))
       return imageToJpegDataUrl(video, video.videoWidth, video.videoHeight, 1280)
     } finally {
