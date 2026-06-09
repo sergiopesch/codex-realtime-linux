@@ -1776,7 +1776,7 @@ function App() {
       if (item.name === 'get_current_weather') {
         setActivity('Voice router', 'Weather lookup')
         const location = typeof payload.location === 'string' ? payload.location : ''
-        const units = payload.units === 'imperial' ? 'imperial' : 'metric'
+        const units = payload.units === 'imperial' || payload.units === 'metric' ? payload.units : weatherUnits
         result = await fetchWeather(location, units)
         const weather = result as WeatherResponse
         showNotice(weather.summary)
