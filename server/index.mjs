@@ -40,6 +40,7 @@ const MAX_VISUAL_CONTEXT_DATA_URL_BYTES = 12 * 1024 * 1024
 const MAX_VISUAL_CONTEXT_SOURCE_LENGTH = 160
 const MAX_VISUAL_CONTEXT_PROMPT_LENGTH = 1_500
 const MAX_VISUAL_CONTEXT_SUMMARY_LENGTH = 4_000
+const MAX_UPSTREAM_JSON_RESPONSE_BYTES = 1 * 1024 * 1024
 const DEFAULT_VISUAL_CONTEXT_PROMPT =
   'Focus on UI state, visible errors, design issues, code clues, and what Codex should know before acting.'
 const MAX_CONVERSATION_ID_LENGTH = 240
@@ -285,6 +286,42 @@ function upstreamSignal() {
   return AbortSignal.timeout(UPSTREAM_FETCH_TIMEOUT_MS)
 }
 
+async function readBoundedResponseText(response, maxBytes = MAX_UPSTREAM_JSON_RESPONSE_BYTES) {
+  if (!response.body) return ''
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let totalBytes = 0
+  let text = ''
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      totalBytes += value.byteLength
+      if (totalBytes > maxBytes) {
+        await reader.cancel().catch(() => {})
+        throw new Error(`Upstream response exceeded ${maxBytes} bytes.`)
+      }
+      text += decoder.decode(value, { stream: true })
+    }
+    text += decoder.decode()
+    return text
+  } finally {
+    reader.releaseLock()
+  }
+}
+
+async function readUpstreamJson(response, fallbackMessage = 'Upstream response was not JSON.') {
+  const text = await readBoundedResponseText(response)
+  try {
+    return text ? JSON.parse(text) : {}
+  } catch {
+    return { error: fallbackMessage }
+  }
+}
+
 function artifactPlanForWorkspace(cwd, goal) {
   const basePlan = artifactPlanForGoal(goal)
   if (!basePlan) return null
@@ -517,7 +554,7 @@ async function createRealtimeClientSecret(openAiApiKey) {
     }),
   })
 
-  const data = await response.json().catch(() => ({ error: 'Realtime token response was not JSON.' }))
+  const data = await readUpstreamJson(response, 'Realtime token response was not JSON.')
   if (!response.ok) {
     const message =
       typeof data?.error === 'string'
@@ -652,7 +689,7 @@ async function analyzeVisualContext({ imageDataUrl, source, prompt }) {
     }),
   })
 
-  const data = await response.json().catch(() => ({ error: 'Vision response was not JSON.' }))
+  const data = await readUpstreamJson(response, 'Vision response was not JSON.')
   if (!response.ok) {
     const message =
       typeof data?.error === 'string'
@@ -1149,7 +1186,7 @@ async function getUsdToGbpRate() {
 
   const response = await fetch(GBP_RATE_API, { signal: upstreamSignal() })
   if (!response.ok) throw new Error(`GBP conversion failed with ${response.status}`)
-  const data = await response.json()
+  const data = await readUpstreamJson(response, 'GBP conversion response was not JSON.')
   const rate = Number(data?.rates?.GBP)
   if (!Number.isFinite(rate) || rate <= 0) throw new Error('GBP conversion response did not include a USD to GBP rate')
   return { rate, source: 'frankfurter' }
@@ -1206,10 +1243,10 @@ async function openaiGet(path, key = OPENAI_ADMIN_KEY) {
     signal: upstreamSignal(),
   })
   if (!response.ok) {
-    const body = await response.text()
+    const body = await readBoundedResponseText(response)
     throw new Error(`${response.status} ${response.statusText}: ${body.slice(0, 300)}`)
   }
-  return response.json()
+  return readUpstreamJson(response)
 }
 
 async function handleCurrentWeather(req, res) {
