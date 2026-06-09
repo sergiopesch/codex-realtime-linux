@@ -2920,7 +2920,7 @@ function App() {
                       src={artifactPreview.url}
                       title={artifactPreview.title}
                       sandbox="allow-scripts"
-                      onLoad={extendArtifactPreview}
+                      referrerPolicy="no-referrer"
                     />
                   ) : null}
                 </section>
