@@ -367,6 +367,38 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   assert.equal(nonObjectConversationDelete.status, 400)
   assert.equal((await readJson(nonObjectConversationDelete)).code, 'invalid_request')
 
+  const nonObjectCodexArchive = await fetch(`${baseUrl}/api/codex/thread/archive`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '[]',
+  })
+  assert.equal(nonObjectCodexArchive.status, 400)
+  assert.equal((await readJson(nonObjectCodexArchive)).code, 'invalid_request')
+
+  const nonObjectCodexTask = await fetch(`${baseUrl}/api/codex/task`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '[]',
+  })
+  assert.equal(nonObjectCodexTask.status, 400)
+  assert.equal((await readJson(nonObjectCodexTask)).code, 'invalid_request')
+
+  const nonObjectCodexSteer = await fetch(`${baseUrl}/api/codex/steer`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '[]',
+  })
+  assert.equal(nonObjectCodexSteer.status, 400)
+  assert.equal((await readJson(nonObjectCodexSteer)).code, 'invalid_request')
+
+  const nonObjectCodexInterrupt = await fetch(`${baseUrl}/api/codex/interrupt`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '[]',
+  })
+  assert.equal(nonObjectCodexInterrupt.status, 400)
+  assert.equal((await readJson(nonObjectCodexInterrupt)).code, 'invalid_request')
+
   const missingTaskWorkspace = await fetch(`${baseUrl}/api/codex/task`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

@@ -2070,7 +2070,8 @@ app.get('/api/codex/threads', async (req, res) => {
 
 app.post('/api/codex/thread/archive', async (req, res) => {
   try {
-    const threadId = requireText(req.body?.threadId, 'threadId', { maxLength: 300 })
+    const body = requireObjectBody(req.body, 'Codex thread archive request')
+    const threadId = requireText(body.threadId, 'threadId', { maxLength: 300 })
     await codex.ensure()
     await codex.request('thread/archive', { threadId })
     res.json({ ok: true, thread: { id: normalizeBoundedString(threadId, '', MAX_CONVERSATION_ID_LENGTH) } })
@@ -2081,8 +2082,9 @@ app.post('/api/codex/thread/archive', async (req, res) => {
 
 app.post('/api/codex/task', async (req, res) => {
   try {
-    const goal = requireText(req.body?.goal, 'goal')
-    const cwd = await requireWorkspaceDirectory(req.body?.cwd, 'cwd')
+    const body = requireObjectBody(req.body, 'Codex task request')
+    const goal = requireText(body.goal, 'goal')
+    const cwd = await requireWorkspaceDirectory(body.cwd, 'cwd')
     await requireAllowedCodexTaskWorkspace(cwd)
     const artifactPlan = await artifactPlanForWorkspace(cwd, goal)
     if (artifactPlan) await mkdir(artifactPlan.absoluteDir, { recursive: true })
@@ -2108,8 +2110,9 @@ app.post('/api/codex/task', async (req, res) => {
 
 app.post('/api/codex/steer', async (req, res) => {
   try {
-    const threadId = requireText(req.body?.threadId, 'threadId', { maxLength: 300 })
-    const instruction = requireText(req.body?.instruction, 'instruction')
+    const body = requireObjectBody(req.body, 'Codex steer request')
+    const threadId = requireText(body.threadId, 'threadId', { maxLength: 300 })
+    const instruction = requireText(body.instruction, 'instruction')
     await codex.ensure()
     await codex.request('turn/steer', {
       threadId,
@@ -2123,8 +2126,9 @@ app.post('/api/codex/steer', async (req, res) => {
 
 app.post('/api/codex/interrupt', async (req, res) => {
   try {
-    const threadId = requireText(req.body?.threadId, 'threadId', { maxLength: 300 })
-    const turnId = requireText(req.body?.turnId, 'turnId', { maxLength: 300 })
+    const body = requireObjectBody(req.body, 'Codex interrupt request')
+    const threadId = requireText(body.threadId, 'threadId', { maxLength: 300 })
+    const turnId = requireText(body.turnId, 'turnId', { maxLength: 300 })
     await codex.ensure()
     await codex.request('turn/interrupt', { threadId, turnId })
     res.json({
