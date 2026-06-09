@@ -1,7 +1,7 @@
 import 'dotenv/config'
 import express from 'express'
 import { spawn } from 'node:child_process'
-import { chmod, mkdir, readFile, readdir, realpath, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, opendir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { createInterface } from 'node:readline'
@@ -56,6 +56,7 @@ const MAX_LOCAL_CONVERSATIONS_PER_WORKSPACE = 80
 const MAX_APP_STATE_FILE_BYTES = 2 * 1024 * 1024
 const MAX_SECRETS_FILE_BYTES = 64 * 1024
 const MAX_GENERATED_ARTIFACTS = 40
+const MAX_ARTIFACT_DIRECTORY_SCAN_ENTRIES = 400
 const MAX_ARTIFACT_NAME_LENGTH = 120
 const MAX_ARTIFACT_TITLE_LENGTH = 180
 const MAX_USAGE_BUCKETS = 20
@@ -361,34 +362,41 @@ async function listGeneratedArtifacts(workspacePath = REPO_ROOT) {
   const resolvedWorkspacePath = path.resolve(workspacePath)
   const artifactsDir = path.join(resolvedWorkspacePath, GENERATED_ARTIFACT_DIR)
   const token = workspaceToken(resolvedWorkspacePath)
-  let entries
+  let directory
   try {
-    entries = await readdir(artifactsDir, { withFileTypes: true })
+    directory = await opendir(artifactsDir)
   } catch (error) {
     if (error?.code === 'ENOENT') return []
     throw error
   }
 
   const artifacts = []
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue
-    if (!isSafeArtifactName(entry.name)) continue
-    const indexPath = path.join(artifactsDir, entry.name, 'index.html')
-    try {
-      const details = await stat(indexPath)
-      const title = entry.name.replace(/^\d{8}t?\d{6}-?/i, '').replace(/-/g, ' ') || entry.name
-      artifacts.push({
-        id: entry.name,
-        title: normalizeBoundedString(title, entry.name, MAX_ARTIFACT_TITLE_LENGTH),
-        url: `/workspace-artifacts/${token}/${entry.name}/index.html`,
-        relativePath: `${GENERATED_ARTIFACT_DIR}/${entry.name}/index.html`,
-        workspacePath: resolvedWorkspacePath,
-        updatedAt: details.mtime.toISOString(),
-        size: finiteNumber(details.size),
-      })
-    } catch (error) {
-      if (error?.code !== 'ENOENT') throw error
+  let scannedEntries = 0
+  try {
+    for await (const entry of directory) {
+      scannedEntries += 1
+      if (scannedEntries > MAX_ARTIFACT_DIRECTORY_SCAN_ENTRIES) break
+      if (!entry.isDirectory()) continue
+      if (!isSafeArtifactName(entry.name)) continue
+      const indexPath = path.join(artifactsDir, entry.name, 'index.html')
+      try {
+        const details = await stat(indexPath)
+        const title = entry.name.replace(/^\d{8}t?\d{6}-?/i, '').replace(/-/g, ' ') || entry.name
+        artifacts.push({
+          id: entry.name,
+          title: normalizeBoundedString(title, entry.name, MAX_ARTIFACT_TITLE_LENGTH),
+          url: `/workspace-artifacts/${token}/${entry.name}/index.html`,
+          relativePath: `${GENERATED_ARTIFACT_DIR}/${entry.name}/index.html`,
+          workspacePath: resolvedWorkspacePath,
+          updatedAt: details.mtime.toISOString(),
+          size: finiteNumber(details.size),
+        })
+      } catch (error) {
+        if (error?.code !== 'ENOENT') throw error
+      }
     }
+  } finally {
+    await directory.close().catch(() => {})
   }
 
   return artifacts
