@@ -241,6 +241,7 @@ const REALTIME_CONNECTION_TIMEOUT_MS = 30_000
 const MAX_REALTIME_TRANSCRIPT_LINES = 80
 const MAX_REALTIME_TRANSCRIPT_ID_LENGTH = 240
 const MAX_REALTIME_TRANSCRIPT_TEXT_LENGTH = 8_000
+const MAX_UI_ERROR_MESSAGE_LENGTH = 500
 const MAX_UI_EVENT_STRING_LENGTH = 2_000
 const MAX_UI_EVENT_ARRAY_ITEMS = 20
 const MAX_UI_EVENT_OBJECT_KEYS = 30
@@ -351,6 +352,11 @@ const boundedRealtimeTranscriptId = (value: unknown) =>
 
 const boundedRealtimeTranscriptText = (value: unknown) =>
   boundedPlainString(value, '', MAX_REALTIME_TRANSCRIPT_TEXT_LENGTH)
+
+const displayErrorMessage = (error: unknown, fallback: string) => {
+  const rawMessage = error instanceof Error ? error.message : ''
+  return boundedPlainString(rawMessage, fallback, MAX_UI_ERROR_MESSAGE_LENGTH)
+}
 
 const boundedEventString = (value: unknown, fallback = '') => {
   const text = typeof value === 'string' && value.trim() ? value.trim() : fallback
@@ -930,7 +936,7 @@ function App() {
       setWeatherResult(weather)
       showNotice(`Weather updated for ${weather.location.name}.`)
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Weather lookup failed'
+      const message = displayErrorMessage(error, 'Weather lookup failed')
       setWeatherError(message)
       setWeatherResult(null)
     } finally {
@@ -955,7 +961,7 @@ function App() {
       await refreshStatus()
       showNotice('OpenAI API key saved locally. Voice is ready.')
     } catch (error) {
-      setLastError(error instanceof Error ? error.message : 'Failed to save OpenAI API key')
+      setLastError(displayErrorMessage(error, 'Failed to save OpenAI API key'))
     } finally {
       setSavingOpenAiKey(false)
     }
@@ -969,7 +975,7 @@ function App() {
       await refreshStatus()
       showNotice('Saved OpenAI API key removed.')
     } catch (error) {
-      setLastError(error instanceof Error ? error.message : 'Failed to remove OpenAI API key')
+      setLastError(displayErrorMessage(error, 'Failed to remove OpenAI API key'))
     } finally {
       setSavingOpenAiKey(false)
     }
@@ -1012,7 +1018,7 @@ function App() {
         body: JSON.stringify({ workspacePath, conversation: savedConversationPayload(conversation) }),
       })
     } catch (error) {
-      setLastError(error instanceof Error ? error.message : 'Failed to save agent conversation')
+      setLastError(displayErrorMessage(error, 'Failed to save agent conversation'))
     }
   }
 
@@ -1040,7 +1046,7 @@ function App() {
         body: JSON.stringify({ workspace }),
       })
     } catch (error) {
-      setLastError(error instanceof Error ? error.message : 'Failed to save workspace')
+      setLastError(displayErrorMessage(error, 'Failed to save workspace'))
     }
   }
 
@@ -1063,7 +1069,7 @@ function App() {
         return
       }
     } catch (error) {
-      setLastError(error instanceof Error ? error.message : 'Failed to open folder picker')
+      setLastError(displayErrorMessage(error, 'Failed to open folder picker'))
       return
     }
 
@@ -1115,7 +1121,7 @@ function App() {
         })
       }
     } catch (error) {
-      setLastError(error instanceof Error ? error.message : 'Failed to delete agent conversation')
+      setLastError(displayErrorMessage(error, 'Failed to delete agent conversation'))
     }
   }
 
@@ -1148,7 +1154,7 @@ function App() {
         body: JSON.stringify({ workspacePath: targetWorkspacePath }),
       })
     } catch (error) {
-      setLastError(error instanceof Error ? error.message : 'Failed to remove workspace')
+      setLastError(displayErrorMessage(error, 'Failed to remove workspace'))
     }
   }
 
@@ -1298,13 +1304,13 @@ function App() {
                 mergeEvents(current, [{
                   method: 'codex/thread-list-unavailable',
                   receivedAt: new Date().toISOString(),
-                  params: { message: error instanceof Error ? error.message : 'Codex app-server thread list failed' },
+                  params: { message: displayErrorMessage(error, 'Codex app-server thread list failed') },
                 }]),
               )
             })
         }
       } catch (error) {
-        setLastError(error instanceof Error ? error.message : 'Failed to load app state')
+        setLastError(displayErrorMessage(error, 'Failed to load app state'))
       }
     }
 
@@ -1418,7 +1424,7 @@ function App() {
                 usb: {
                   active: false,
                   startedAt: current.usb?.startedAt ?? null,
-                  error: error instanceof Error ? error.message : 'USB monitor unavailable',
+                  error: displayErrorMessage(error, 'USB monitor unavailable'),
                 },
               }
             : current,
@@ -1572,7 +1578,7 @@ function App() {
         showNotice(upload.summary)
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Realtime tool call failed'
+      const message = displayErrorMessage(error, 'Realtime tool call failed')
       setLastError(message)
       result = { error: message }
     }
@@ -1664,7 +1670,7 @@ function App() {
         if (functionCallItem) setActivity('Voice router', functionCallItem.name ?? 'Tool call')
         appendEvent(typeof message.type === 'string' ? message.type : 'realtime/event', message)
         handleRealtimeToolCall(message).catch((error: unknown) => {
-          setLastError(error instanceof Error ? error.message : 'Realtime tool call failed')
+          setLastError(displayErrorMessage(error, 'Realtime tool call failed'))
         })
       })
 
@@ -1706,7 +1712,7 @@ function App() {
       cleanupVoiceSession()
       setVoiceState('idle')
       setActivity('Voice router idle')
-      setLastError(error instanceof Error ? error.message : 'Voice session failed')
+      setLastError(displayErrorMessage(error, 'Voice session failed'))
     }
   }
 
@@ -1740,7 +1746,7 @@ function App() {
       const imageDataUrl = await dataUrlFromVideoFrame(stream)
       await analyzeAndAttachVisualContext(imageDataUrl, 'screen')
     } catch (error) {
-      setLastError(error instanceof Error ? error.message : 'Screen share failed')
+      setLastError(displayErrorMessage(error, 'Screen share failed'))
     } finally {
       cleanupScreenShare(stream ?? undefined)
     }
@@ -1755,7 +1761,7 @@ function App() {
       const imageDataUrl = await dataUrlFromFile(file)
       await analyzeAndAttachVisualContext(imageDataUrl, file.name)
     } catch (error) {
-      setLastError(error instanceof Error ? error.message : 'Image analysis failed')
+      setLastError(displayErrorMessage(error, 'Image analysis failed'))
     } finally {
       if (imageInputRef.current) imageInputRef.current.value = ''
     }
