@@ -547,6 +547,8 @@ const basenameFromWorkspacePath = (workspacePath: string) =>
   normalizeAbsoluteLocalWorkspacePath(workspacePath).split('/').filter(Boolean).at(-1) ?? ''
 const workspacePathFor = (workspace: Workspace) => normalizeAbsoluteLocalWorkspacePath(workspace.path ?? workspace.id)
 const isAbsoluteLocalWorkspacePath = (workspacePath: string) => normalizeAbsoluteLocalWorkspacePath(workspacePath).startsWith('/')
+const mobileSidebarShouldCollapse = () =>
+  typeof window !== 'undefined' && window.matchMedia('(max-width: 720px)').matches
 
 const realtimeFunctionCallItem = (message: Record<string, unknown>): RealtimeFunctionCallItem | null => {
   const eventType = typeof message.type === 'string' ? message.type : ''
@@ -621,7 +623,7 @@ function App() {
   const [selectedWorkspace, setSelectedWorkspace] = useState(initialWorkspacePath)
   const [selectedConversationId, setSelectedConversationId] = useState('')
   const [activeSystemScreen, setActiveSystemScreen] = useState<SystemScreen | null>(null)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => mobileSidebarShouldCollapse())
   const [openAiApiKeyInput, setOpenAiApiKeyInput] = useState('')
   const [savingOpenAiKey, setSavingOpenAiKey] = useState(false)
   const [weatherLocationInput, setWeatherLocationInput] = useState('')
@@ -1156,6 +1158,7 @@ function App() {
     setActiveSystemScreen(null)
     setNotice(null)
     setLastError(null)
+    if (mobileSidebarShouldCollapse()) setSidebarCollapsed(true)
   }
 
   const createConversation = async (targetWorkspacePath?: string) => {
@@ -1340,6 +1343,7 @@ function App() {
     } else {
       setSelectedConversationId('')
     }
+    if (mobileSidebarShouldCollapse()) setSidebarCollapsed(true)
     setCollapsedWorkspaces((current) =>
       current.includes(workspacePath) ? current.filter((item) => item !== workspacePath) : [...current, workspacePath],
     )
@@ -1349,6 +1353,7 @@ function App() {
     setActiveSystemScreen(screen)
     setNotice(null)
     setLastError(null)
+    if (mobileSidebarShouldCollapse()) setSidebarCollapsed(true)
   }
 
   const controlWindow = (action: 'minimize' | 'maximize' | 'close') => {

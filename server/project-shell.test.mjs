@@ -34,6 +34,7 @@ test('renderer does not seed hardcoded demo conversations', async () => {
 
 test('renderer labels identity and voice context from runtime workspace state', async () => {
   const appSource = await readFile(path.join(repoRoot, 'src', 'App.tsx'), 'utf8')
+  const cssSource = await readFile(path.join(repoRoot, 'src', 'App.css'), 'utf8')
 
   assert.match(appSource, /const basenameFromWorkspacePath = \(workspacePath: string\) =>/)
   assert.match(
@@ -58,6 +59,15 @@ test('renderer labels identity and voice context from runtime workspace state', 
     appSource,
     /const workspacePath = workspaceRoots\.some\(\(root\) => root\.workspacePath === requestedWorkspacePath\) \? requestedWorkspacePath : ''/,
   )
+  assert.match(appSource, /const mobileSidebarShouldCollapse = \(\) =>/)
+  assert.match(appSource, /window\.matchMedia\('\(max-width: 720px\)'\)\.matches/)
+  assert.match(appSource, /const \[sidebarCollapsed, setSidebarCollapsed\] = useState\(\(\) => mobileSidebarShouldCollapse\(\)\)/)
+  assert.match(appSource, /if \(mobileSidebarShouldCollapse\(\)\) setSidebarCollapsed\(true\)/)
+  assert.match(cssSource, /@media \(max-width: 720px\)[\s\S]*\.thread-sidebar \{[\s\S]*position: absolute/)
+  assert.match(cssSource, /@media \(max-width: 720px\)[\s\S]*\.codex-shell\.sidebar-collapsed \{[\s\S]*grid-template-columns: 1fr/)
+  assert.match(cssSource, /@media \(max-width: 720px\)[\s\S]*\.conversation-pane \{[\s\S]*grid-column: 1/)
+  assert.match(cssSource, /@media \(max-width: 720px\)[\s\S]*\.sidebar-collapsed \.thread-sidebar \{[\s\S]*pointer-events: none/)
+  assert.doesNotMatch(cssSource, /@media \(max-width: 720px\)[\s\S]*\.thread-sidebar \{[^}]*display: none/)
   assert.doesNotMatch(appSource, /selectedWorkspace\.split\('\/'\)\.filter\(Boolean\)\[1\]/)
   assert.doesNotMatch(appSource, /workspaceRoots\[0\]\?\.workspace\.name\s+\?\?\s+'No workspace'/)
   assert.doesNotMatch(appSource, /workspaceRoots\[0\]\?\.workspacePath/)
