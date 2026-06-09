@@ -585,12 +585,11 @@ const conversationsAfterDelete = (
   confirmedConversations: AgentConversation[],
   conversationId: string,
 ) => {
-  const confirmedWithoutDeleted = confirmedConversations.filter((conversation) => conversation.id !== conversationId)
-  const confirmedIds = new Set(confirmedWithoutDeleted.map((conversation) => conversation.id))
+  const confirmedIds = new Set(confirmedConversations.map((conversation) => conversation.id))
   const retainedConversations = removeFirstConversationById(existing, conversationId).filter(
     (conversation) => !confirmedIds.has(conversation.id),
   )
-  return mergeConversations(retainedConversations, confirmedWithoutDeleted)
+  return [...confirmedConversations, ...retainedConversations].slice(0, MAX_UI_CONVERSATIONS_PER_WORKSPACE)
 }
 
 const savedConversationPayload = (conversation: AgentConversation) => ({
