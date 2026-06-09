@@ -398,6 +398,12 @@ function artifactPlanForWorkspace(cwd, goal) {
   if (!basePlan) return null
 
   const workspacePath = path.resolve(cwd)
+  if (workspacePath === REPO_ROOT) {
+    throw httpError('Generated artifacts must be created in a selected workspace outside this app source tree.', {
+      statusCode: 400,
+      code: 'protected_app_workspace',
+    })
+  }
   const token = workspaceToken(workspacePath)
   return {
     ...basePlan,
