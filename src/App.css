@@ -548,6 +548,7 @@ button:disabled {
   align-items: center;
   justify-content: center;
   width: fit-content;
+  max-width: 100%;
   border: 1px solid rgba(255, 255, 255, 0.085);
   border-radius: 999px;
   padding: 9px;
@@ -561,6 +562,7 @@ button:disabled {
 .voice-composer-controls {
   display: flex;
   align-items: center;
+  max-width: 100%;
   gap: 9px;
 }
 
@@ -1494,4 +1496,30 @@ button:disabled {
     justify-content: center;
   }
 
+}
+
+@media (max-width: 360px) {
+  .voice-home {
+    width: min(100% - 24px, 920px);
+  }
+
+  .voice-composer:not(.compact) {
+    padding: 6px;
+  }
+
+  .voice-composer:not(.compact) .voice-composer-controls {
+    gap: 5px;
+  }
+
+  .voice-composer:not(.compact) .voice-action {
+    width: 38px;
+    min-width: 38px;
+    height: 38px;
+  }
+
+  .voice-composer:not(.compact) .voice-action.primary {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+  }
 }
