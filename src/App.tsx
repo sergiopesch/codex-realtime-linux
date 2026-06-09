@@ -240,6 +240,7 @@ const DEFAULT_API_TIMEOUT_MS = 130_000
 const MAX_API_RESPONSE_TEXT_LENGTH = 1_000_000
 const MAX_API_ERROR_RESPONSE_TEXT_LENGTH = 4_000
 const REALTIME_CONNECTION_TIMEOUT_MS = 30_000
+const MAX_REALTIME_SDP_RESPONSE_LENGTH = 120_000
 const MAX_REALTIME_EVENT_MESSAGE_LENGTH = 120_000
 const MAX_REALTIME_FUNCTION_ARGUMENTS_LENGTH = 80_000
 const MAX_REALTIME_TRANSCRIPT_LINES = 80
@@ -1760,9 +1761,13 @@ function App() {
         },
         REALTIME_CONNECTION_TIMEOUT_MS,
       )
-      if (!answerResponse.ok) throw new Error(await answerResponse.text())
+      const answerText = await readBoundedApiText(
+        answerResponse,
+        answerResponse.ok ? MAX_REALTIME_SDP_RESPONSE_LENGTH : MAX_API_ERROR_RESPONSE_TEXT_LENGTH,
+      )
+      if (!answerResponse.ok) throw new Error(boundedApiErrorText(answerText, 'Realtime call failed.'))
 
-      await pc.setRemoteDescription({ type: 'answer', sdp: await answerResponse.text() })
+      await pc.setRemoteDescription({ type: 'answer', sdp: answerText })
       setVoiceState('live')
       setActivity('Voice router', 'Listening')
       showNotice('Voice is live.')
