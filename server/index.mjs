@@ -781,27 +781,34 @@ function normalizeCodexMetadataValue(value, depth = 0, seen = new WeakSet()) {
   return normalized
 }
 
-function visualContextDataUrlType(value) {
-  if (typeof value !== 'string') return ''
-  const match = /^data:([^;,]+)[;,]/i.exec(value)
-  return match ? match[1].toLowerCase() : ''
+function visualContextDataUrlParts(value) {
+  if (typeof value !== 'string') return null
+  const match = /^data:([^;,]+);base64,(.*)$/i.exec(value)
+  if (!match) return null
+  const payload = match[2]
+  if (!payload || payload.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(payload)) return null
+  return {
+    type: match[1].toLowerCase(),
+  }
 }
 
 async function analyzeVisualContext({ imageDataUrl, source, prompt }) {
   const sourceLabel = normalizeBoundedString(source, 'attached image', MAX_VISUAL_CONTEXT_SOURCE_LENGTH)
   const promptText = normalizeBoundedString(prompt, DEFAULT_VISUAL_CONTEXT_PROMPT, MAX_VISUAL_CONTEXT_PROMPT_LENGTH)
-  const imageType = visualContextDataUrlType(imageDataUrl)
+  const imageDataUrlText = typeof imageDataUrl === 'string' ? imageDataUrl : ''
 
-  if (!SUPPORTED_VISUAL_CONTEXT_DATA_URL_TYPES.has(imageType)) {
-    throw httpError('imageDataUrl must be a JPEG, PNG, WebP, or GIF data URL.', {
-      statusCode: 400,
-      code: 'invalid_visual_context',
-    })
-  }
-  if (Buffer.byteLength(imageDataUrl, 'utf8') > MAX_VISUAL_CONTEXT_DATA_URL_BYTES) {
+  if (Buffer.byteLength(imageDataUrlText, 'utf8') > MAX_VISUAL_CONTEXT_DATA_URL_BYTES) {
     throw httpError('Visual context image is too large.', {
       statusCode: 413,
       code: 'visual_context_too_large',
+    })
+  }
+
+  const imageData = visualContextDataUrlParts(imageDataUrlText)
+  if (!imageData || !SUPPORTED_VISUAL_CONTEXT_DATA_URL_TYPES.has(imageData.type)) {
+    throw httpError('imageDataUrl must be a base64 JPEG, PNG, WebP, or GIF data URL.', {
+      statusCode: 400,
+      code: 'invalid_visual_context',
     })
   }
 

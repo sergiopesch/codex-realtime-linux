@@ -487,7 +487,10 @@ test('upstream OpenAI and usage fetches are timeout bounded', async () => {
   assert.match(serverSource, /function normalizeOpenAiSafetyIdentifier\(value\)[\s\S]*MAX_OPENAI_SAFETY_IDENTIFIER_LENGTH/)
   assert.match(serverSource, /const SUPPORTED_VISUAL_CONTEXT_DATA_URL_TYPES = new Set\(\['image\/jpeg', 'image\/png', 'image\/webp', 'image\/gif'\]\)/)
   assert.match(serverSource, /function normalizeBoundedString\(value, fallback = '', maxLength = 1_000\)/)
-  assert.match(serverSource, /function visualContextDataUrlType\(value\)/)
+  assert.match(serverSource, /function visualContextDataUrlParts\(value\)/)
+  assert.match(serverSource, /\^data:\(\[\^;,\]\+\);base64,\(\.\*\)\$/)
+  assert.match(serverSource, /payload\.length % 4 !== 0/)
+  assert.match(serverSource, /\^\[A-Za-z0-9\+\/\]\*=\{0,2\}\$/)
   assert.match(
     serverSource,
     /const sourceLabel = normalizeBoundedString\(source, 'attached image', MAX_VISUAL_CONTEXT_SOURCE_LENGTH\)/,
@@ -496,9 +499,11 @@ test('upstream OpenAI and usage fetches are timeout bounded', async () => {
     serverSource,
     /const promptText = normalizeBoundedString\(prompt, DEFAULT_VISUAL_CONTEXT_PROMPT, MAX_VISUAL_CONTEXT_PROMPT_LENGTH\)/,
   )
-  assert.match(serverSource, /const imageType = visualContextDataUrlType\(imageDataUrl\)/)
-  assert.match(serverSource, /SUPPORTED_VISUAL_CONTEXT_DATA_URL_TYPES\.has\(imageType\)/)
-  assert.match(serverSource, /imageDataUrl must be a JPEG, PNG, WebP, or GIF data URL\./)
+  assert.match(serverSource, /const imageDataUrlText = typeof imageDataUrl === 'string' \? imageDataUrl : ''/)
+  assert.match(serverSource, /Buffer\.byteLength\(imageDataUrlText, 'utf8'\) > MAX_VISUAL_CONTEXT_DATA_URL_BYTES/)
+  assert.match(serverSource, /const imageData = visualContextDataUrlParts\(imageDataUrlText\)/)
+  assert.match(serverSource, /!imageData \|\| !SUPPORTED_VISUAL_CONTEXT_DATA_URL_TYPES\.has\(imageData\.type\)/)
+  assert.match(serverSource, /imageDataUrl must be a base64 JPEG, PNG, WebP, or GIF data URL\./)
   assert.doesNotMatch(serverSource, /imageDataUrl\.startsWith\('data:image\/'\)/)
   assert.match(
     serverSource,
@@ -533,7 +538,7 @@ test('upstream OpenAI and usage fetches are timeout bounded', async () => {
     /normalizeBoundedString\(result\.model \?\? result\.object, 'Completions', MAX_USAGE_BUCKET_LABEL_LENGTH\)/,
   )
   assert.match(serverSource, /totals\.requests \+= finiteNumber\(result\.num_model_requests\)/)
-  assert.match(serverSource, /Buffer\.byteLength\(imageDataUrl, 'utf8'\) > MAX_VISUAL_CONTEXT_DATA_URL_BYTES/)
+  assert.match(serverSource, /Buffer\.byteLength\(imageDataUrlText, 'utf8'\) > MAX_VISUAL_CONTEXT_DATA_URL_BYTES/)
   assert.match(serverSource, /visual_context_too_large/)
   assert.match(serverSource, /client_secrets'[\s\S]*signal: upstreamSignal\(\)/)
   assert.match(serverSource, /'OpenAI-Safety-Identifier': OPENAI_SAFETY_IDENTIFIER/)

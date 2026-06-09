@@ -625,6 +625,22 @@ test('visual context route validates image payloads before requiring upstream cr
   assert.equal(unsupportedImage.status, 400)
   assert.equal((await readJson(unsupportedImage)).code, 'invalid_visual_context')
 
+  const malformedSupportedImage = await fetch(`${baseUrl}/api/vision/context`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ imageDataUrl: 'data:image/png,not-base64-image-data' }),
+  })
+  assert.equal(malformedSupportedImage.status, 400)
+  assert.equal((await readJson(malformedSupportedImage)).code, 'invalid_visual_context')
+
+  const invalidBase64Image = await fetch(`${baseUrl}/api/vision/context`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ imageDataUrl: 'data:image/png;base64,====' }),
+  })
+  assert.equal(invalidBase64Image.status, 400)
+  assert.equal((await readJson(invalidBase64Image)).code, 'invalid_visual_context')
+
   const oversizedImage = await fetch(`${baseUrl}/api/vision/context`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
