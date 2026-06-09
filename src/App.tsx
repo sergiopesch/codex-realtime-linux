@@ -798,6 +798,7 @@ function App() {
   const primaryActivity = [routingActivity[0] ?? 'Voice router idle', visualContextLabel].filter(Boolean).join(' · ')
   const codexTurnInProgress = Boolean(activeTurnId)
   const artifactPreview =
+    !activeSystemScreen &&
     selectedArtifact &&
     artifactPreviewLease &&
     selectedArtifact.workspacePath === selectedWorkspace &&
@@ -807,7 +808,7 @@ function App() {
       ? selectedArtifact
       : null
   const agentIsWorkingOnArtifact = Boolean(pendingArtifact && codexTurnInProgress)
-  const showSubagentPreview = codexTurnInProgress && !agentIsWorkingOnArtifact
+  const showSubagentPreview = !activeSystemScreen && codexTurnInProgress && !agentIsWorkingOnArtifact
   const subagentTitle = activeConversation?.title ? briefThreadTitle(activeConversation.title) : 'Codex'
   const subagentHint =
     activeConversation?.prompt || activeConversation?.response || 'Working through the active Codex turn.'
