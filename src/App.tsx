@@ -237,6 +237,7 @@ type DesktopWindow = Window & {
 
 const initialWorkspacePath = ''
 const DEFAULT_API_TIMEOUT_MS = 130_000
+const MAX_API_RESPONSE_TEXT_LENGTH = 1_000_000
 const MAX_API_ERROR_RESPONSE_TEXT_LENGTH = 4_000
 const REALTIME_CONNECTION_TIMEOUT_MS = 30_000
 const MAX_REALTIME_EVENT_MESSAGE_LENGTH = 120_000
@@ -260,6 +261,14 @@ const boundedApiErrorText = (value: unknown, fallback = '') => {
     : text
 }
 
+const readBoundedApiText = async (response: Response, maxLength = MAX_API_RESPONSE_TEXT_LENGTH) => {
+  const text = await response.text()
+  if (text.length > maxLength) {
+    throw new Error(`API response was too large. Maximum response length is ${maxLength} characters.`)
+  }
+  return text
+}
+
 const fetchWithTimeout = async (input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = DEFAULT_API_TIMEOUT_MS) => {
   const controller = new AbortController()
   const timeout = window.setTimeout(() => controller.abort(), timeoutMs)
@@ -279,7 +288,7 @@ const fetchWithTimeout = async (input: RequestInfo | URL, init: RequestInit = {}
 const api = async <T,>(path: string, init?: RequestInit, options?: { timeoutMs?: number }): Promise<T> => {
   const response = await fetchWithTimeout(path, init, options?.timeoutMs)
   if (!response.ok) {
-    const rawText = await response.text()
+    const rawText = await readBoundedApiText(response, MAX_API_ERROR_RESPONSE_TEXT_LENGTH)
     const text = boundedApiErrorText(rawText)
     let message: string
     try {
@@ -290,7 +299,13 @@ const api = async <T,>(path: string, init?: RequestInit, options?: { timeoutMs?:
     }
     throw new Error(message || boundedApiErrorText(`${response.status} ${response.statusText}`))
   }
-  return response.json()
+
+  const text = await readBoundedApiText(response)
+  try {
+    return (text ? JSON.parse(text) : {}) as T
+  } catch (error) {
+    throw new Error('API response was not valid JSON.', { cause: error })
+  }
 }
 
 const fetchGeneratedArtifacts = (workspacePath: string) =>
