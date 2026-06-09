@@ -128,7 +128,7 @@ OpenAI, admin usage, vision, Realtime token, and exchange-rate HTTP calls are al
 UPSTREAM_FETCH_TIMEOUT_MS=20000
 ```
 
-Visual context uses the same OpenAI key by default. The app captures uploaded images or a single screen-share frame, analyzes it with the Responses API, then injects the concise summary into the live Realtime conversation when voice is active. Override the vision model if needed:
+Visual context uses the same OpenAI key by default. The app captures uploaded images or a single screen-share frame, analyzes it with the Responses API, then injects the concise summary into the live Realtime conversation when voice is active. Image and screen source labels are reduced to safe basename-style labels before they are sent to prompts, notices, or Realtime. Override the vision model if needed:
 
 ```bash
 VISION_MODEL=gpt-5.4

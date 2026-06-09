@@ -716,10 +716,13 @@ test('upstream OpenAI and usage fetches are timeout bounded', async () => {
   assert.match(serverSource, /\^data:\(\[\^;,\]\+\);base64,\(\.\*\)\$/)
   assert.match(serverSource, /payload\.length % 4 !== 0/)
   assert.match(serverSource, /\^\[A-Za-z0-9\+\/\]\*=\{0,2\}\$/)
-  assert.match(
-    serverSource,
-    /const sourceLabel = normalizeBoundedString\(source, 'attached image', MAX_VISUAL_CONTEXT_SOURCE_LENGTH\)/,
-  )
+  assert.match(serverSource, /function normalizeVisualContextSourceLabel\(value\)/)
+  assert.ok(serverSource.includes('rawLabel.split(/[\\\\/]+/).filter(Boolean).pop() ?? rawLabel'))
+  assert.match(serverSource, /replace\(\/\[\\u0000-\\u001f\\u007f\]\/g, ' '\)/)
+  assert.match(serverSource, /replace\(\/\[\^A-Za-z0-9\._ -\]\+\/g, ' '\)/)
+  assert.match(serverSource, /if \(!label \|\| label === '\.' \|\| label === '\.\.'\) return 'attached image'/)
+  assert.match(serverSource, /const sourceLabel = normalizeVisualContextSourceLabel\(source\)/)
+  assert.doesNotMatch(serverSource, /const sourceLabel = normalizeBoundedString\(source, 'attached image', MAX_VISUAL_CONTEXT_SOURCE_LENGTH\)/)
   assert.match(
     serverSource,
     /const promptText = normalizeBoundedString\(prompt, DEFAULT_VISUAL_CONTEXT_PROMPT, MAX_VISUAL_CONTEXT_PROMPT_LENGTH\)/,

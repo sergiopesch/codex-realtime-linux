@@ -904,8 +904,20 @@ function visualContextDataUrlParts(value) {
   }
 }
 
+function normalizeVisualContextSourceLabel(value) {
+  const rawLabel = normalizeBoundedString(value, 'attached image', MAX_VISUAL_CONTEXT_SOURCE_LENGTH)
+  const basename = rawLabel.split(/[\\/]+/).filter(Boolean).pop() ?? rawLabel
+  const label = basename
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/[^A-Za-z0-9._ -]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!label || label === '.' || label === '..') return 'attached image'
+  return normalizeBoundedString(label, 'attached image', MAX_VISUAL_CONTEXT_SOURCE_LENGTH)
+}
+
 async function analyzeVisualContext({ imageDataUrl, source, prompt }) {
-  const sourceLabel = normalizeBoundedString(source, 'attached image', MAX_VISUAL_CONTEXT_SOURCE_LENGTH)
+  const sourceLabel = normalizeVisualContextSourceLabel(source)
   const promptText = normalizeBoundedString(prompt, DEFAULT_VISUAL_CONTEXT_PROMPT, MAX_VISUAL_CONTEXT_PROMPT_LENGTH)
   const imageDataUrlText = typeof imageDataUrl === 'string' ? imageDataUrl : ''
 
