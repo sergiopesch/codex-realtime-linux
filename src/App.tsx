@@ -403,6 +403,17 @@ const finiteTimestamp = (value: string | null | undefined) => {
   return Number.isFinite(timestamp) ? timestamp : null
 }
 
+const artifactMatchesDismissal = (
+  artifact: GeneratedArtifact,
+  dismissedArtifact: { url: string; updatedAt: string; workspacePath: string } | null,
+) => {
+  if (!dismissedArtifact) return false
+  if (artifact.workspacePath !== dismissedArtifact.workspacePath || artifact.url !== dismissedArtifact.url) return false
+  const dismissedTime = finiteTimestamp(dismissedArtifact.updatedAt)
+  const artifactTime = finiteTimestamp(artifact.updatedAt)
+  return dismissedTime == null || artifactTime == null || artifactTime <= dismissedTime
+}
+
 const titleFromGoal = (goal: string) => {
   const brief = briefThreadTitle(goal.replace(/[.?!]+$/g, ''))
   return brief === 'Untitled' ? 'Voice routed work' : brief
@@ -705,7 +716,7 @@ function App() {
   const primaryActivity = [routingActivity[0] ?? 'Voice router idle', visualContextLabel].filter(Boolean).join(' · ')
   const codexTurnInProgress = Boolean(activeTurnId)
   const showSubagentPreview = codexTurnInProgress
-  const artifactPreview = selectedArtifact && selectedArtifact.url !== dismissedArtifact?.url ? selectedArtifact : null
+  const artifactPreview = selectedArtifact && !artifactMatchesDismissal(selectedArtifact, dismissedArtifact) ? selectedArtifact : null
   const agentIsWorkingOnArtifact = Boolean(pendingArtifact && codexTurnInProgress)
   const subagentTitle = activeConversation?.title ? briefThreadTitle(activeConversation.title) : 'Codex'
   const subagentHint =
@@ -1063,18 +1074,11 @@ function App() {
 
   const selectLatestArtifact = useCallback((artifactData: GeneratedArtifact[]) => {
     setSelectedArtifact((current) => {
-      if (current && artifactData.some((artifact) => artifact.url === current.url)) return current
-      const dismissedWorkspacePath = dismissedArtifact?.workspacePath ?? ''
-      const dismissedTime = finiteTimestamp(dismissedArtifact?.updatedAt)
-      return artifactData.find((artifact) => {
-        const matchesDismissedWorkspace = artifact.workspacePath === dismissedWorkspacePath
-        if (matchesDismissedWorkspace && artifact.url === dismissedArtifact?.url) return false
-        if (matchesDismissedWorkspace && dismissedTime != null) {
-          const artifactTime = finiteTimestamp(artifact.updatedAt)
-          return artifactTime != null && artifactTime > dismissedTime
-        }
-        return true
-      }) ?? null
+      const refreshedCurrent = current
+        ? artifactData.find((artifact) => artifact.workspacePath === current.workspacePath && artifact.url === current.url)
+        : null
+      if (refreshedCurrent && !artifactMatchesDismissal(refreshedCurrent, dismissedArtifact)) return refreshedCurrent
+      return artifactData.find((artifact) => !artifactMatchesDismissal(artifact, dismissedArtifact)) ?? null
     })
   }, [dismissedArtifact])
 
