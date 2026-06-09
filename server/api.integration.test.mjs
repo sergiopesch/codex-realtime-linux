@@ -194,6 +194,10 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   assert.equal(invalidToken.status, 400)
   assert.match(await invalidToken.text(), /Invalid workspace token/)
 
+  const oversizedToken = await fetch(`${baseUrl}/workspace-artifacts/${'a'.repeat(8193)}/sample-report/index.html`)
+  assert.equal(oversizedToken.status, 400)
+  assert.match(await oversizedToken.text(), /Invalid workspace token/)
+
   const relativeToken = Buffer.from('relative-workspace', 'utf8').toString('base64url')
   const relativeWorkspaceToken = await fetch(`${baseUrl}/workspace-artifacts/${relativeToken}/sample-report/index.html`)
   assert.equal(relativeWorkspaceToken.status, 400)

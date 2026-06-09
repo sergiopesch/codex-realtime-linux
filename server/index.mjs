@@ -82,6 +82,7 @@ const MAX_ARTIFACT_DIRECTORY_SCAN_ENTRIES = 400
 const MAX_ARTIFACT_NAME_LENGTH = 120
 const MAX_ARTIFACT_TITLE_LENGTH = 180
 const MAX_ARTIFACT_PREVIEW_FILE_BYTES = 25 * 1024 * 1024
+const MAX_WORKSPACE_TOKEN_LENGTH = 8192
 const MAX_USAGE_BUCKETS = 20
 const MAX_USAGE_BUCKET_LABEL_LENGTH = 120
 const MAX_ADMIN_WORKSPACES = 20
@@ -340,7 +341,7 @@ function workspaceToken(workspacePath) {
 }
 
 function workspaceFromToken(token) {
-  if (typeof token !== 'string' || !/^[A-Za-z0-9_-]+$/.test(token)) {
+  if (typeof token !== 'string' || token.length > MAX_WORKSPACE_TOKEN_LENGTH || !/^[A-Za-z0-9_-]+$/.test(token)) {
     throw httpError('Invalid workspace token.', { statusCode: 400, code: 'invalid_workspace_token' })
   }
   const workspacePath = Buffer.from(token, 'base64url').toString('utf8')
