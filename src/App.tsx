@@ -277,6 +277,9 @@ const MAX_UI_CONVERSATION_TITLE_LENGTH = 180
 const MAX_UI_ERROR_MESSAGE_LENGTH = 500
 const MAX_UI_NOTICE_LENGTH = 320
 const MAX_UI_ACTIVITY_LENGTH = 120
+const MAX_UI_GENERATED_ARTIFACTS = 40
+const MAX_UI_ARTIFACT_TITLE_LENGTH = 180
+const MAX_UI_ARTIFACT_PATH_LENGTH = 1024
 const MAX_UI_EVENT_STRING_LENGTH = 2_000
 const MAX_UI_EVENT_ARRAY_ITEMS = 20
 const MAX_UI_EVENT_OBJECT_KEYS = 30
@@ -774,6 +777,31 @@ const normalizeAbsoluteLocalWorkspacePath = (workspacePath: string) => {
   }
   return `/${parts.join('/')}`
 }
+const safeGeneratedArtifact = (value: unknown): GeneratedArtifact | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const artifact = value as UnknownRecord
+  const workspacePath = normalizeAbsoluteLocalWorkspacePath(typeof artifact.workspacePath === 'string' ? artifact.workspacePath : '')
+  const url = boundedPlainString(artifact.url, '', MAX_UI_ARTIFACT_PATH_LENGTH)
+  if (!workspacePath || !url.startsWith('/workspace-artifacts/')) return null
+  const relativePath = boundedPlainString(artifact.relativePath, '', MAX_UI_ARTIFACT_PATH_LENGTH)
+  if (!relativePath) return null
+  const updatedAt = typeof artifact.updatedAt === 'string' && finiteTimestamp(artifact.updatedAt) != null
+    ? artifact.updatedAt
+    : new Date(0).toISOString()
+  return {
+    id: boundedPlainString(artifact.id, relativePath, MAX_UI_ARTIFACT_TITLE_LENGTH),
+    title: boundedPlainString(artifact.title, relativePath, MAX_UI_ARTIFACT_TITLE_LENGTH),
+    url,
+    relativePath,
+    workspacePath,
+    updatedAt,
+    size: nonNegativeUiNumber(artifact.size),
+  }
+}
+const safeGeneratedArtifacts = (values: unknown) =>
+  Array.isArray(values)
+    ? values.map(safeGeneratedArtifact).filter((artifact): artifact is GeneratedArtifact => Boolean(artifact)).slice(0, MAX_UI_GENERATED_ARTIFACTS)
+    : []
 const basenameFromWorkspacePath = (workspacePath: string) =>
   normalizeAbsoluteLocalWorkspacePath(workspacePath).split('/').filter(Boolean).at(-1) ?? ''
 const workspacePathFor = (workspace: Workspace) => normalizeAbsoluteLocalWorkspacePath(workspace.path ?? workspace.id)
@@ -1435,8 +1463,9 @@ function App() {
       return []
     }
     const data = await fetchGeneratedArtifacts(workspacePath, init)
-    setArtifacts(data.data)
-    return data.data
+    const artifacts = safeGeneratedArtifacts(data.data)
+    setArtifacts(artifacts)
+    return artifacts
   }, [])
 
   const refreshOpenArtifact = useCallback((artifactData: GeneratedArtifact[]) => {
@@ -1902,7 +1931,7 @@ function App() {
           fetchGeneratedArtifacts(preferredPath, { signal: controller.signal })
             .then((artifactData) => {
               if (!effectActive) return
-              setArtifacts(artifactData.data)
+              setArtifacts(safeGeneratedArtifacts(artifactData.data))
               setSelectedArtifact(null)
               setArtifactPreviewLease(null)
             })
