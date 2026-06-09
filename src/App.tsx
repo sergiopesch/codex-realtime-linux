@@ -728,7 +728,12 @@ function App() {
       : `What should we build in ${selectedWorkspaceName}?`
   const primaryActivity = [routingActivity[0] ?? 'Voice router idle', visualContextLabel].filter(Boolean).join(' · ')
   const codexTurnInProgress = Boolean(activeTurnId)
-  const artifactPreview = selectedArtifact && !artifactMatchesDismissal(selectedArtifact, dismissedArtifact) ? selectedArtifact : null
+  const artifactPreview =
+    selectedArtifact &&
+    selectedArtifact.workspacePath === selectedWorkspace &&
+    !artifactMatchesDismissal(selectedArtifact, dismissedArtifact)
+      ? selectedArtifact
+      : null
   const agentIsWorkingOnArtifact = Boolean(pendingArtifact && codexTurnInProgress)
   const showSubagentPreview = codexTurnInProgress && !agentIsWorkingOnArtifact
   const subagentTitle = activeConversation?.title ? briefThreadTitle(activeConversation.title) : 'Codex'
@@ -1156,6 +1161,7 @@ function App() {
     setSelectedWorkspace(workspacePath)
     setSelectedConversationId(conversationId)
     setActiveSystemScreen(null)
+    setSelectedArtifact(null)
     setNotice(null)
     setLastError(null)
     if (mobileSidebarShouldCollapse()) setSidebarCollapsed(true)
@@ -1210,6 +1216,7 @@ function App() {
     setSelectedWorkspace(workspacePath)
     setSelectedConversationId('')
     setActiveSystemScreen(null)
+    setSelectedArtifact(null)
     showNotice(`${name} added as a workspace. Create a new agent conversation when you are ready.`)
 
     try {
@@ -1316,6 +1323,7 @@ function App() {
         setSelectedConversationId('')
         setActiveSystemScreen('settings')
       }
+      setSelectedArtifact(null)
     }
 
     showNotice('Workspace removed from this app. The local folder was not deleted.')
@@ -1338,6 +1346,7 @@ function App() {
 
     setSelectedWorkspace(workspacePath)
     setActiveSystemScreen(null)
+    setSelectedArtifact(null)
     if (firstConversation) {
       setSelectedConversationId(firstConversation.id)
     } else {
@@ -1351,6 +1360,7 @@ function App() {
 
   const openSystemScreen = (screen: SystemScreen) => {
     setActiveSystemScreen(screen)
+    setSelectedArtifact(null)
     setNotice(null)
     setLastError(null)
     if (mobileSidebarShouldCollapse()) setSidebarCollapsed(true)
