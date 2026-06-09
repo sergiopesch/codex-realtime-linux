@@ -1251,7 +1251,7 @@ async function readAppState() {
 
 async function writeAppState(state) {
   const normalizedState = normalizeAppState(state)
-  await writeJsonFileAtomic(STATE_PATH, normalizedState, { fileMode: 0o600 })
+  await writeJsonFileAtomic(STATE_PATH, normalizedState, { dirMode: 0o700, fileMode: 0o600 })
   return normalizedState
 }
 

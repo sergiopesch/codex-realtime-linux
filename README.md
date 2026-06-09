@@ -196,7 +196,7 @@ OPENAI_USAGE_GBP_RATE_API=https://api.frankfurter.app/latest?from=USD&to=GBP
 - `/api/codex/task` requires an explicit existing workspace `cwd`; Realtime voice routing only accepts the workspace currently selected in the app.
 - `/api/codex/events` returns bounded, normalized Codex app-server notifications for lightweight UI activity tracking.
 - Mutating `/api/*` routes reject untrusted browser origins, and routes with JSON payloads reject form-style, malformed, or oversized requests before they can touch state, Codex, or Arduino hardware.
-- The server persists this client's local workspace/thread state to `CODEX_REALTIME_STATE_PATH`, defaulting to `~/.local/state/codex-realtime-linux/app-state.json`; overrides must be absolute paths, and writes are synced before atomic rename.
+- The server persists this client's local workspace/thread state to `CODEX_REALTIME_STATE_PATH`, defaulting to `~/.local/state/codex-realtime-linux/app-state.json`; overrides must be absolute paths, the state directory is tightened to `0700`, and writes are synced before atomic rename.
 - The server persists Settings-saved API secrets to `CODEX_REALTIME_SECRETS_PATH`, defaulting to `~/.config/codex-realtime-linux/secrets.json`; overrides must be absolute paths, the secrets directory is tightened to `0700`, writes are synced before atomic rename, and malformed or oversized saved keys are ignored on load.
 - Removing a workspace in the app hides that workspace from this client's sidebar state only; it does not delete the local folder.
 - `src/App.tsx` is the Electron renderer UI.

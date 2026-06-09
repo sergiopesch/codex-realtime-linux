@@ -585,12 +585,17 @@ test('server ignores malformed persisted settings secrets', async (t) => {
   assert.equal(status.openAiKeySource, 'missing')
 })
 
-test('settings secret writes tighten existing directory and file permissions', async (t) => {
+test('settings and app-state writes tighten existing directory and file permissions', async (t) => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-secrets-mode-'))
   t.after(() => rm(tempDir, { recursive: true, force: true }))
-  const statePath = path.join(tempDir, 'state.json')
+  const stateDir = path.join(tempDir, 'permissive-state')
+  const statePath = path.join(stateDir, 'state.json')
   const secretsDir = path.join(tempDir, 'permissive-secrets')
   const secretsPath = path.join(secretsDir, 'secrets.json')
+  const workspacePath = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-state-mode-workspace-'))
+  t.after(() => rm(workspacePath, { recursive: true, force: true }))
+  await mkdir(stateDir, { recursive: true, mode: 0o777 })
+  await chmod(stateDir, 0o777)
   await mkdir(secretsDir, { recursive: true, mode: 0o777 })
   await chmod(secretsDir, 0o777)
 
@@ -598,9 +603,18 @@ test('settings secret writes tighten existing directory and file permissions', a
     CODEX_REALTIME_STATE_PATH: statePath,
     CODEX_REALTIME_SECRETS_PATH: secretsPath,
   })
+  const stateResponse = await fetch(`${baseUrl}/api/app-state/workspaces`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspace: { path: workspacePath } }),
+  })
+  assert.equal(stateResponse.status, 200)
+
   const response = await fetch(`${baseUrl}/api/settings/openai-key`, { method: 'DELETE' })
   assert.equal(response.status, 200)
 
+  assert.equal((await stat(stateDir)).mode & 0o777, 0o700)
+  assert.equal((await stat(statePath)).mode & 0o777, 0o600)
   assert.equal((await stat(secretsDir)).mode & 0o777, 0o700)
   assert.equal((await stat(secretsPath)).mode & 0o777, 0o600)
 })
