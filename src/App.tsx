@@ -252,6 +252,7 @@ const MAX_REALTIME_FUNCTION_ARGUMENTS_LENGTH = 80_000
 const MAX_REALTIME_TRANSCRIPT_LINES = 80
 const MAX_REALTIME_TRANSCRIPT_ID_LENGTH = 240
 const MAX_REALTIME_TRANSCRIPT_TEXT_LENGTH = 8_000
+const MAX_UI_CONVERSATIONS_PER_WORKSPACE = 80
 const MAX_UI_ERROR_MESSAGE_LENGTH = 500
 const MAX_UI_NOTICE_LENGTH = 320
 const MAX_UI_ACTIVITY_LENGTH = 120
@@ -458,6 +459,7 @@ const mergeConversations = (current: AgentConversation[], incoming: AgentConvers
       seen.add(conversation.id)
       return true
     })
+    .slice(0, MAX_UI_CONVERSATIONS_PER_WORKSPACE)
 }
 
 const savedConversationPayload = (conversation: AgentConversation) => ({
@@ -1164,7 +1166,7 @@ function App() {
 
     setConversationsByWorkspace((current) => ({
       ...current,
-      [workspacePath]: [conversation, ...(current[workspacePath] ?? existing)],
+      [workspacePath]: mergeConversations(current[workspacePath] ?? existing, [conversation]),
     }))
     openConversationWindow(workspacePath, conversation.id)
     showNotice(`${title} opened as a new agent conversation window. Start voice to describe the build goal.`)
