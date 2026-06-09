@@ -902,19 +902,34 @@ const safeHiddenWorkspacePaths = (values: unknown) =>
     ? [...new Set(values.map((value) => normalizeAbsoluteLocalWorkspacePath(typeof value === 'string' ? value : '')).filter((value) => value.startsWith('/')))]
         .slice(0, MAX_UI_HIDDEN_WORKSPACES)
     : []
+
+const safeArtifactNamePattern = /^[a-z0-9][a-z0-9-]*$/i
+
+const base64UrlEncode = (value: string) => {
+  const bytes = new TextEncoder().encode(value)
+  let binary = ''
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+}
+
+const artifactPreviewUrl = (workspacePath: string, artifactName: string) =>
+  `/workspace-artifacts/${base64UrlEncode(workspacePath)}/${artifactName}/index.html`
+
 const safeGeneratedArtifact = (value: unknown): GeneratedArtifact | null => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const artifact = value as UnknownRecord
   const workspacePath = normalizeAbsoluteLocalWorkspacePath(typeof artifact.workspacePath === 'string' ? artifact.workspacePath : '')
+  const id = boundedPlainString(artifact.id, '', MAX_UI_ARTIFACT_TITLE_LENGTH)
+  if (!workspacePath || !safeArtifactNamePattern.test(id)) return null
   const url = boundedPlainString(artifact.url, '', MAX_UI_ARTIFACT_PATH_LENGTH)
-  if (!workspacePath || !url.startsWith('/workspace-artifacts/')) return null
   const relativePath = boundedPlainString(artifact.relativePath, '', MAX_UI_ARTIFACT_PATH_LENGTH)
-  if (!relativePath) return null
+  if (relativePath !== `public/agent-files/${id}/index.html`) return null
+  if (url !== artifactPreviewUrl(workspacePath, id)) return null
   const updatedAt = typeof artifact.updatedAt === 'string' && finiteTimestamp(artifact.updatedAt) != null
     ? artifact.updatedAt
     : new Date(0).toISOString()
   return {
-    id: boundedPlainString(artifact.id, relativePath, MAX_UI_ARTIFACT_TITLE_LENGTH),
+    id,
     title: boundedPlainString(artifact.title, relativePath, MAX_UI_ARTIFACT_TITLE_LENGTH),
     url,
     relativePath,
@@ -941,10 +956,10 @@ const safeArtifactPlan = (value: unknown, expectedWorkspacePath: string): Artifa
   const relativeDir = boundedPlainString(artifact.relativeDir, '', MAX_UI_ARTIFACT_PATH_LENGTH)
   const relativePath = boundedPlainString(artifact.relativePath, '', MAX_UI_ARTIFACT_PATH_LENGTH)
   const url = boundedPlainString(artifact.url, '', MAX_UI_ARTIFACT_PATH_LENGTH)
-  if (!/^[a-z0-9][a-z0-9-]*$/i.test(directoryName)) return null
+  if (!safeArtifactNamePattern.test(directoryName)) return null
   if (relativeDir !== `public/agent-files/${directoryName}`) return null
   if (relativePath !== `${relativeDir}/index.html`) return null
-  if (!url.startsWith('/workspace-artifacts/')) return null
+  if (url !== artifactPreviewUrl(workspacePath, directoryName)) return null
   return { directoryName, relativeDir, relativePath, url, workspacePath }
 }
 const basenameFromWorkspacePath = (workspacePath: string) =>
