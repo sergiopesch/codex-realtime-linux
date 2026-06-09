@@ -1,6 +1,6 @@
 require('dotenv/config')
 
-const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron')
+const { app, BrowserWindow, dialog, ipcMain, session, shell } = require('electron')
 const { spawn } = require('node:child_process')
 const { randomUUID } = require('node:crypto')
 const { chmodSync, closeSync, mkdirSync, openSync, readFileSync, renameSync, statSync, writeSync } = require('node:fs')
@@ -51,6 +51,7 @@ const trustedRendererOrigins = new Set([
   new URL(apiUrl).origin,
   ...(devServerUrl ? [new URL(devServerUrl).origin] : []),
 ])
+const desktopAllowedPermissions = new Set(['media', 'display-capture'])
 const apiNodeBin = configuredAbsolutePath(process.env.CODEX_REALTIME_NODE_BIN, process.execPath)
 const apiNodeUsesElectronRuntime = apiNodeBin === process.execPath
 const desktopServerToken = randomUUID()
@@ -290,6 +291,46 @@ const isTrustedRendererEvent = (event) => {
   }
 }
 
+const trustedOriginFrom = (value) => {
+  if (typeof value !== 'string' || !value) return ''
+  try {
+    const origin = new URL(value).origin
+    return trustedRendererOrigins.has(origin) ? origin : ''
+  } catch {
+    return ''
+  }
+}
+
+const isTrustedMainFramePermission = (webContents, origin, details) => {
+  try {
+    if (!webContents || !details?.isMainFrame || !trustedOriginFrom(origin)) return false
+    const requestUrl = details.requestingUrl
+    if (requestUrl && !trustedOriginFrom(requestUrl)) return false
+    const securityOrigin = details.securityOrigin
+    if (securityOrigin && !trustedOriginFrom(securityOrigin)) return false
+    return Boolean(trustedOriginFrom(webContents.mainFrame?.url))
+  } catch {
+    return false
+  }
+}
+
+const permissionRequestOrigin = (details) => details?.securityOrigin || details?.requestingUrl || ''
+
+const installPermissionHandlers = () => {
+  session.defaultSession.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
+    if (!desktopAllowedPermissions.has(permission)) return false
+    return isTrustedMainFramePermission(webContents, requestingOrigin, details)
+  })
+
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    if (!desktopAllowedPermissions.has(permission)) {
+      callback(false)
+      return
+    }
+    callback(isTrustedMainFramePermission(webContents, permissionRequestOrigin(details), details))
+  })
+}
+
 const isAppShellNavigation = (url, appOrigin) => {
   try {
     const parsed = new URL(url)
@@ -408,6 +449,8 @@ if (gotSingleInstanceLock) {
 }
 
 if (gotSingleInstanceLock) app.whenReady().then(() => {
+  installPermissionHandlers()
+
   ipcMain.on('window-control', (event, action) => {
     if (!isTrustedRendererEvent(event)) return
     const win = BrowserWindow.fromWebContents(event.sender)
