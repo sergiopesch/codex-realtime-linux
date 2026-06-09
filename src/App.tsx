@@ -570,6 +570,14 @@ const boundedRealtimeTranscriptId = (value: unknown) =>
 const boundedRealtimeTranscriptText = (value: unknown) =>
   boundedPlainString(value, '', MAX_REALTIME_TRANSCRIPT_TEXT_LENGTH)
 
+const resolvedRealtimeTranscriptText = (currentText: string, replacementText: string) => {
+  const current = boundedRealtimeTranscriptText(currentText)
+  const replacement = boundedRealtimeTranscriptText(replacementText)
+  if (!replacement) return current
+  if (!current) return replacement
+  return current.startsWith(replacement) && replacement.length < current.length ? current : replacement
+}
+
 const realtimeTranscriptKeyPart = (value: unknown) => {
   if (typeof value === 'string' && value.trim()) return value.trim()
   if (typeof value === 'number' && Number.isFinite(value)) return String(value)
@@ -933,7 +941,9 @@ function App() {
       next[index] = {
         ...existing,
         speaker,
-        text: boundedRealtimeTranscriptText(mode === 'append' ? `${existing.text}${nextText}` : nextText),
+        text: mode === 'append'
+          ? boundedRealtimeTranscriptText(`${existing.text}${nextText}`)
+          : resolvedRealtimeTranscriptText(existing.text, nextText),
         status,
       }
       return next
