@@ -280,7 +280,9 @@ const closeApiLog = () => {
 
 const isTrustedRendererEvent = (event) => {
   try {
-    const frameUrl = event.senderFrame?.url
+    const frame = event.senderFrame
+    if (!frame || frame !== event.sender.mainFrame || frame.top !== frame || frame.parent !== null) return false
+    const frameUrl = frame.url
     if (typeof frameUrl !== 'string' || !frameUrl) return false
     return trustedRendererOrigins.has(new URL(frameUrl).origin)
   } catch {
