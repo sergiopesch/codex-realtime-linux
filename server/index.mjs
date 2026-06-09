@@ -29,7 +29,13 @@ const REALTIME_PERSONA =
   process.env.REALTIME_PERSONA ??
   'Speak naturally, stay technically sharp, keep replies concise, and route concrete work to Codex tools.'
 const VISION_MODEL = process.env.VISION_MODEL ?? CODEX_MODEL
-const USAGE_PERIOD_DAYS = Number(process.env.OPENAI_USAGE_PERIOD_DAYS ?? 30)
+const DEFAULT_USAGE_PERIOD_DAYS = 30
+const MAX_USAGE_PERIOD_DAYS = 90
+const USAGE_PERIOD_DAYS = configuredInteger(process.env.OPENAI_USAGE_PERIOD_DAYS, {
+  fallback: DEFAULT_USAGE_PERIOD_DAYS,
+  min: 1,
+  max: MAX_USAGE_PERIOD_DAYS,
+})
 const GBP_RATE_API = process.env.OPENAI_USAGE_GBP_RATE_API ?? 'https://api.frankfurter.app/latest?from=USD&to=GBP'
 const CONFIGURED_UPSTREAM_FETCH_TIMEOUT_MS = Number(process.env.UPSTREAM_FETCH_TIMEOUT_MS)
 const UPSTREAM_FETCH_TIMEOUT_MS =
@@ -120,6 +126,11 @@ function apiRouteRequiresJsonBody(req) {
 function configuredPort(value, fallback = DEFAULT_PORT) {
   const port = Number(value ?? fallback)
   return Number.isInteger(port) && port > 0 && port <= 65535 ? port : fallback
+}
+
+function configuredInteger(value, { fallback, min, max }) {
+  const number = Number(value ?? fallback)
+  return Number.isInteger(number) && number >= min && number <= max ? number : fallback
 }
 
 function guardLocalApiRequests(req, res, next) {
