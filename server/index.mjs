@@ -503,6 +503,18 @@ async function listGeneratedArtifacts(workspacePath) {
   const resolvedWorkspacePath = path.resolve(workspacePath)
   const artifactsDir = path.join(resolvedWorkspacePath, GENERATED_ARTIFACT_DIR)
   const token = workspaceToken(resolvedWorkspacePath)
+  let realWorkspacePath
+  let realArtifactsDir
+  try {
+    const resolvedPaths = await Promise.all([realpath(resolvedWorkspacePath), realpath(artifactsDir)])
+    realWorkspacePath = resolvedPaths[0]
+    realArtifactsDir = resolvedPaths[1]
+  } catch (error) {
+    if (error?.code === 'ENOENT') return []
+    throw error
+  }
+  if (!isPathInside(realWorkspacePath, realArtifactsDir)) return []
+
   let directory
   try {
     directory = await opendir(artifactsDir)
@@ -527,6 +539,7 @@ async function listGeneratedArtifacts(workspacePath) {
           realpath(path.join(artifactsDir, entry.name)),
           realpath(indexPath),
         ])
+        if (!isPathInside(realArtifactsDir, realArtifactRoot)) continue
         if (!isPathInside(realArtifactRoot, realIndexPath)) continue
         const title = entry.name.replace(/^\d{8}t?\d{6}-?/i, '').replace(/-/g, ' ') || entry.name
         artifacts.push({
@@ -2000,6 +2013,7 @@ app.get(/^\/workspace-artifacts\/([^/]+)\/([^/]+)\/(.+)$/, async (req, res) => {
       return
     }
     const workspacePath = await requireWorkspaceDirectory(workspaceFromToken(token), 'workspace token')
+    const artifactsDir = path.join(workspacePath, GENERATED_ARTIFACT_DIR)
     const artifactRoot = path.join(workspacePath, GENERATED_ARTIFACT_DIR, artifactName)
     const requestedPath = path.resolve(artifactRoot, filePath)
 
@@ -2008,17 +2022,34 @@ app.get(/^\/workspace-artifacts\/([^/]+)\/([^/]+)\/(.+)$/, async (req, res) => {
       return
     }
 
+    let realWorkspacePath
     let realArtifactRoot
+    let realArtifactsDir
     let realRequestedPath
     try {
-      const resolvedPaths = await Promise.all([realpath(artifactRoot), realpath(requestedPath)])
-      realArtifactRoot = resolvedPaths[0]
-      realRequestedPath = resolvedPaths[1]
+      const resolvedPaths = await Promise.all([
+        realpath(workspacePath),
+        realpath(artifactsDir),
+        realpath(artifactRoot),
+        realpath(requestedPath),
+      ])
+      realWorkspacePath = resolvedPaths[0]
+      realArtifactsDir = resolvedPaths[1]
+      realArtifactRoot = resolvedPaths[2]
+      realRequestedPath = resolvedPaths[3]
     } catch {
       res.status(404).send('Not found')
       return
     }
 
+    if (!isPathInside(realWorkspacePath, realArtifactsDir)) {
+      res.status(403).send('Forbidden')
+      return
+    }
+    if (!isPathInside(realArtifactsDir, realArtifactRoot)) {
+      res.status(403).send('Forbidden')
+      return
+    }
     if (!isPathInside(realArtifactRoot, realRequestedPath)) {
       res.status(403).send('Forbidden')
       return
