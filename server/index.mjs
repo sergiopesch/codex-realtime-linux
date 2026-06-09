@@ -913,25 +913,38 @@ async function mutateAppState(updater) {
 }
 
 function threadToConversation(thread) {
-  const title = normalizeString(thread?.name, normalizeString(thread?.preview, 'Codex conversation'))
+  const fallbackPreview = 'Resume this Codex conversation.'
+  const preview = normalizeBoundedString(thread?.preview, fallbackPreview, MAX_CONVERSATION_TEXT_LENGTH)
+  const title = normalizeBoundedString(
+    thread?.name,
+    normalizeBoundedString(thread?.preview, 'Codex conversation', MAX_CONVERSATION_TITLE_LENGTH),
+    MAX_CONVERSATION_TITLE_LENGTH,
+  )
   const updatedAt = typeof thread?.updatedAt === 'number' ? new Date(thread.updatedAt * 1000).toISOString() : new Date().toISOString()
   const status = thread?.status?.type === 'active' ? 'running' : 'ready'
+  const statusType = normalizeBoundedString(thread?.status?.type, 'ready', 40)
+  const threadId = normalizeBoundedString(thread?.id, `codex-${updatedAt}`, MAX_CONVERSATION_ID_LENGTH)
+  const workspacePath = normalizeBoundedString(normalizeWorkspacePath(thread?.cwd), '', MAX_CONVERSATION_TEXT_LENGTH)
 
   return {
-    id: thread.id,
+    id: threadId,
     title: title.length > 54 ? `${title.slice(0, 51)}...` : title,
     age: 'codex',
     status,
-    prompt: normalizeString(thread?.preview, 'Resume this Codex conversation.'),
+    prompt: preview,
     response: 'Persisted Codex app-server conversation. Build or voice controls can continue work from this workspace context.',
-    traces: ['Loaded from Codex app-server', `Workspace: ${thread.cwd}`, `Status: ${thread?.status?.type ?? 'ready'}`],
+    traces: normalizeStringList(
+      ['Loaded from Codex app-server', workspacePath ? `Workspace: ${workspacePath}` : 'Workspace: unavailable', `Status: ${statusType}`],
+      MAX_CONVERSATION_TRACES,
+      MAX_CONVERSATION_TRACE_LENGTH,
+    ),
     transcript: [
-      { speaker: 'user', text: normalizeString(thread?.preview, 'Resume this Codex conversation.') },
+      { speaker: 'user', text: preview },
       { speaker: 'codex', text: 'This thread is available from Codex app-server history.' },
     ],
-    workspacePath: thread.cwd,
+    workspacePath,
     source: 'codex',
-    codexThreadId: thread.id,
+    codexThreadId: threadId,
     createdAt: updatedAt,
     updatedAt,
   }

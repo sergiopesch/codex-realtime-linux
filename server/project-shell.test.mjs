@@ -241,12 +241,20 @@ test('Codex app-server RPC bridge has bounded requests and single-flight initial
 
 test('renderer loads Codex thread history only for explicit saved workspaces', async () => {
   const appSource = await readFile(path.join(repoRoot, 'src', 'App.tsx'), 'utf8')
+  const serverSource = await readFile(path.join(repoRoot, 'server', 'index.mjs'), 'utf8')
 
   assert.match(appSource, /const shouldLoadCodexHistory = Boolean\(/)
   assert.match(appSource, /visibleSavedWorkspaces\.some\(\(workspace\) => workspacePathFor\(workspace\) === preferredPath\)/)
   assert.match(appSource, /if \(shouldLoadCodexHistory\) \{/)
   assert.match(appSource, /\/api\/codex\/threads\?limit=40&cwd=\$\{encodeURIComponent\(preferredPath\)\}/)
   assert.doesNotMatch(appSource, /api<CodexThreadsResponse>\('\/api\/codex\/threads\?limit=40'\)/)
+  assert.match(serverSource, /function threadToConversation\(thread\)/)
+  assert.match(serverSource, /const preview = normalizeBoundedString\(thread\?\.preview, fallbackPreview, MAX_CONVERSATION_TEXT_LENGTH\)/)
+  assert.match(serverSource, /const threadId = normalizeBoundedString\(thread\?\.id, `codex-\$\{updatedAt\}`, MAX_CONVERSATION_ID_LENGTH\)/)
+  assert.match(serverSource, /const workspacePath = normalizeBoundedString\(normalizeWorkspacePath\(thread\?\.cwd\), '', MAX_CONVERSATION_TEXT_LENGTH\)/)
+  assert.match(serverSource, /traces: normalizeStringList\(/)
+  assert.doesNotMatch(serverSource, /id: thread\.id/)
+  assert.doesNotMatch(serverSource, /workspacePath: thread\.cwd/)
 })
 
 test('upstream OpenAI and usage fetches are timeout bounded', async () => {
