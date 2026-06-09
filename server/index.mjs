@@ -1093,15 +1093,17 @@ async function readAppState() {
 }
 
 async function writeAppState(state) {
-  await writeJsonFileAtomic(STATE_PATH, normalizeAppState(state), { fileMode: 0o600 })
+  const normalizedState = normalizeAppState(state)
+  await writeJsonFileAtomic(STATE_PATH, normalizedState, { fileMode: 0o600 })
+  return normalizedState
 }
 
 async function mutateAppState(updater) {
   const mutation = appStateMutation.then(async () => {
     const state = await readAppState()
     const result = await updater(state)
-    await writeAppState(state)
-    return { state, result }
+    const normalizedState = await writeAppState(state)
+    return { state: normalizedState, result }
   })
   appStateMutation = mutation.catch(() => {})
   return mutation

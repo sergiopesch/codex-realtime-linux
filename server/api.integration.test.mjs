@@ -353,6 +353,61 @@ test('server bounds persisted app state loaded from disk', async (t) => {
   assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id][1].transcript[0].text, 'hello')
 })
 
+test('server returns normalized app state after mutations', async (t) => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-mutation-state-'))
+  t.after(() => rm(tempDir, { recursive: true, force: true }))
+  const statePath = path.join(tempDir, 'state.json')
+  const secretsPath = path.join(tempDir, 'secrets.json')
+  const workspacePath = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-mutation-workspace-'))
+  t.after(() => rm(workspacePath, { recursive: true, force: true }))
+  const existingWorkspaces = Array.from({ length: 45 }, (_, index) => ({
+    id: path.join('/tmp', `codex-realtime-existing-${index}`),
+    name: `Existing ${index}`,
+  }))
+  const existingConversations = Array.from({ length: 100 }, (_, index) => ({
+    id: `existing-conversation-${index}`,
+    title: `Existing conversation ${index}`,
+  }))
+
+  await writeFile(
+    statePath,
+    JSON.stringify({
+      workspaces: existingWorkspaces,
+      conversationsByWorkspace: {
+        [workspacePath]: existingConversations,
+      },
+    }),
+  )
+
+  const { baseUrl } = await startTestServer(t, {
+    CODEX_REALTIME_STATE_PATH: statePath,
+    CODEX_REALTIME_SECRETS_PATH: secretsPath,
+  })
+
+  const workspaceSave = await fetch(`${baseUrl}/api/app-state/workspaces`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspace: { id: workspacePath, path: workspacePath, name: 'Mutation workspace' } }),
+  })
+  assert.equal(workspaceSave.status, 200)
+  const workspaceBody = await workspaceSave.json()
+  assert.equal(workspaceBody.state.workspaces.length, 40)
+  assert.equal(workspaceBody.state.workspaces[0].path, workspacePath)
+
+  const conversationSave = await fetch(`${baseUrl}/api/app-state/conversations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      workspacePath,
+      conversation: { id: 'new-conversation', title: 'New conversation' },
+    }),
+  })
+  assert.equal(conversationSave.status, 200)
+  const conversationBody = await conversationSave.json()
+  assert.equal(conversationBody.state.conversationsByWorkspace[workspacePath].length, 80)
+  assert.equal(conversationBody.state.conversationsByWorkspace[workspacePath][0].id, 'new-conversation')
+})
+
 test('server ignores oversized persisted app state and secrets files', async (t) => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-oversized-state-'))
   t.after(() => rm(tempDir, { recursive: true, force: true }))
