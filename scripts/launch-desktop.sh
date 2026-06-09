@@ -38,11 +38,13 @@ fi
 : >> "$desktop_log"
 chmod 600 "$desktop_log" 2>/dev/null || true
 exec >> "$desktop_log" 2>&1
+printf '\n[%s] Launching Codex desktop from %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$repo_root"
 
 electron_bin="./node_modules/electron/dist/electron"
 if [ ! -x "$electron_bin" ]; then
   electron_bin="./node_modules/.bin/electron"
 fi
+printf '[%s] Using Electron binary %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$electron_bin"
 
 if [ ! -x "$electron_bin" ]; then
   echo "Electron is not installed. Run npm install in $repo_root."
