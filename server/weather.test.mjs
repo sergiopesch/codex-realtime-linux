@@ -136,6 +136,57 @@ test('getCurrentWeather surfaces not-found locations as a 404', async () => {
   )
 })
 
+test('getCurrentWeather rejects malformed upstream coordinates', async () => {
+  const fetchImpl = async () =>
+    Response.json({
+      results: [
+        {
+          name: 'Broken place',
+          latitude: Number.POSITIVE_INFINITY,
+          longitude: 13.41,
+        },
+      ],
+    })
+
+  await assert.rejects(
+    () => getCurrentWeather('Broken place', { fetchImpl }),
+    (error) =>
+      error instanceof WeatherServiceError &&
+      error.status === 404 &&
+      error.code === 'weather_location_not_found',
+  )
+})
+
+test('getCurrentWeather rejects malformed current temperatures', async () => {
+  const fetchImpl = async (url) => {
+    if (String(url).startsWith('https://geocoding-api.open-meteo.com/')) {
+      return Response.json({
+        results: [
+          {
+            name: 'Broken forecast',
+            latitude: 52.52,
+            longitude: 13.41,
+          },
+        ],
+      })
+    }
+
+    return Response.json({
+      current: {
+        temperature_2m: Number.NaN,
+      },
+    })
+  }
+
+  await assert.rejects(
+    () => getCurrentWeather('Broken forecast', { fetchImpl }),
+    (error) =>
+      error instanceof WeatherServiceError &&
+      error.status === 502 &&
+      error.code === 'weather_missing_current_conditions',
+  )
+})
+
 test('getCurrentWeather converts network failures into a graceful upstream error', async () => {
   const fetchImpl = async () => {
     throw new Error('socket hang up')

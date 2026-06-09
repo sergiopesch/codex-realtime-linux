@@ -634,6 +634,12 @@ test('weather upstream responses are timeout and size bounded', async () => {
   assert.match(weatherSource, /const text = await readBoundedResponseText\(response, stage\)/)
   assert.match(weatherSource, /return text \? JSON\.parse\(text\) : \{\}/)
   assert.doesNotMatch(weatherSource, /response\.json\(\)/)
+  assert.match(weatherSource, /function finiteNumber\(value\)/)
+  assert.match(weatherSource, /const latitude = finiteNumber\(resolvedLocation\?\.latitude\)/)
+  assert.match(weatherSource, /const longitude = finiteNumber\(resolvedLocation\?\.longitude\)/)
+  assert.match(weatherSource, /if \(!current \|\| finiteNumber\(current\.temperature_2m\) == null\)/)
+  assert.doesNotMatch(weatherSource, /typeof resolvedLocation\.latitude !== 'number'/)
+  assert.doesNotMatch(weatherSource, /typeof current\.temperature_2m !== 'number'/)
 })
 
 test('USB serial-by-id scans are bounded', async () => {

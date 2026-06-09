@@ -98,6 +98,10 @@ function formatNumber(value) {
   return typeof value === 'number' && Number.isFinite(value) ? Math.round(value * 10) / 10 : null
 }
 
+function finiteNumber(value) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
 async function readBoundedResponseText(response, stage) {
   if (!response.body) return ''
 
@@ -221,7 +225,9 @@ export async function getCurrentWeather(locationQuery, options = {}) {
   const geocoding = await fetchJson(geocodingUrl, { fetchImpl, timeoutMs, stage: 'geocoding' })
   const resolvedLocation = Array.isArray(geocoding?.results) ? geocoding.results[0] : null
 
-  if (!resolvedLocation?.name || typeof resolvedLocation.latitude !== 'number' || typeof resolvedLocation.longitude !== 'number') {
+  const latitude = finiteNumber(resolvedLocation?.latitude)
+  const longitude = finiteNumber(resolvedLocation?.longitude)
+  if (!resolvedLocation?.name || latitude == null || longitude == null) {
     throw new WeatherServiceError(`No weather location matched "${location}".`, {
       code: 'weather_location_not_found',
       status: 404,
@@ -229,8 +235,8 @@ export async function getCurrentWeather(locationQuery, options = {}) {
   }
 
   const weatherUrl = new URL(WEATHER_API_URL)
-  weatherUrl.searchParams.set('latitude', String(resolvedLocation.latitude))
-  weatherUrl.searchParams.set('longitude', String(resolvedLocation.longitude))
+  weatherUrl.searchParams.set('latitude', String(latitude))
+  weatherUrl.searchParams.set('longitude', String(longitude))
   weatherUrl.searchParams.set(
     'current',
     [
@@ -249,7 +255,7 @@ export async function getCurrentWeather(locationQuery, options = {}) {
 
   const weather = await fetchJson(weatherUrl, { fetchImpl, timeoutMs, stage: 'forecast' })
   const current = weather?.current
-  if (!current || typeof current.temperature_2m !== 'number') {
+  if (!current || finiteNumber(current.temperature_2m) == null) {
     throw new WeatherServiceError('The weather service did not return current conditions.', {
       code: 'weather_missing_current_conditions',
       status: 502,
@@ -263,8 +269,8 @@ export async function getCurrentWeather(locationQuery, options = {}) {
       name: boundedString(resolvedLocation.name, 'Unknown location', MAX_LOCATION_LABEL_LENGTH),
       admin1: boundedString(resolvedLocation.admin1, '', MAX_LOCATION_LABEL_LENGTH),
       country: boundedString(resolvedLocation.country, '', MAX_LOCATION_LABEL_LENGTH),
-      latitude: resolvedLocation.latitude,
-      longitude: resolvedLocation.longitude,
+      latitude,
+      longitude,
       timezone: boundedString(
         typeof weather?.timezone === 'string' ? weather.timezone : resolvedLocation.timezone,
         '',
