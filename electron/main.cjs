@@ -46,7 +46,9 @@ const configuredAbsolutePath = (value, fallback) => {
 }
 const apiPort = configuredPort(process.env.PORT)
 const apiUrl = configuredLocalHttpOrigin(process.env.CODEX_DESKTOP_API_URL, `http://127.0.0.1:${apiPort}`)
-const devServerUrl = configuredLocalHttpOrigin(process.env.VITE_DEV_SERVER_URL, '')
+const devServerUrl = process.env.NODE_ENV === 'production'
+  ? ''
+  : configuredLocalHttpOrigin(process.env.VITE_DEV_SERVER_URL, '')
 const trustedRendererOrigins = new Set([
   new URL(apiUrl).origin,
   ...(devServerUrl ? [new URL(devServerUrl).origin] : []),
