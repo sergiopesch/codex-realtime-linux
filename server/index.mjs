@@ -91,6 +91,7 @@ const MAX_WORKSPACE_TOKEN_LENGTH = 8192
 const MAX_USAGE_BUCKETS = 20
 const MAX_USAGE_BUCKET_LABEL_LENGTH = 120
 const MAX_USAGE_CURRENCY_LENGTH = 12
+const MAX_IGNORED_USAGE_CURRENCIES = 5
 const MAX_ADMIN_WORKSPACES = 20
 const MAX_CODEX_NOTIFICATIONS = 160
 const MAX_CODEX_METADATA_STRING_LENGTH = 1_000
@@ -1499,10 +1500,18 @@ function normalizeUsageCurrency(value, fallback = 'usd') {
   return currency && currency.length <= MAX_USAGE_CURRENCY_LENGTH && /^[a-z]{3,12}$/.test(currency) ? currency : fallback
 }
 
+function mixedCurrencyUsageWarning(count, currencies) {
+  if (!count) return null
+  const labels = currencies.length ? ` (${currencies.join(', ')})` : ''
+  return `Ignored ${count} cost ${count === 1 ? 'row' : 'rows'} with mixed currencies${labels}.`
+}
+
 function normalizeCosts(costs) {
   const buckets = Array.isArray(costs?.data) ? costs.data : []
   const totalsByLabel = new Map()
-  let currency = 'usd'
+  const ignoredCurrencies = new Set()
+  let ignoredCurrencyCount = 0
+  let currency = null
 
   for (const bucket of buckets) {
     const results = Array.isArray(bucket?.results) ? bucket.results : []
@@ -1512,14 +1521,24 @@ function normalizeCosts(costs) {
         'OpenAI usage',
         MAX_USAGE_BUCKET_LABEL_LENGTH,
       )
-      if (typeof result.amount?.currency === 'string') currency = normalizeUsageCurrency(result.amount.currency, currency)
       const amount =
         result.amount?.value ??
         result.amount?.amount ??
         result.cost?.value ??
         result.cost ??
         0
-      totalsByLabel.set(label, (totalsByLabel.get(label) ?? 0) + finiteNumber(amount))
+      const value = finiteNumber(amount, Number.NaN)
+      if (!Number.isFinite(value) || value <= 0) continue
+
+      const resultCurrency = normalizeUsageCurrency(result.amount?.currency, currency ?? 'usd')
+      if (!currency) currency = resultCurrency
+      if (resultCurrency !== currency) {
+        ignoredCurrencyCount += 1
+        ignoredCurrencies.add(resultCurrency.toUpperCase())
+        continue
+      }
+
+      totalsByLabel.set(label, (totalsByLabel.get(label) ?? 0) + value)
     }
   }
 
@@ -1530,7 +1549,9 @@ function normalizeCosts(costs) {
 
   return {
     total,
-    currency,
+    currency: currency ?? 'usd',
+    ignoredCurrencyCount,
+    ignoredCurrencies: [...ignoredCurrencies].slice(0, MAX_IGNORED_USAGE_CURRENCIES),
     buckets: topUsageBuckets(totalsByLabel),
   }
 }
@@ -1618,6 +1639,9 @@ async function normalizeUsage(costs, completionUsage) {
   } else {
     conversionError = `No GBP conversion is configured for ${nativeCurrency.toUpperCase()}`
   }
+
+  const mixedCurrencyWarning = mixedCurrencyUsageWarning(cost.ignoredCurrencyCount, cost.ignoredCurrencies)
+  conversionError = [conversionError, mixedCurrencyWarning].filter(Boolean).join(' ') || null
 
   return {
     periodDays: USAGE_PERIOD_DAYS,
