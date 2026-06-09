@@ -285,17 +285,29 @@ const readBoundedApiText = async (response: Response, maxLength = MAX_API_RESPON
 
 const fetchWithTimeout = async (input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = DEFAULT_API_TIMEOUT_MS) => {
   const controller = new AbortController()
-  const timeout = window.setTimeout(() => controller.abort(), timeoutMs)
+  const externalSignal = init.signal
+  let timedOut = false
+  const abortFromExternalSignal = () => controller.abort(externalSignal?.reason)
+  const timeout = window.setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, timeoutMs)
+  if (externalSignal?.aborted) {
+    abortFromExternalSignal()
+  } else {
+    externalSignal?.addEventListener('abort', abortFromExternalSignal, { once: true })
+  }
 
   try {
     return await fetch(input, { ...init, signal: controller.signal })
   } catch (error) {
-    if (controller.signal.aborted) {
+    if (timedOut) {
       throw new Error(`Request timed out after ${Math.round(timeoutMs / 1000)} seconds.`, { cause: error })
     }
     throw error
   } finally {
     window.clearTimeout(timeout)
+    externalSignal?.removeEventListener('abort', abortFromExternalSignal)
   }
 }
 
@@ -371,8 +383,8 @@ const api = async <T,>(path: string, init?: RequestInit, options?: { timeoutMs?:
   }
 }
 
-const fetchGeneratedArtifacts = (workspacePath: string) =>
-  api<{ data: GeneratedArtifact[] }>(`/api/artifacts?workspacePath=${encodeURIComponent(workspacePath)}`)
+const fetchGeneratedArtifacts = (workspacePath: string, init?: RequestInit) =>
+  api<{ data: GeneratedArtifact[] }>(`/api/artifacts?workspacePath=${encodeURIComponent(workspacePath)}`, init)
 
 const slug = (value: string) =>
   value
@@ -1033,12 +1045,12 @@ function App() {
       body: JSON.stringify(payload),
     })
 
-  const refreshArtifacts = useCallback(async (workspacePath = selectedWorkspaceRef.current) => {
+  const refreshArtifacts = useCallback(async (workspacePath = selectedWorkspaceRef.current, init?: RequestInit) => {
     if (!workspacePath) {
       setArtifacts([])
       return []
     }
-    const data = await fetchGeneratedArtifacts(workspacePath)
+    const data = await fetchGeneratedArtifacts(workspacePath, init)
     setArtifacts(data.data)
     return data.data
   }, [])
@@ -1363,14 +1375,17 @@ function App() {
   }, [notice])
 
   useEffect(() => {
+    const controller = new AbortController()
+    let effectActive = true
     const load = async () => {
       try {
         const [statusData, workspaceData, spendData, appStateData] = await Promise.all([
-          api<Status>('/api/status'),
-          api<{ data: Workspace[] }>('/api/workspaces'),
-          api<SpendResponse>('/api/spend'),
-          api<AppStateResponse>('/api/app-state'),
+          api<Status>('/api/status', { signal: controller.signal }),
+          api<{ data: Workspace[] }>('/api/workspaces', { signal: controller.signal }),
+          api<SpendResponse>('/api/spend', { signal: controller.signal }),
+          api<AppStateResponse>('/api/app-state', { signal: controller.signal }),
         ])
+        if (!effectActive) return
         const localWorkspaceData = workspaceData.data.filter((workspace) => isAbsoluteLocalWorkspacePath(workspacePathFor(workspace)))
         const roots = localWorkspaceData.slice(0, 5)
         const savedWorkspaces = (appStateData.workspaces ?? []).filter((workspace) =>
@@ -1396,8 +1411,9 @@ function App() {
           current.trim() || !statusData.defaultWeatherLocation ? current : statusData.defaultWeatherLocation ?? '',
         )
         if (preferredPath) {
-          fetchGeneratedArtifacts(preferredPath)
+          fetchGeneratedArtifacts(preferredPath, { signal: controller.signal })
             .then((artifactData) => {
+              if (!effectActive) return
               setArtifacts(artifactData.data)
               setSelectedArtifact((current) => current ?? artifactData.data[0] ?? null)
             })
@@ -1415,8 +1431,12 @@ function App() {
         setSelectedConversationId(firstConversation?.id ?? '')
 
         if (shouldLoadCodexHistory) {
-          api<CodexThreadsResponse>(`/api/codex/threads?limit=40&cwd=${encodeURIComponent(preferredPath)}`)
+          api<CodexThreadsResponse>(
+            `/api/codex/threads?limit=40&cwd=${encodeURIComponent(preferredPath)}`,
+            { signal: controller.signal },
+          )
             .then((threadData) => {
+              if (!effectActive) return
               const codexConversationsByWorkspace = (threadData.conversations ?? []).reduce<Record<string, AgentConversation[]>>(
                 (groups, conversation) => {
                   const workspacePath = conversation.workspacePath
@@ -1440,6 +1460,7 @@ function App() {
               })
             })
             .catch((error: unknown) => {
+              if (!effectActive || controller.signal.aborted) return
               setEvents((current) =>
                 mergeEvents(current, [{
                   method: 'codex/thread-list-unavailable',
@@ -1450,20 +1471,28 @@ function App() {
             })
         }
       } catch (error) {
+        if (!effectActive || controller.signal.aborted) return
         setLastError(displayErrorMessage(error, 'Failed to load app state'))
       }
     }
 
     load()
+    return () => {
+      effectActive = false
+      controller.abort()
+    }
   }, [])
 
   useEffect(() => {
+    const controller = new AbortController()
+    let effectActive = true
     let pollInFlight = false
     const pollCodexEvents = async () => {
       if (pollInFlight) return
       pollInFlight = true
       try {
-        const data = await api<{ data: EventRecord[] }>('/api/codex/events')
+        const data = await api<{ data: EventRecord[] }>('/api/codex/events', { signal: controller.signal })
+        if (!effectActive) return
         setEvents((current) => mergeEvents(current, data.data))
         if (
           activeTurnIdRef.current &&
@@ -1487,6 +1516,7 @@ function App() {
           })
         }
       } catch {
+        if (!effectActive || controller.signal.aborted) return
         // The app-server may not be started until the first Codex action.
       } finally {
         pollInFlight = false
@@ -1495,16 +1525,25 @@ function App() {
 
     void pollCodexEvents()
     const interval = window.setInterval(() => void pollCodexEvents(), 1800)
-    return () => window.clearInterval(interval)
+    return () => {
+      effectActive = false
+      controller.abort()
+      window.clearInterval(interval)
+    }
   }, [])
 
   useEffect(() => {
+    const controller = new AbortController()
+    let effectActive = true
     let pollInFlight = false
     const pollArtifacts = async () => {
       if (pollInFlight) return
       pollInFlight = true
       try {
-        const artifactData = await refreshArtifacts(pendingArtifact?.workspacePath ?? selectedWorkspaceRef.current)
+        const artifactData = await refreshArtifacts(pendingArtifact?.workspacePath ?? selectedWorkspaceRef.current, {
+          signal: controller.signal,
+        })
+        if (!effectActive) return
         if (!pendingArtifact) {
           selectLatestArtifact(artifactData)
           return
@@ -1519,6 +1558,7 @@ function App() {
         setActivity('Artifact ready', completed.title)
         showNotice(`Preview ready: ${completed.relativePath}`)
       } catch {
+        if (!effectActive || controller.signal.aborted) return
         // Artifact polling should not interrupt voice or Codex work.
       } finally {
         pollInFlight = false
@@ -1527,16 +1567,26 @@ function App() {
 
     void pollArtifacts()
     const interval = window.setInterval(() => void pollArtifacts(), pendingArtifact ? 1500 : 5000)
-    return () => window.clearInterval(interval)
+    return () => {
+      effectActive = false
+      controller.abort()
+      window.clearInterval(interval)
+    }
   }, [pendingArtifact, refreshArtifacts, selectLatestArtifact])
 
   useEffect(() => {
+    const controller = new AbortController()
+    let effectActive = true
     let pollInFlight = false
     const pollUsbEvents = async () => {
       if (pollInFlight) return
       pollInFlight = true
       try {
-        const data = await api<UsbEventsResponse>(`/api/usb/events${usbInitializedRef.current ? '' : '?scan=true'}`)
+        const data = await api<UsbEventsResponse>(
+          `/api/usb/events${usbInitializedRef.current ? '' : '?scan=true'}`,
+          { signal: controller.signal },
+        )
+        if (!effectActive) return
         setStatus((current) => current ? { ...current, usb: data.status } : current)
 
         const unseen = data.data
@@ -1581,6 +1631,7 @@ function App() {
           }
         }
       } catch (error) {
+        if (!effectActive || controller.signal.aborted) return
         setStatus((current) =>
           current
             ? {
@@ -1600,7 +1651,11 @@ function App() {
 
     void pollUsbEvents()
     const interval = window.setInterval(() => void pollUsbEvents(), 1200)
-    return () => window.clearInterval(interval)
+    return () => {
+      effectActive = false
+      controller.abort()
+      window.clearInterval(interval)
+    }
   }, [])
 
   const handleRealtimeToolCall = async (message: Record<string, unknown>) => {
