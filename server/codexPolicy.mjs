@@ -67,6 +67,9 @@ const ARTIFACT_OUTPUT_TERMS = [
 const EXPLICIT_APP_EDIT_PATTERN =
   /\b(edit|change|modify|update|fix|refactor|redesign|alter|touch)\b[\s\S]{0,100}\b(app source|application source|app shell|this app|the app|ui source|electron app|react app|src\/|server\/|electron\/|index\.html)\b/i
 
+const EXPLICIT_APP_CREATION_PATTERN =
+  /\b(add|build|create|make|implement|develop)\b[\s\S]{0,120}\b(to|in|inside|within|into)\s+(this app|the app|the electron app|the react app|codex realtime linux)\b/i
+
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 const termPattern = (term) => escapeRegExp(term).replace(/\s+/g, '\\s+')
@@ -85,7 +88,7 @@ export function isArtifactRequest(goal) {
 }
 
 export function hasExplicitAppEditIntent(goal) {
-  return EXPLICIT_APP_EDIT_PATTERN.test(goal)
+  return EXPLICIT_APP_EDIT_PATTERN.test(goal) || EXPLICIT_APP_CREATION_PATTERN.test(goal)
 }
 
 export function artifactPlanForGoal(goal, date = new Date(), uniqueSuffix = '') {

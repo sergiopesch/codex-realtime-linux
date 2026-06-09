@@ -27,6 +27,15 @@ test('classifies generated HTML requests as artifact work', () => {
 test('detects explicit app edit intent separately from artifact creation', () => {
   assert.equal(hasExplicitAppEditIntent('Create a simple index.html about the project.'), false)
   assert.equal(hasExplicitAppEditIntent('Edit this app and change the React UI source.'), true)
+  assert.equal(hasExplicitAppEditIntent('Add a settings page to this app.'), true)
+  assert.equal(hasExplicitAppEditIntent('Build a workspace picker inside the React app.'), true)
+  assert.equal(hasExplicitAppEditIntent('Create a presentation about this app.'), false)
+})
+
+test('keeps app-directed page creation out of artifact routing', () => {
+  assert.equal(isArtifactRequest('Add a settings page to this app.'), true)
+  assert.equal(artifactPlanForGoal('Add a settings page to this app.'), null)
+  assert.notEqual(artifactPlanForGoal('Create a presentation about this app.'), null)
 })
 
 test('guard routes generic file creation away from protected app source', () => {
