@@ -699,6 +699,23 @@ const realtimeFunctionOutput = (value: unknown) => {
   }
 }
 
+const normalizeRealtimeFunctionArguments = (value: unknown): UnknownRecord => {
+  if (typeof value !== 'string' || !value) return {}
+  if (value.length > MAX_REALTIME_FUNCTION_ARGUMENTS_LENGTH) {
+    return { error: 'Function call arguments were too large.' }
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(value)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return { error: 'Function call arguments must be a JSON object.' }
+    }
+    return parsed as UnknownRecord
+  } catch {
+    return { error: 'Function call arguments were not valid JSON.' }
+  }
+}
+
 const displayErrorMessage = (error: unknown, fallback: string) => {
   const rawMessage = error instanceof Error ? error.message : ''
   return boundedPlainString(rawMessage, fallback, MAX_UI_ERROR_MESSAGE_LENGTH)
@@ -2165,17 +2182,7 @@ function App() {
 
     setActivity('Voice router', toolName || 'Tool call')
 
-    let payload: Record<string, unknown>
-    try {
-      if (item.arguments && item.arguments.length > MAX_REALTIME_FUNCTION_ARGUMENTS_LENGTH) {
-        payload = { error: 'Function call arguments were too large.' }
-      } else {
-        payload = item.arguments ? JSON.parse(item.arguments) : {}
-      }
-    } catch {
-      payload = { error: 'Function call arguments were not valid JSON.' }
-    }
-
+    const payload = normalizeRealtimeFunctionArguments(item.arguments)
     let result: unknown = { ignored: true }
     try {
       if (typeof payload.error === 'string') {
