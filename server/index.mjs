@@ -87,6 +87,7 @@ const MAX_ARTIFACT_PREVIEW_FILE_BYTES = 25 * 1024 * 1024
 const MAX_WORKSPACE_TOKEN_LENGTH = 8192
 const MAX_USAGE_BUCKETS = 20
 const MAX_USAGE_BUCKET_LABEL_LENGTH = 120
+const MAX_USAGE_CURRENCY_LENGTH = 12
 const MAX_ADMIN_WORKSPACES = 20
 const MAX_CODEX_NOTIFICATIONS = 160
 const MAX_CODEX_METADATA_STRING_LENGTH = 1_000
@@ -1459,6 +1460,11 @@ function topUsageBuckets(totalsByLabel) {
     .slice(0, MAX_USAGE_BUCKETS)
 }
 
+function normalizeUsageCurrency(value, fallback = 'usd') {
+  const currency = normalizeString(value).toLowerCase()
+  return currency && currency.length <= MAX_USAGE_CURRENCY_LENGTH && /^[a-z]{3,12}$/.test(currency) ? currency : fallback
+}
+
 function normalizeCosts(costs) {
   const buckets = Array.isArray(costs?.data) ? costs.data : []
   const totalsByLabel = new Map()
@@ -1472,7 +1478,7 @@ function normalizeCosts(costs) {
         'OpenAI usage',
         MAX_USAGE_BUCKET_LABEL_LENGTH,
       )
-      if (typeof result.amount?.currency === 'string') currency = result.amount.currency
+      if (typeof result.amount?.currency === 'string') currency = normalizeUsageCurrency(result.amount.currency, currency)
       const amount =
         result.amount?.value ??
         result.amount?.amount ??

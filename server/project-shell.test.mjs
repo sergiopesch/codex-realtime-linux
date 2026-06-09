@@ -710,6 +710,7 @@ test('upstream OpenAI and usage fetches are timeout bounded', async () => {
   assert.match(serverSource, /return text \? JSON\.parse\(text\) : \{\}/)
   assert.match(serverSource, /const MAX_USAGE_BUCKETS = 20/)
   assert.match(serverSource, /const MAX_USAGE_BUCKET_LABEL_LENGTH = 120/)
+  assert.match(serverSource, /const MAX_USAGE_CURRENCY_LENGTH = 12/)
   assert.match(serverSource, /const DEFAULT_USAGE_PERIOD_DAYS = 30/)
   assert.match(serverSource, /const MAX_USAGE_PERIOD_DAYS = 90/)
   assert.match(serverSource, /const USAGE_PERIOD_DAYS = configuredInteger\(process\.env\.OPENAI_USAGE_PERIOD_DAYS/)
@@ -726,6 +727,10 @@ test('upstream OpenAI and usage fetches are timeout bounded', async () => {
   assert.match(serverSource, /function finiteNumber\(value, fallback = 0\)/)
   assert.match(serverSource, /function topUsageBuckets\(totalsByLabel\)/)
   assert.match(serverSource, /\.slice\(0, MAX_USAGE_BUCKETS\)/)
+  assert.match(serverSource, /function normalizeUsageCurrency\(value, fallback = 'usd'\)/)
+  assert.match(serverSource, /\^\[a-z\]\{3,12\}\$/)
+  assert.match(serverSource, /currency = normalizeUsageCurrency\(result\.amount\.currency, currency\)/)
+  assert.doesNotMatch(serverSource, /currency = result\.amount\.currency/)
   assert.match(serverSource, /\[\.\.\.totalsByLabel\.values\(\)\]\.reduce\(/)
   assert.match(serverSource, /buckets: topUsageBuckets\(totalsByLabel\)/)
   assert.match(
