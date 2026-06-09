@@ -600,6 +600,11 @@ const realtimeTranscriptKeyPart = (value: unknown) => {
   return ''
 }
 
+const realtimeTranscriptIndexPart = (value: unknown, label: string) => {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) return ''
+  return `${label}-${value}`
+}
+
 const realtimeErrorMessage = (value: unknown, fallback: string) => {
   if (!value || typeof value !== 'object') return fallback
   const message = (value as UnknownRecord).message
@@ -976,9 +981,9 @@ function App() {
       realtimeTranscriptKeyPart(message.response_id) ||
       realtimeTranscriptKeyPart(message.event_id) ||
       `${type}-${Date.now()}`
-    const outputIndex = realtimeTranscriptKeyPart(message.output_index)
-    const contentIndex = realtimeTranscriptKeyPart(message.content_index)
-    const transcriptId = [itemId, outputIndex ? `output-${outputIndex}` : '', contentIndex ? `content-${contentIndex}` : '']
+    const outputIndex = realtimeTranscriptIndexPart(message.output_index, 'output')
+    const contentIndex = realtimeTranscriptIndexPart(message.content_index, 'content')
+    const transcriptId = [itemId, outputIndex, contentIndex]
       .filter(Boolean)
       .join(':')
 
