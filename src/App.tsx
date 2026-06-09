@@ -1263,19 +1263,18 @@ function App() {
       updatedAt: new Date().toISOString(),
     }
 
-    setConversationsByWorkspace((current) => ({
-      ...current,
-      [workspacePath]: mergeConversations(current[workspacePath] ?? existing, [conversation]),
-    }))
-    openConversationWindow(workspacePath, conversation.id)
-    showNotice(`${title} opened as a new agent conversation window. Start voice to describe the build goal.`)
-
     try {
-      await api('/api/app-state/conversations', {
+      const savedConversation = await api<{ conversation: AgentConversation }>('/api/app-state/conversations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ workspacePath, conversation: savedConversationPayload(conversation) }),
       })
+      setConversationsByWorkspace((current) => ({
+        ...current,
+        [workspacePath]: mergeConversations(current[workspacePath] ?? existing, [savedConversation.conversation]),
+      }))
+      openConversationWindow(workspacePath, savedConversation.conversation.id)
+      showNotice(`${title} opened as a new agent conversation window. Start voice to describe the build goal.`)
     } catch (error) {
       setLastError(displayErrorMessage(error, 'Failed to save agent conversation'))
     }
@@ -1290,22 +1289,33 @@ function App() {
     }
     const workspace = { id: workspacePath, name, path: workspacePath }
 
-    setUserWorkspaces((current) => [workspace, ...current.filter((item) => workspacePathFor(item) !== workspacePath)])
-    setConversationsByWorkspace((current) => ({ ...current, [workspacePath]: current[workspacePath] ?? [] }))
-    setCollapsedWorkspaces((current) => current.filter((item) => item !== workspacePath))
-    setSelectedWorkspace(workspacePath)
-    setSelectedConversationId('')
-    setActiveSystemScreen(null)
-    setSelectedArtifact(null)
-    setArtifactPreviewLease(null)
-    showNotice(`${name} added as a workspace. Create a new agent conversation when you are ready.`)
-
     try {
-      await api('/api/app-state/workspaces', {
+      const savedWorkspace = await api<{ workspace: Workspace; state: AppStateResponse }>('/api/app-state/workspaces', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ workspace }),
       })
+      const savedWorkspacePath = workspacePathFor(savedWorkspace.workspace)
+      if (!isAbsoluteLocalWorkspacePath(savedWorkspacePath)) {
+        throw new Error('Saved workspace response did not include a local path.')
+      }
+      const savedWorkspaces = (savedWorkspace.state.workspaces ?? [savedWorkspace.workspace]).filter((workspace) =>
+        isAbsoluteLocalWorkspacePath(workspacePathFor(workspace)),
+      )
+
+      setUserWorkspaces(savedWorkspaces)
+      setHiddenWorkspacePaths((savedWorkspace.state.hiddenWorkspacePaths ?? []).map(normalizeAbsoluteLocalWorkspacePath))
+      setConversationsByWorkspace((current) => ({
+        ...current,
+        [savedWorkspacePath]: current[savedWorkspacePath] ?? savedWorkspace.state.conversationsByWorkspace?.[savedWorkspacePath] ?? [],
+      }))
+      setCollapsedWorkspaces((current) => current.filter((item) => item !== savedWorkspacePath))
+      setSelectedWorkspace(savedWorkspacePath)
+      setSelectedConversationId('')
+      setActiveSystemScreen(null)
+      setSelectedArtifact(null)
+      setArtifactPreviewLease(null)
+      showNotice(`${savedWorkspace.workspace.name} added as a workspace. Create a new agent conversation when you are ready.`)
     } catch (error) {
       setLastError(displayErrorMessage(error, 'Failed to save workspace'))
     }
