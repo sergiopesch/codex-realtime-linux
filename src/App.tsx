@@ -614,7 +614,7 @@ const resolvedRealtimeTranscriptText = (currentText: string, replacementText: st
   const replacement = boundedRealtimeTranscriptText(replacementText)
   if (!replacement) return current
   if (!current) return replacement
-  return current.startsWith(replacement) && replacement.length < current.length ? current : replacement
+  return replacement.length < current.length ? current : replacement
 }
 
 const realtimeTranscriptKeyPart = (value: unknown) => {
