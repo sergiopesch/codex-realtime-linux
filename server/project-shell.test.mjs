@@ -180,6 +180,8 @@ test('artifact previews are served through workspace-scoped routes only', async 
   assert.match(appSource, /return dismissedTime == null \|\| artifactTime == null \|\| artifactTime <= dismissedTime/)
   assert.match(appSource, /const artifactPreview =[\s\S]*!activeSystemScreen &&[\s\S]*selectedArtifact &&[\s\S]*artifactPreviewLease &&[\s\S]*selectedArtifact\.workspacePath === selectedWorkspace &&[\s\S]*selectedArtifact\.workspacePath === artifactPreviewLease\.workspacePath &&[\s\S]*selectedArtifact\.url === artifactPreviewLease\.url &&[\s\S]*!artifactMatchesDismissal\(selectedArtifact, dismissedArtifact\)/)
   assert.match(appSource, /const shouldShowArtifactBrowser = Boolean\(artifactPreview\)/)
+  assert.doesNotMatch(appSource, /const shouldShowArtifactBrowser = true/)
+  assert.doesNotMatch(appSource, /const shouldShowArtifactBrowser = Boolean\(selectedArtifact\)/)
   assert.match(appSource, /const closeArtifactPreview = useCallback\(\(\) => \{[\s\S]*setSelectedArtifact\(null\)[\s\S]*setArtifactPreviewLease\(null\)[\s\S]*\}, \[\]\)/)
   assert.match(appSource, /workspacePath: artifactPreview\.workspacePath/)
   assert.match(appSource, /fetchGeneratedArtifacts\(preferredPath, \{ signal: controller\.signal \}\)[\s\S]*setArtifacts\(artifactData\.data\)[\s\S]*setSelectedArtifact\(null\)[\s\S]*setArtifactPreviewLease\(null\)/)
@@ -236,6 +238,29 @@ test('artifact previews are served through workspace-scoped routes only', async 
   assert.doesNotMatch(appSource, /const agentIsWorkingOnArtifact = Boolean\(pendingArtifact && activeThreadId\)/)
   assert.match(appSource, /sandbox="allow-scripts"/)
   assert.doesNotMatch(appSource, /sandbox="allow-scripts allow-same-origin"/)
+})
+
+test('renderer normalizes usage data before rendering charts', async () => {
+  const appSource = await readFile(path.join(repoRoot, 'src', 'App.tsx'), 'utf8')
+
+  assert.match(appSource, /const MAX_UI_USAGE_BUCKETS = 50/)
+  assert.match(appSource, /const MAX_UI_USAGE_LABEL_LENGTH = 120/)
+  assert.match(appSource, /const finiteUiNumber = \(value: unknown, fallback = 0\) =>/)
+  assert.match(appSource, /typeof value === 'number' && Number\.isFinite\(value\) \? value : fallback/)
+  assert.match(appSource, /const nonNegativeUiNumber = \(value: unknown, fallback = 0\) => Math\.max\(0, finiteUiNumber\(value, fallback\)\)/)
+  assert.match(appSource, /const safeUsageBuckets = \(values: unknown\) =>/)
+  assert.match(appSource, /Array\.isArray\(values\)/)
+  assert.match(appSource, /\.slice\(0, MAX_UI_USAGE_BUCKETS\)/)
+  assert.match(appSource, /const safeTokenTotals = \(value: unknown\) =>/)
+  assert.match(appSource, /costBuckets = useMemo\(\(\) => safeUsageBuckets\(spend\?\.data\?\.costBuckets\)/)
+  assert.match(appSource, /tokenBuckets = useMemo\(\(\) => safeUsageBuckets\(spend\?\.data\?\.tokenBuckets\)/)
+  assert.match(appSource, /tokenTotals = useMemo\(\(\) => safeTokenTotals\(spend\?\.data\?\.tokenTotals\)/)
+  assert.match(appSource, /const usagePeriodDays = Math\.max\(1, Math\.floor\(nonNegativeUiNumber\(spend\?\.data\?\.periodDays, 30\)\)\)/)
+  assert.match(appSource, /formatTokens\(tokenTotals\.total\)/)
+  assert.doesNotMatch(appSource, /const costBuckets = useMemo\(\(\) => spend\?\.data\?\.costBuckets \?\? \[\]/)
+  assert.doesNotMatch(appSource, /const tokenBuckets = useMemo\(\(\) => spend\?\.data\?\.tokenBuckets \?\? \[\]/)
+  assert.doesNotMatch(appSource, /const tokenTotals = spend\?\.data\?\.tokenTotals \?\? \{/)
+  assert.doesNotMatch(appSource, /format\(value \?\? 0\)/)
 })
 
 test('persisted workspaces and conversations require absolute workspace paths', async () => {

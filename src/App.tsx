@@ -269,6 +269,8 @@ const MAX_UI_EVENT_STRING_LENGTH = 2_000
 const MAX_UI_EVENT_ARRAY_ITEMS = 20
 const MAX_UI_EVENT_OBJECT_KEYS = 30
 const MAX_UI_EVENT_DEPTH = 6
+const MAX_UI_USAGE_BUCKETS = 50
+const MAX_UI_USAGE_LABEL_LENGTH = 120
 const MAX_SEEN_USB_EVENT_IDS = 240
 const MAX_VISUAL_CONTEXT_IMAGE_FILE_BYTES = 12 * 1024 * 1024
 const VISUAL_CONTEXT_CAPTURE_TIMEOUT_MS = 10_000
@@ -461,13 +463,18 @@ const titleFromGoal = (goal: string) => {
   return brief === 'Untitled' ? 'Voice routed work' : brief
 }
 
+const finiteUiNumber = (value: unknown, fallback = 0) =>
+  typeof value === 'number' && Number.isFinite(value) ? value : fallback
+
+const nonNegativeUiNumber = (value: unknown, fallback = 0) => Math.max(0, finiteUiNumber(value, fallback))
+
 const formatGbp = (value: number | null | undefined) =>
-  typeof value === 'number'
+  typeof value === 'number' && Number.isFinite(value)
     ? new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 2 }).format(value)
     : 'No cost data'
 
 const formatTokens = (value: number | null | undefined) =>
-  new Intl.NumberFormat('en-GB', { notation: 'compact', maximumFractionDigits: 1 }).format(value ?? 0)
+  new Intl.NumberFormat('en-GB', { notation: 'compact', maximumFractionDigits: 1 }).format(finiteUiNumber(value))
 
 const makeDraftConversation = (
   workspacePath: string,
@@ -513,6 +520,30 @@ const savedConversationPayload = (conversation: AgentConversation) => ({
 const boundedPlainString = (value: unknown, fallback = '', maxLength = 1_000) => {
   const text = typeof value === 'string' && value ? value : fallback
   return text.length > maxLength ? `${text.slice(0, Math.max(0, maxLength - 3))}...` : text
+}
+
+const safeUsageBuckets = (values: unknown) =>
+  Array.isArray(values)
+    ? values
+        .map((bucket) => ({
+          label: boundedPlainString((bucket as { label?: unknown })?.label, 'Usage', MAX_UI_USAGE_LABEL_LENGTH),
+          value: nonNegativeUiNumber((bucket as { value?: unknown })?.value),
+        }))
+        .filter((bucket) => bucket.label && bucket.value >= 0)
+        .slice(0, MAX_UI_USAGE_BUCKETS)
+    : []
+
+const safeTokenTotals = (value: unknown) => {
+  const totals = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
+  return {
+    input: nonNegativeUiNumber(totals.input),
+    output: nonNegativeUiNumber(totals.output),
+    cached: nonNegativeUiNumber(totals.cached),
+    audioInput: nonNegativeUiNumber(totals.audioInput),
+    audioOutput: nonNegativeUiNumber(totals.audioOutput),
+    total: nonNegativeUiNumber(totals.total),
+    requests: nonNegativeUiNumber(totals.requests),
+  }
 }
 
 const requireRealtimeToolText = (value: unknown, label: string, maxLength = MAX_REALTIME_TOOL_TEXT_LENGTH) => {
@@ -757,17 +788,9 @@ function App() {
   const seenUsbEventIdsRef = useRef<Set<string>>(new Set())
   const usbInitializedRef = useRef(false)
 
-  const costBuckets = useMemo(() => spend?.data?.costBuckets ?? [], [spend?.data?.costBuckets])
-  const tokenBuckets = useMemo(() => spend?.data?.tokenBuckets ?? [], [spend?.data?.tokenBuckets])
-  const tokenTotals = spend?.data?.tokenTotals ?? {
-    input: 0,
-    output: 0,
-    cached: 0,
-    audioInput: 0,
-    audioOutput: 0,
-    total: 0,
-    requests: 0,
-  }
+  const costBuckets = useMemo(() => safeUsageBuckets(spend?.data?.costBuckets), [spend?.data?.costBuckets])
+  const tokenBuckets = useMemo(() => safeUsageBuckets(spend?.data?.tokenBuckets), [spend?.data?.tokenBuckets])
+  const tokenTotals = useMemo(() => safeTokenTotals(spend?.data?.tokenTotals), [spend?.data?.tokenTotals])
 
   const hasDesktopWindowControls = Boolean((window as DesktopWindow).desktopWindow)
   const workspaceSource = useMemo(() => {
@@ -2504,16 +2527,21 @@ function App() {
 
     if (activeSystemScreen === 'usage') {
       const hasLiveUsage = spend?.source === 'admin-api'
-      const costPeak = Math.max(...costBuckets.map((bucket) => bucket.value), spend?.data?.totalCostGbp ?? 0, 1)
+      const totalCostGbp =
+        typeof spend?.data?.totalCostGbp === 'number' && Number.isFinite(spend.data.totalCostGbp)
+          ? Math.max(0, spend.data.totalCostGbp)
+          : null
+      const usagePeriodDays = Math.max(1, Math.floor(nonNegativeUiNumber(spend?.data?.periodDays, 30)))
+      const costPeak = Math.max(...costBuckets.map((bucket) => bucket.value), totalCostGbp ?? 0, 1)
       const tokenPeak = Math.max(...tokenBuckets.map((bucket) => bucket.value), tokenTotals.total, 1)
 
       return (
         <section className="system-screen system-usage">
           <header className="system-page-header usage-header">
-            <h2>{hasLiveUsage ? formatGbp(spend?.data?.totalCostGbp) : 'Usage'}</h2>
+            <h2>{hasLiveUsage ? formatGbp(totalCostGbp) : 'Usage'}</h2>
             <small>
               {hasLiveUsage
-                ? `${formatTokens(tokenTotals.total)} tokens over ${spend?.data?.periodDays ?? 30} days`
+                ? `${formatTokens(tokenTotals.total)} tokens over ${usagePeriodDays} days`
                 : 'Add OPENAI_ADMIN_KEY for live organization usage'}
             </small>
           </header>
