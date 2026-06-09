@@ -189,6 +189,7 @@ OPENAI_USAGE_GBP_RATE_API=https://api.frankfurter.app/latest?from=USD&to=GBP
 ## Architecture
 
 - `server/index.mjs` is the local API bridge for Realtime session creation, Codex app-server RPC, workspace discovery, events, spending, and rate limits.
+- `/api/status` is the desktop health contract used by the Electron launcher; unexpected status probe failures return bounded JSON errors instead of unhandled responses.
 - `/api/weather/current` resolves a place name and returns normalized current weather data without requiring an API key.
 - `/api/usb/events` reports Linux USB serial add/remove events with bounded device metadata and bounded monitor status errors, and flags Arduino-like devices.
 - `/api/arduino/upload` compiles and uploads sketches with `arduino-cli`; `/api/arduino/status` returns bounded CLI and board metadata, and uploads ignore malformed detected FQBNs before falling back to `ARDUINO_DEFAULT_FQBN=arduino:avr:uno`.

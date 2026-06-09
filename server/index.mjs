@@ -1609,34 +1609,42 @@ async function handleCurrentWeather(req, res) {
 }
 
 app.get('/api/status', async (_req, res) => {
-  const openAiApiKey = getOpenAiApiKey()
-  const codexApiKey = getCodexApiKey()
-  const arduino = await getArduinoCliStatus()
-  res.json({
-    realtime: Boolean(openAiApiKey),
-    openAiKeySource: getOpenAiKeySource(),
-    adminApi: Boolean(OPENAI_ADMIN_KEY),
-    codexApiKey: Boolean(codexApiKey),
-    codexAuthPreference: codexApiKey ? 'api-key' : 'existing-codex-auth',
-    codexBin: CODEX_BIN,
-    realtimeModel: REALTIME_MODEL,
-    codexModel: CODEX_MODEL,
-    visionModel: VISION_MODEL,
-    realtimeVoice: REALTIME_VOICE,
-    appRoot: REPO_ROOT,
-    appName: path.basename(REPO_ROOT),
-    desktopServer: {
-      pid: process.pid,
-      token: DESKTOP_SERVER_TOKEN || null,
-    },
-    defaultWeatherLocation: REALTIME_USER_LOCATION,
-    realtimeUser: {
-      name: REALTIME_USER_NAME,
-      location: REALTIME_USER_LOCATION,
-    },
-    arduino,
-    usb: usbMonitor.status(),
-  })
+  try {
+    const openAiApiKey = getOpenAiApiKey()
+    const codexApiKey = getCodexApiKey()
+    const arduino = await getArduinoCliStatus()
+    res.json({
+      realtime: Boolean(openAiApiKey),
+      openAiKeySource: getOpenAiKeySource(),
+      adminApi: Boolean(OPENAI_ADMIN_KEY),
+      codexApiKey: Boolean(codexApiKey),
+      codexAuthPreference: codexApiKey ? 'api-key' : 'existing-codex-auth',
+      codexBin: CODEX_BIN,
+      realtimeModel: REALTIME_MODEL,
+      codexModel: CODEX_MODEL,
+      visionModel: VISION_MODEL,
+      realtimeVoice: REALTIME_VOICE,
+      appRoot: REPO_ROOT,
+      appName: path.basename(REPO_ROOT),
+      desktopServer: {
+        pid: process.pid,
+        token: DESKTOP_SERVER_TOKEN || null,
+      },
+      defaultWeatherLocation: REALTIME_USER_LOCATION,
+      realtimeUser: {
+        name: REALTIME_USER_NAME,
+        location: REALTIME_USER_LOCATION,
+      },
+      arduino,
+      usb: usbMonitor.status(),
+    })
+  } catch (error) {
+    sendJsonError(res, error, {
+      fallbackStatus: 500,
+      fallbackMessage: 'Failed to read application status.',
+      fallbackCode: 'status_failed',
+    })
+  }
 })
 
 app.post('/api/realtime/token', async (_req, res) => {
