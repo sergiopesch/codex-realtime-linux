@@ -879,7 +879,8 @@ const safeConversation = (value: unknown, workspacePath: string): AgentConversat
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const conversation = value as UnknownRecord
   const title = boundedPlainString(conversation.title, 'Untitled conversation', MAX_UI_CONVERSATION_TITLE_LENGTH)
-  const id = boundedPlainString(conversation.id, `${workspacePath}::${slug(title)}`, MAX_REALTIME_FUNCTION_CALL_ID_LENGTH)
+  const rawId = typeof conversation.id === 'string' ? conversation.id.trim() : ''
+  const id = boundedPlainString(rawId, '', MAX_REALTIME_FUNCTION_CALL_ID_LENGTH)
   if (!id) return null
   const status = conversation.status === 'ready' || conversation.status === 'running' || conversation.status === 'draft' ? conversation.status : 'draft'
   return {
