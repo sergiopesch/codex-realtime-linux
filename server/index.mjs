@@ -1707,6 +1707,24 @@ function normalizeCodexEntityId(entity, label) {
   return id
 }
 
+async function archiveCodexThreadBestEffort(threadId, reason) {
+  if (!threadId) return
+  try {
+    await codex.request('thread/archive', { threadId })
+    codex.recordNotification({
+      method: 'codex/thread-archive-cleanup',
+      receivedAt: new Date().toISOString(),
+      params: { threadId, reason },
+    })
+  } catch (error) {
+    codex.recordNotification({
+      method: 'codex/thread-archive-cleanup-failed',
+      receivedAt: new Date().toISOString(),
+      params: { threadId, reason, message: responseErrorMessage(error, 'Failed to archive failed Codex thread.') },
+    })
+  }
+}
+
 function finiteNumber(value, fallback = 0) {
   const number = Number(value)
   return Number.isFinite(number) ? number : fallback
@@ -2189,6 +2207,7 @@ app.post('/api/codex/thread/archive', async (req, res) => {
 })
 
 app.post('/api/codex/task', async (req, res) => {
+  let threadId = ''
   try {
     const body = requireObjectBody(req.body, 'Codex task request')
     const goal = requireText(body.goal, 'goal')
@@ -2204,7 +2223,7 @@ app.post('/api/codex/task', async (req, res) => {
       approvalPolicy: CODEX_APPROVAL_POLICY,
       serviceName: 'codex_realtime_linux',
     })
-    const threadId = normalizeCodexEntityId(threadResult.thread, 'thread')
+    threadId = normalizeCodexEntityId(threadResult.thread, 'thread')
     const turnResult = await codex.request('turn/start', {
       threadId,
       input: [{ type: 'text', text: goalForWorkspace(cwd, goal, artifactPlan) }],
@@ -2212,6 +2231,7 @@ app.post('/api/codex/task', async (req, res) => {
     const turnId = normalizeCodexEntityId(turnResult.turn, 'turn')
     res.json({ thread: { id: threadId }, turn: { id: turnId }, artifact: publicArtifactPlan(artifactPlan) })
   } catch (error) {
+    await archiveCodexThreadBestEffort(threadId, 'codex task startup failed')
     sendJsonError(res, error, { fallbackStatus: 502, fallbackMessage: 'Failed to start Codex task.' })
   }
 })

@@ -836,6 +836,50 @@ test('codex task returns public artifact metadata for external workspace artifac
   assert.equal(threadListMessages[1].params.cwd, workspacePath)
 })
 
+test('codex task archives started thread when turn start fails', async (t) => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-failed-task-cleanup-'))
+  const workspacePath = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-failed-task-workspace-'))
+  t.after(() => rm(tempDir, { recursive: true, force: true }))
+  t.after(() => rm(workspacePath, { recursive: true, force: true }))
+  const { fakeCodexPath, logPath } = await writeFakeCodexAppServer(tempDir)
+  const { baseUrl } = await startTestServer(t, {
+    CODEX_BIN: fakeCodexPath,
+    CODEX_API_KEY: '',
+    CODEX_USE_OPENAI_API_KEY: 'false',
+    FAKE_CODEX_RPC_LOG: logPath,
+    FAKE_CODEX_ERROR_METHODS: 'turn/start',
+    FAKE_CODEX_ERROR_MESSAGE: 'turn failed after thread start',
+  })
+
+  const response = await fetch(`${baseUrl}/api/codex/task`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      cwd: workspacePath,
+      goal: 'Review this workspace and summarize it.',
+    }),
+  })
+  assert.equal(response.status, 502)
+  assert.match((await readJson(response)).error, /turn failed after thread start/)
+
+  const rpcMessages = (await readFile(logPath, 'utf8'))
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line))
+  assert.deepEqual(
+    rpcMessages
+      .map((message) => message.method)
+      .filter((method) => ['thread/start', 'turn/start', 'thread/archive'].includes(method)),
+    ['thread/start', 'turn/start', 'thread/archive'],
+  )
+  assert.equal(rpcMessages.find((message) => message.method === 'thread/archive')?.params?.threadId, 'thread-ok')
+
+  const events = await fetch(`${baseUrl}/api/codex/events`)
+  assert.equal(events.status, 200)
+  const eventsBody = await events.json()
+  assert.equal(eventsBody.data.some((event) => event.method === 'codex/thread-archive-cleanup'), true)
+})
+
 test('codex app-source tasks require an explicit environment opt-in', async (t) => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-fake-codex-app-source-'))
   t.after(() => rm(tempDir, { recursive: true, force: true }))
