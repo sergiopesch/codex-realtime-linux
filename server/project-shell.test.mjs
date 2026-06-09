@@ -491,6 +491,7 @@ test('realtime voice sessions reset transcript state and clean up media resource
 
   assert.match(appSource, /const DEFAULT_API_TIMEOUT_MS = 130_000/)
   assert.match(appSource, /const REALTIME_CONNECTION_TIMEOUT_MS = 30_000/)
+  assert.match(appSource, /const MAX_REALTIME_EVENT_MESSAGE_LENGTH = 120_000/)
   assert.match(appSource, /const MAX_REALTIME_FUNCTION_ARGUMENTS_LENGTH = 80_000/)
   assert.match(appSource, /const MAX_REALTIME_TRANSCRIPT_LINES = 80/)
   assert.match(appSource, /const MAX_REALTIME_TRANSCRIPT_ID_LENGTH = 240/)
@@ -526,6 +527,8 @@ test('realtime voice sessions reset transcript state and clean up media resource
   assert.doesNotMatch(appSource, /const message = error instanceof Error \? error\.message :/)
   assert.match(appSource, /\.\.\.incoming\.map\(normalizeUiEventRecord\), \.\.\.current\.map\(normalizeUiEventRecord\)/)
   assert.match(appSource, /appendEvent\(typeof message\.type === 'string' \? message\.type : 'realtime\/event', message\)/)
+  assert.match(appSource, /typeof event\.data !== 'string' \|\| event\.data\.length > MAX_REALTIME_EVENT_MESSAGE_LENGTH/)
+  assert.match(appSource, /appendEvent\('realtime\/message-dropped'/)
   assert.doesNotMatch(appSource, /params: message,\s*\}\]\),\s*\)/)
   assert.match(appSource, /eventType === 'response\.output_item\.done' && item\?\.type === 'function_call'/)
   assert.match(appSource, /eventType !== 'response\.function_call_arguments\.done'/)

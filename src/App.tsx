@@ -238,6 +238,7 @@ type DesktopWindow = Window & {
 const initialWorkspacePath = ''
 const DEFAULT_API_TIMEOUT_MS = 130_000
 const REALTIME_CONNECTION_TIMEOUT_MS = 30_000
+const MAX_REALTIME_EVENT_MESSAGE_LENGTH = 120_000
 const MAX_REALTIME_FUNCTION_ARGUMENTS_LENGTH = 80_000
 const MAX_REALTIME_TRANSCRIPT_LINES = 80
 const MAX_REALTIME_TRANSCRIPT_ID_LENGTH = 240
@@ -1676,6 +1677,13 @@ function App() {
       dataChannel.addEventListener('message', (event) => {
         let message: Record<string, unknown>
         try {
+          if (typeof event.data !== 'string' || event.data.length > MAX_REALTIME_EVENT_MESSAGE_LENGTH) {
+            appendEvent('realtime/message-dropped', {
+              reason: typeof event.data === 'string' ? 'too-large' : 'non-string',
+              size: typeof event.data === 'string' ? event.data.length : null,
+            })
+            return
+          }
           message = JSON.parse(event.data)
         } catch {
           appendEvent('realtime/message-unreadable')
