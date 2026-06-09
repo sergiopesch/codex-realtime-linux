@@ -10,6 +10,7 @@ import {
   listArduinoBoards,
   listSerialPorts,
   normalizeUploadRequest,
+  resolveSerialByIdPortTarget,
   runCommand,
   sketchForAction,
   uploadArduinoSketch,
@@ -200,6 +201,22 @@ test('listSerialPorts prefers stable serial-by-id links before tty fallbacks', a
     path.join(devDir, 'ttyACM0'),
     path.join(devDir, 'ttyUSB1'),
   ])
+})
+
+test('resolveSerialByIdPortTarget maps a stable by-id port to its tty target', async (t) => {
+  const devDir = await mkdtemp(path.join(os.tmpdir(), 'codex-arduino-dev-'))
+  t.after(() => rm(devDir, { recursive: true, force: true }))
+  const serialByIdDir = path.join(devDir, 'serial', 'by-id')
+  const byIdPort = path.join(serialByIdDir, 'usb-Arduino_Nano-if00')
+
+  await mkdir(serialByIdDir, { recursive: true })
+  await writeFile(path.join(devDir, 'ttyUSB0'), '')
+  await symlink('../../ttyUSB0', byIdPort)
+
+  assert.equal(
+    await resolveSerialByIdPortTarget(byIdPort, { devDir, serialByIdDir }),
+    path.join(devDir, 'ttyUSB0'),
+  )
 })
 
 test('listSerialPorts bounds returned serial ports', async (t) => {
@@ -415,6 +432,43 @@ test('uploadArduinoSketch uses detected board FQBN for an explicit stable serial
       run,
       listPorts: async () => ['/dev/serial/by-id/usb-Arduino_Nano-if00', '/dev/ttyUSB0'],
       listBoards: async () => [{ address: '/dev/ttyUSB0', fqbn: 'arduino:avr:nano', boardName: 'Arduino Nano' }],
+    },
+  )
+
+  assert.equal(result.port, '/dev/serial/by-id/usb-Arduino_Nano-if00')
+  assert.equal(result.fqbn, 'arduino:avr:nano')
+  assert.equal(result.boardName, 'Arduino Nano')
+  assert.deepEqual(commands[0].slice(0, 3), ['compile', '--fqbn', 'arduino:avr:nano'])
+  assert.deepEqual(commands[1].slice(0, 5), [
+    'upload',
+    '-p',
+    '/dev/serial/by-id/usb-Arduino_Nano-if00',
+    '--fqbn',
+    'arduino:avr:nano',
+  ])
+})
+
+test('uploadArduinoSketch maps an explicit stable by-id port to the matching board among multiple ttys', async () => {
+  const commands = []
+  const run = async (args) => {
+    commands.push(args)
+    return { stdout: `${args[0]} ok`, stderr: '' }
+  }
+
+  const result = await uploadArduinoSketch(
+    { action: 'onboard_led_blink', port: '/dev/serial/by-id/usb-Arduino_Nano-if00' },
+    {
+      run,
+      listPorts: async () => [
+        '/dev/serial/by-id/usb-Arduino_Nano-if00',
+        '/dev/ttyACM0',
+        '/dev/ttyUSB0',
+      ],
+      listBoards: async () => [
+        { address: '/dev/ttyACM0', fqbn: 'arduino:avr:uno', boardName: 'Arduino Uno' },
+        { address: '/dev/ttyUSB0', fqbn: 'arduino:avr:nano', boardName: 'Arduino Nano' },
+      ],
+      resolvePortAlias: async () => '/dev/ttyUSB0',
     },
   )
 

@@ -256,9 +256,33 @@ function preferredPortForDetectedBoard(detectedPort, ports) {
   return detectedPort
 }
 
-function boardAddressForRequestedPort(requestedPort, ports) {
+export async function resolveSerialByIdPortTarget(
+  requestedPort,
+  { devDir = '/dev', serialByIdDir = DEFAULT_SERIAL_BY_ID_DIR } = {},
+) {
+  const requestedPortName = path.basename(requestedPort)
+  if (!SERIAL_BY_ID_NAME_PATTERN.test(requestedPortName)) return null
+  const portPath = path.join(serialByIdDir, requestedPortName)
+  if (requestedPort !== portPath) return null
+
+  try {
+    const target = await readlink(portPath)
+    const resolvedTarget = path.resolve(serialByIdDir, target)
+    const targetName = path.basename(resolvedTarget)
+    if (SERIAL_PORT_PATTERN.test(targetName) && resolvedTarget === path.join(devDir, targetName)) {
+      return resolvedTarget
+    }
+  } catch {
+    // Fall back to the visible requested port when the symlink changes during upload.
+  }
+
+  return null
+}
+
+function boardAddressForRequestedPort(requestedPort, ports, resolvedPortTarget = null) {
   if (!requestedPort || SERIAL_PORT_PATH_PATTERN.test(requestedPort)) return requestedPort
   if (!SERIAL_BY_ID_PATTERN.test(requestedPort) || !ports.includes(requestedPort)) return requestedPort
+  if (resolvedPortTarget && ports.includes(resolvedPortTarget)) return resolvedPortTarget
   const ttyPorts = ports.filter((port) => SERIAL_PORT_PATH_PATTERN.test(port))
   return ttyPorts.length === 1 ? ttyPorts[0] : requestedPort
 }
@@ -440,7 +464,12 @@ export async function getArduinoCliStatus({ run = runArduinoCli } = {}) {
 
 export async function uploadArduinoSketch(
   input = {},
-  { run = runArduinoCli, listPorts = listSerialPorts, listBoards = listArduinoBoards } = {},
+  {
+    run = runArduinoCli,
+    listPorts = listSerialPorts,
+    listBoards = listArduinoBoards,
+    resolvePortAlias = resolveSerialByIdPortTarget,
+  } = {},
 ) {
   const request = normalizeUploadRequest(input)
   const [rawPorts, rawBoards] = await Promise.all([listPorts(), listBoards({ run })])
@@ -481,7 +510,15 @@ export async function uploadArduinoSketch(
       },
     })
   }
-  const boardAddressForRequest = boardAddressForRequestedPort(request.port, ports)
+  let resolvedRequestedPortTarget = null
+  if (request.port && SERIAL_BY_ID_PATTERN.test(request.port)) {
+    try {
+      resolvedRequestedPortTarget = await resolvePortAlias(request.port)
+    } catch {
+      resolvedRequestedPortTarget = null
+    }
+  }
+  const boardAddressForRequest = boardAddressForRequestedPort(request.port, ports, resolvedRequestedPortTarget)
   const matchingBoard = boardAddressForRequest ? boards.find((board) => board.address === boardAddressForRequest) : null
   const autoDetectedBoard = request.port ? null : uploadableBoards[0]
   const detectedBoard = matchingBoard ?? autoDetectedBoard
