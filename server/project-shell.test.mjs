@@ -465,12 +465,15 @@ test('upstream OpenAI and usage fetches are timeout bounded', async () => {
 
 test('Arduino explicit-port uploads do not borrow unrelated detected board metadata', async () => {
   const arduinoSource = await readFile(path.join(repoRoot, 'server', 'arduino.mjs'), 'utf8')
+  const appSource = await readFile(path.join(repoRoot, 'src', 'App.tsx'), 'utf8')
 
   assert.match(arduinoSource, /function normalizeDetectedBoard\(entry\)/)
   assert.match(arduinoSource, /const DEFAULT_FQBN = FQBN_PATTERN\.test\(CONFIGURED_DEFAULT_FQBN\) \? CONFIGURED_DEFAULT_FQBN : 'arduino:avr:uno'/)
+  assert.match(arduinoSource, /const SKETCH_NAME_PATTERN = \/\^\[a-zA-Z\]\[a-zA-Z0-9_\]\{0,48\}\$\//)
   assert.match(arduinoSource, /const MAX_COMMAND_CAPTURE_CHARS = 16_000/)
   assert.match(arduinoSource, /const MAX_SERIAL_PORT_SCAN_ENTRIES = 400/)
   assert.match(arduinoSource, /const MAX_SERIAL_PORTS = 80/)
+  assert.match(arduinoSource, /code: 'arduino_invalid_sketch_name'/)
   assert.match(arduinoSource, /function appendCommandOutput\(current, chunk\)/)
   assert.match(arduinoSource, /stdout = appendCommandOutput\(stdout, chunk\)/)
   assert.match(arduinoSource, /stderr = appendCommandOutput\(stderr, chunk\)/)
@@ -485,6 +488,8 @@ test('Arduino explicit-port uploads do not borrow unrelated detected board metad
   assert.match(arduinoSource, /const autoDetectedBoard = request\.port \? null : boards\[0\]/)
   assert.match(arduinoSource, /const detectedBoard = matchingBoard \?\? autoDetectedBoard/)
   assert.doesNotMatch(arduinoSource, /boards\.find\(\(board\) => board\.address === request\.port\) \?\? boards\[0\]/)
+  assert.match(appSource, /const action = typeof payload\.action === 'string' \? payload\.action : undefined/)
+  assert.doesNotMatch(appSource, /payload\.action === 'onboard_led_blink' \|\| payload\.action === 'custom_sketch'[\s\S]{0,120}: 'onboard_led_on'/)
 })
 
 test('electron shell keeps renderer isolation and external navigation guarded', async () => {

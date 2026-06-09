@@ -1660,10 +1660,7 @@ function App() {
 
       if (item.name === 'arduino_upload_sketch') {
         setActivity('Arduino upload', 'Compiling sketch')
-        const action =
-          payload.action === 'onboard_led_blink' || payload.action === 'custom_sketch'
-            ? payload.action
-            : 'onboard_led_on'
+        const action = typeof payload.action === 'string' ? payload.action : undefined
         result = await uploadArduinoSketch({
           action,
           port: typeof payload.port === 'string' ? payload.port : undefined,
