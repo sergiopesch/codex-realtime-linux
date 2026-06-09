@@ -1,6 +1,6 @@
 const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron')
 const { spawn } = require('node:child_process')
-const { createWriteStream, mkdirSync } = require('node:fs')
+const { closeSync, mkdirSync, openSync, writeSync } = require('node:fs')
 const http = require('node:http')
 const os = require('node:os')
 const path = require('node:path')
@@ -18,7 +18,7 @@ const repoRoot = path.join(__dirname, '..')
 const stateDir = path.join(process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local', 'state'), 'codex-realtime-linux')
 const apiLogPath = path.join(stateDir, 'api-server.log')
 let apiProcess = null
-let apiLogStream = null
+let apiLogFd = null
 
 const openExternalIfAllowed = (url) => {
   try {
@@ -85,14 +85,34 @@ const waitForAppServer = (baseUrl, timeoutMs = 15000) =>
     attempt()
   })
 
-const createApiLogStream = () => {
+const createApiLogFd = () => {
   try {
     mkdirSync(stateDir, { recursive: true })
-    const stream = createWriteStream(apiLogPath, { flags: 'a' })
-    stream.write(`\n[${new Date().toISOString()}] Starting API server from Electron\n`)
-    return stream
+    const fd = openSync(apiLogPath, 'a')
+    writeSync(fd, `\n[${new Date().toISOString()}] Starting API server from Electron\n`)
+    return fd
   } catch {
     return 'ignore'
+  }
+}
+
+const writeApiLog = (message) => {
+  if (apiLogFd == null || apiLogFd === 'ignore') return
+  try {
+    writeSync(apiLogFd, `[${new Date().toISOString()}] ${message}\n`)
+  } catch {
+    // Logging must not interfere with desktop shutdown.
+  }
+}
+
+const closeApiLog = () => {
+  if (apiLogFd == null || apiLogFd === 'ignore') return
+  try {
+    closeSync(apiLogFd)
+  } catch {
+    // Ignore log close failures during app shutdown.
+  } finally {
+    apiLogFd = null
   }
 }
 
@@ -103,25 +123,19 @@ const ensureApiServer = async () => {
     await waitForAppServer(apiUrl, 750)
     return apiUrl
   } catch {
-    apiLogStream = createApiLogStream()
+    apiLogFd = createApiLogFd()
     apiProcess = spawn('node', ['server/index.mjs'], {
       cwd: repoRoot,
       env: { ...process.env, PORT: String(apiPort), NODE_ENV: process.env.NODE_ENV || 'production' },
-      stdio: ['ignore', apiLogStream, apiLogStream],
+      stdio: ['ignore', apiLogFd, apiLogFd],
     })
     apiProcess.once('error', (error) => {
-      if (apiLogStream && apiLogStream !== 'ignore') {
-        apiLogStream.write(`[${new Date().toISOString()}] API server failed to start: ${error.message}\n`)
-        apiLogStream.end()
-        apiLogStream = null
-      }
+      writeApiLog(`API server failed to start: ${error.message}`)
+      closeApiLog()
     })
     apiProcess.once('exit', (code, signal) => {
-      if (apiLogStream && apiLogStream !== 'ignore') {
-        apiLogStream.write(`[${new Date().toISOString()}] API server exited with ${signal ? `signal ${signal}` : `code ${code}`}\n`)
-        apiLogStream.end()
-        apiLogStream = null
-      }
+      writeApiLog(`API server exited with ${signal ? `signal ${signal}` : `code ${code}`}`)
+      closeApiLog()
     })
     apiProcess.unref()
     await waitForAppServer(apiUrl)
