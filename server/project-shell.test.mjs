@@ -1110,6 +1110,9 @@ test('Arduino explicit-port uploads do not borrow unrelated detected board metad
   assert.match(appSource, /action,\s+port: typeof payload\.port === 'string'/)
   assert.doesNotMatch(appSource, /payload\.action === 'onboard_led_blink' \|\| payload\.action === 'custom_sketch'[\s\S]{0,120}: 'onboard_led_on'/)
   assert.doesNotMatch(appSource, /action: typeof payload\.action === 'string' \? payload\.action : undefined/)
+  assert.match(arduinoSource, /const action = typeof input\.action === 'string' && input\.action\.trim\(\) \? input\.action\.trim\(\) : ''/)
+  assert.match(arduinoSource, /A supported Arduino action is required before uploading a sketch\./)
+  assert.doesNotMatch(arduinoSource, /const action = typeof input\.action === 'string' && input\.action\.trim\(\) \? input\.action\.trim\(\) : 'onboard_led_on'/)
 })
 
 test('electron shell keeps renderer isolation and external navigation guarded', async () => {

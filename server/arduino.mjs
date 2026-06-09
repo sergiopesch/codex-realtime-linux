@@ -116,18 +116,19 @@ void loop() {
 }
 
 export function normalizeUploadRequest(input = {}) {
-  const action = typeof input.action === 'string' && input.action.trim() ? input.action.trim() : 'onboard_led_on'
+  const action = typeof input.action === 'string' && input.action.trim() ? input.action.trim() : ''
   const port = typeof input.port === 'string' && input.port.trim() ? input.port.trim() : null
   const fqbn = typeof input.fqbn === 'string' && input.fqbn.trim() ? input.fqbn.trim() : null
   const sketchName = normalizeSketchName(input.sketchName)
-  const sketch = action === 'custom_sketch' ? input.sketch : sketchForAction(action)
 
   if (!['onboard_led_on', 'onboard_led_blink', 'custom_sketch'].includes(action)) {
-    throw new ArduinoUploadError('Unsupported Arduino action.', {
+    throw new ArduinoUploadError('A supported Arduino action is required before uploading a sketch.', {
       code: 'arduino_invalid_action',
       status: 400,
     })
   }
+
+  const sketch = action === 'custom_sketch' ? input.sketch : sketchForAction(action)
 
   if (typeof sketch !== 'string' || !sketch.trim()) {
     throw new ArduinoUploadError('A sketch is required for this Arduino upload.', {

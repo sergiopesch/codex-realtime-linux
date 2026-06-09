@@ -25,8 +25,16 @@ test('sketchForAction creates an onboard LED on sketch', () => {
   assert.match(sketch, /void loop\(\)/)
 })
 
-test('normalizeUploadRequest defaults to the onboard LED on action', () => {
-  const request = normalizeUploadRequest({})
+test('normalizeUploadRequest requires an explicit supported action', () => {
+  assert.throws(
+    () => normalizeUploadRequest({}),
+    (error) =>
+      error instanceof ArduinoUploadError &&
+      error.status === 400 &&
+      error.code === 'arduino_invalid_action',
+  )
+
+  const request = normalizeUploadRequest({ action: 'onboard_led_on' })
 
   assert.equal(request.action, 'onboard_led_on')
   assert.equal(request.fqbn, null)
@@ -35,14 +43,14 @@ test('normalizeUploadRequest defaults to the onboard LED on action', () => {
 })
 
 test('normalizeUploadRequest accepts explicit safe sketch names', () => {
-  const request = normalizeUploadRequest({ sketchName: 'BlinkDemo_1' })
+  const request = normalizeUploadRequest({ action: 'onboard_led_blink', sketchName: 'BlinkDemo_1' })
 
   assert.equal(request.sketchName, 'BlinkDemo_1')
 })
 
 test('normalizeUploadRequest rejects invalid explicit sketch names', () => {
   assert.throws(
-    () => normalizeUploadRequest({ sketchName: '../BlinkDemo' }),
+    () => normalizeUploadRequest({ action: 'onboard_led_blink', sketchName: '../BlinkDemo' }),
     (error) =>
       error instanceof ArduinoUploadError &&
       error.status === 400 &&
@@ -50,7 +58,7 @@ test('normalizeUploadRequest rejects invalid explicit sketch names', () => {
   )
 
   assert.throws(
-    () => normalizeUploadRequest({ sketchName: `B${'link'.repeat(20)}` }),
+    () => normalizeUploadRequest({ action: 'onboard_led_blink', sketchName: `B${'link'.repeat(20)}` }),
     (error) =>
       error instanceof ArduinoUploadError &&
       error.status === 400 &&
@@ -70,7 +78,7 @@ test('normalizeUploadRequest rejects custom sketches without setup and loop', ()
 
 test('normalizeUploadRequest rejects unsupported serial ports and malformed FQBNs', () => {
   assert.throws(
-    () => normalizeUploadRequest({ port: '/etc/passwd' }),
+    () => normalizeUploadRequest({ action: 'onboard_led_on', port: '/etc/passwd' }),
     (error) =>
       error instanceof ArduinoUploadError &&
       error.status === 400 &&
@@ -78,7 +86,7 @@ test('normalizeUploadRequest rejects unsupported serial ports and malformed FQBN
   )
 
   assert.throws(
-    () => normalizeUploadRequest({ fqbn: 'arduino avr uno' }),
+    () => normalizeUploadRequest({ action: 'onboard_led_on', fqbn: 'arduino avr uno' }),
     (error) =>
       error instanceof ArduinoUploadError &&
       error.status === 400 &&
@@ -86,7 +94,7 @@ test('normalizeUploadRequest rejects unsupported serial ports and malformed FQBN
   )
 
   assert.throws(
-    () => normalizeUploadRequest({ port: `/dev/serial/by-id/${'a'.repeat(260)}` }),
+    () => normalizeUploadRequest({ action: 'onboard_led_on', port: `/dev/serial/by-id/${'a'.repeat(260)}` }),
     (error) =>
       error instanceof ArduinoUploadError &&
       error.status === 400 &&
@@ -94,7 +102,7 @@ test('normalizeUploadRequest rejects unsupported serial ports and malformed FQBN
   )
 
   assert.throws(
-    () => normalizeUploadRequest({ fqbn: `arduino:avr:${'uno'.repeat(90)}` }),
+    () => normalizeUploadRequest({ action: 'onboard_led_on', fqbn: `arduino:avr:${'uno'.repeat(90)}` }),
     (error) =>
       error instanceof ArduinoUploadError &&
       error.status === 400 &&
