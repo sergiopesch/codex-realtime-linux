@@ -1,3 +1,5 @@
+require('dotenv/config')
+
 const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron')
 const { spawn } = require('node:child_process')
 const { closeSync, mkdirSync, openSync, writeSync } = require('node:fs')

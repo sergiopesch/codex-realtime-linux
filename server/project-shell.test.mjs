@@ -189,6 +189,7 @@ test('Arduino explicit-port uploads do not borrow unrelated detected board metad
 test('electron shell keeps renderer isolation and external navigation guarded', async () => {
   const mainSource = await readFile(path.join(repoRoot, 'electron', 'main.cjs'), 'utf8')
 
+  assert.match(mainSource, /require\('dotenv\/config'\)/)
   assert.match(mainSource, /contextIsolation:\s*true/)
   assert.match(mainSource, /nodeIntegration:\s*false/)
   assert.match(mainSource, /sandbox:\s*true/)
