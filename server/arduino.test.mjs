@@ -31,6 +31,30 @@ test('normalizeUploadRequest defaults to the onboard LED on action', () => {
   assert.match(request.sketch, /LED_BUILTIN/)
 })
 
+test('normalizeUploadRequest accepts explicit safe sketch names', () => {
+  const request = normalizeUploadRequest({ sketchName: 'BlinkDemo_1' })
+
+  assert.equal(request.sketchName, 'BlinkDemo_1')
+})
+
+test('normalizeUploadRequest rejects invalid explicit sketch names', () => {
+  assert.throws(
+    () => normalizeUploadRequest({ sketchName: '../BlinkDemo' }),
+    (error) =>
+      error instanceof ArduinoUploadError &&
+      error.status === 400 &&
+      error.code === 'arduino_invalid_sketch_name',
+  )
+
+  assert.throws(
+    () => normalizeUploadRequest({ sketchName: `B${'link'.repeat(20)}` }),
+    (error) =>
+      error instanceof ArduinoUploadError &&
+      error.status === 400 &&
+      error.code === 'arduino_invalid_sketch_name',
+  )
+})
+
 test('normalizeUploadRequest rejects custom sketches without setup and loop', () => {
   assert.throws(
     () => normalizeUploadRequest({ action: 'custom_sketch', sketch: 'int value = 1;' }),

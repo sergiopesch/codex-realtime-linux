@@ -10,6 +10,7 @@ const DEFAULT_FQBN = FQBN_PATTERN.test(CONFIGURED_DEFAULT_FQBN) ? CONFIGURED_DEF
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const ARDUINO_CLI_PATH = process.env.ARDUINO_CLI_PATH || path.join(REPO_ROOT, 'bin', 'arduino-cli')
 const DEFAULT_SKETCH_NAME = 'CodexRealtimeSketch'
+const SKETCH_NAME_PATTERN = /^[a-zA-Z][a-zA-Z0-9_]{0,48}$/
 const MAX_SKETCH_BYTES = 64 * 1024
 const MAX_COMMAND_CAPTURE_CHARS = 16_000
 const MAX_COMMAND_OUTPUT_CHARS = 4_000
@@ -93,10 +94,7 @@ export function normalizeUploadRequest(input = {}) {
   const action = typeof input.action === 'string' && input.action.trim() ? input.action.trim() : 'onboard_led_on'
   const port = typeof input.port === 'string' && input.port.trim() ? input.port.trim() : null
   const fqbn = typeof input.fqbn === 'string' && input.fqbn.trim() ? input.fqbn.trim() : null
-  const sketchName =
-    typeof input.sketchName === 'string' && /^[a-zA-Z][a-zA-Z0-9_]{0,48}$/.test(input.sketchName)
-      ? input.sketchName
-      : DEFAULT_SKETCH_NAME
+  const sketchName = normalizeSketchName(input.sketchName)
   const sketch = action === 'custom_sketch' ? input.sketch : sketchForAction(action)
 
   if (!['onboard_led_on', 'onboard_led_blink', 'custom_sketch'].includes(action)) {
@@ -142,6 +140,15 @@ export function normalizeUploadRequest(input = {}) {
   }
 
   return { action, port, fqbn, sketch, sketchName }
+}
+
+function normalizeSketchName(value) {
+  if (value == null || value === '') return DEFAULT_SKETCH_NAME
+  if (typeof value === 'string' && SKETCH_NAME_PATTERN.test(value)) return value
+  throw new ArduinoUploadError('Arduino sketch names must start with a letter and contain only letters, numbers, or underscores.', {
+    code: 'arduino_invalid_sketch_name',
+    status: 400,
+  })
 }
 
 export async function listSerialPorts({ devDir = '/dev' } = {}) {
