@@ -1983,12 +1983,20 @@ app.post('/api/app-state/workspaces', async (req, res) => {
   }
   const workspace = normalizeWorkspace({ ...(req.body.workspace ?? req.body), id: workspacePath, path: workspacePath })
 
-  const { state } = await mutateAppState(async (state) => {
-    state.workspaces = [workspace, ...state.workspaces.filter((item) => (item.path ?? item.id) !== workspacePath)]
-    state.hiddenWorkspacePaths = state.hiddenWorkspacePaths.filter((item) => item !== workspacePath)
-    state.conversationsByWorkspace[workspacePath] = state.conversationsByWorkspace[workspacePath] ?? []
-  })
-  res.json({ workspace, state })
+  try {
+    const { state } = await mutateAppState(async (state) => {
+      state.workspaces = [workspace, ...state.workspaces.filter((item) => (item.path ?? item.id) !== workspacePath)]
+      state.hiddenWorkspacePaths = state.hiddenWorkspacePaths.filter((item) => item !== workspacePath)
+      state.conversationsByWorkspace[workspacePath] = state.conversationsByWorkspace[workspacePath] ?? []
+    })
+    res.json({ workspace, state })
+  } catch (error) {
+    sendJsonError(res, error, {
+      fallbackStatus: 500,
+      fallbackMessage: 'Failed to update saved app state.',
+      fallbackCode: 'app_state_write_failed',
+    })
+  }
 })
 
 app.post('/api/app-state/workspaces/delete', async (req, res) => {
@@ -2005,12 +2013,20 @@ app.post('/api/app-state/workspaces/delete', async (req, res) => {
     return
   }
 
-  const { state } = await mutateAppState(async (state) => {
-    state.workspaces = state.workspaces.filter((item) => (item.path ?? item.id) !== workspacePath)
-    state.hiddenWorkspacePaths = [...new Set([...(state.hiddenWorkspacePaths ?? []), workspacePath])]
-    delete state.conversationsByWorkspace[workspacePath]
-  })
-  res.json({ state })
+  try {
+    const { state } = await mutateAppState(async (state) => {
+      state.workspaces = state.workspaces.filter((item) => (item.path ?? item.id) !== workspacePath)
+      state.hiddenWorkspacePaths = [...new Set([...(state.hiddenWorkspacePaths ?? []), workspacePath])]
+      delete state.conversationsByWorkspace[workspacePath]
+    })
+    res.json({ state })
+  } catch (error) {
+    sendJsonError(res, error, {
+      fallbackStatus: 500,
+      fallbackMessage: 'Failed to update saved app state.',
+      fallbackCode: 'app_state_write_failed',
+    })
+  }
 })
 
 app.post('/api/app-state/conversations', async (req, res) => {
@@ -2023,11 +2039,19 @@ app.post('/api/app-state/conversations', async (req, res) => {
   }
 
   const conversation = normalizeConversation(req.body.conversation, workspacePath)
-  const { state } = await mutateAppState(async (state) => {
-    const current = state.conversationsByWorkspace[workspacePath] ?? []
-    state.conversationsByWorkspace[workspacePath] = [conversation, ...current.filter((item) => item.id !== conversation.id)]
-  })
-  res.json({ conversation, state })
+  try {
+    const { state } = await mutateAppState(async (state) => {
+      const current = state.conversationsByWorkspace[workspacePath] ?? []
+      state.conversationsByWorkspace[workspacePath] = [conversation, ...current.filter((item) => item.id !== conversation.id)]
+    })
+    res.json({ conversation, state })
+  } catch (error) {
+    sendJsonError(res, error, {
+      fallbackStatus: 500,
+      fallbackMessage: 'Failed to update saved app state.',
+      fallbackCode: 'app_state_write_failed',
+    })
+  }
 })
 
 app.patch('/api/app-state/conversations', async (req, res) => {
@@ -2070,11 +2094,11 @@ app.patch('/api/app-state/conversations', async (req, res) => {
       return next[index]
     })
   } catch (error) {
-    sendJsonError(
-      res,
-      error,
-      { fallbackStatus: 404, fallbackCode: 'conversation_not_found' },
-    )
+    sendJsonError(res, error, {
+      fallbackStatus: 500,
+      fallbackMessage: 'Failed to update saved app state.',
+      fallbackCode: 'app_state_write_failed',
+    })
     return
   }
   res.json({ conversation: mutation.result, state: mutation.state })
@@ -2102,17 +2126,25 @@ app.post('/api/app-state/conversations/delete', async (req, res) => {
     return
   }
 
-  const { state } = await mutateAppState(async (state) => {
-    const conversations = state.conversationsByWorkspace[workspacePath] ?? []
-    const next = conversations.filter((conversation) => conversation.id !== conversationId)
-    if (next.length === conversations.length) return
-    if (next.length > 0) {
-      state.conversationsByWorkspace[workspacePath] = next
-    } else {
-      delete state.conversationsByWorkspace[workspacePath]
-    }
-  })
-  res.json({ state })
+  try {
+    const { state } = await mutateAppState(async (state) => {
+      const conversations = state.conversationsByWorkspace[workspacePath] ?? []
+      const next = conversations.filter((conversation) => conversation.id !== conversationId)
+      if (next.length === conversations.length) return
+      if (next.length > 0) {
+        state.conversationsByWorkspace[workspacePath] = next
+      } else {
+        delete state.conversationsByWorkspace[workspacePath]
+      }
+    })
+    res.json({ state })
+  } catch (error) {
+    sendJsonError(res, error, {
+      fallbackStatus: 500,
+      fallbackMessage: 'Failed to update saved app state.',
+      fallbackCode: 'app_state_write_failed',
+    })
+  }
 })
 
 app.get('/api/workspaces', async (_req, res) => {

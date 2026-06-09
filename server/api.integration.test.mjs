@@ -859,8 +859,15 @@ test('settings OpenAI key route returns stable json validation errors', async (t
 
 test('server returns json errors for unmatched API routes and unhandled route failures', async (t) => {
   const badSecretsPath = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-secrets-dir-'))
+  const badStatePath = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-state-dir-'))
+  const workspacePath = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-state-error-workspace-'))
   t.after(() => rm(badSecretsPath, { recursive: true, force: true }))
-  const { baseUrl } = await startTestServer(t, { CODEX_REALTIME_SECRETS_PATH: badSecretsPath })
+  t.after(() => rm(badStatePath, { recursive: true, force: true }))
+  t.after(() => rm(workspacePath, { recursive: true, force: true }))
+  const { baseUrl } = await startTestServer(t, {
+    CODEX_REALTIME_SECRETS_PATH: badSecretsPath,
+    CODEX_REALTIME_STATE_PATH: badStatePath,
+  })
 
   const missingApi = await fetch(`${baseUrl}/api/does-not-exist`)
   assert.equal(missingApi.status, 404)
@@ -873,4 +880,13 @@ test('server returns json errors for unmatched API routes and unhandled route fa
   assert.equal(failedSecretWrite.status, 500)
   assert.equal(failedSecretWrite.headers.get('content-type')?.includes('application/json'), true)
   assert.equal((await readJson(failedSecretWrite)).code, 'openai_key_remove_failed')
+
+  const failedStateWrite = await fetch(`${baseUrl}/api/app-state/workspaces`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspace: { path: workspacePath } }),
+  })
+  assert.equal(failedStateWrite.status, 500)
+  assert.equal(failedStateWrite.headers.get('content-type')?.includes('application/json'), true)
+  assert.equal((await readJson(failedStateWrite)).code, 'app_state_write_failed')
 })
