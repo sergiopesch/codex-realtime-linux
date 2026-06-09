@@ -138,6 +138,7 @@ test('artifact previews are served through workspace-scoped routes only', async 
   assert.doesNotMatch(artifactHeadersSource, /connect-src 'self'/)
   assert.match(artifactHeadersSource, /Permissions-Policy/)
   assert.match(artifactHeadersSource, /microphone=\(\)/)
+  assert.match(artifactHeadersSource, /display-capture=\(\)/)
   assert.match(artifactHeadersSource, /X-Content-Type-Options/)
   assert.match(artifactHeadersSource, /'Cache-Control': 'no-store'/)
   assert.match(serverSource, /function setAppShellHeaders\(res\)/)

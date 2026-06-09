@@ -379,7 +379,7 @@ function setArtifactPreviewHeaders(res) {
       "form-action 'none'",
       "frame-ancestors 'self'",
     ].join('; '),
-    'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), usb=(), serial=()',
+    'Permissions-Policy': 'camera=(), microphone=(), display-capture=(), geolocation=(), usb=(), serial=()',
     'Referrer-Policy': 'no-referrer',
     'X-Content-Type-Options': 'nosniff',
     'Cache-Control': 'no-store',
