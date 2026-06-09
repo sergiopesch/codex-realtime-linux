@@ -254,6 +254,7 @@ const REALTIME_CONNECTION_TIMEOUT_MS = 30_000
 const MAX_REALTIME_SDP_RESPONSE_LENGTH = 120_000
 const MAX_REALTIME_EVENT_MESSAGE_LENGTH = 120_000
 const MAX_REALTIME_FUNCTION_ARGUMENTS_LENGTH = 80_000
+const MAX_REALTIME_FUNCTION_OUTPUT_LENGTH = 32_000
 const MAX_REALTIME_TOOL_TEXT_LENGTH = 8_000
 const MAX_HANDLED_REALTIME_FUNCTION_CALL_IDS = 240
 const MAX_REALTIME_TRANSCRIPT_LINES = 80
@@ -548,6 +549,17 @@ const realtimeErrorMessage = (value: unknown, fallback: string) => {
   if (!value || typeof value !== 'object') return fallback
   const message = (value as UnknownRecord).message
   return boundedRealtimeTranscriptText(typeof message === 'string' && message.trim() ? `${fallback}: ${message.trim()}` : fallback)
+}
+
+const realtimeFunctionOutput = (value: unknown) => {
+  try {
+    const text = JSON.stringify(value ?? {})
+    if (!text) return '{}'
+    if (text.length <= MAX_REALTIME_FUNCTION_OUTPUT_LENGTH) return text
+    return JSON.stringify({ error: 'Realtime tool output was too large.', truncated: true })
+  } catch {
+    return JSON.stringify({ error: 'Realtime tool output was not serializable.' })
+  }
 }
 
 const displayErrorMessage = (error: unknown, fallback: string) => {
@@ -2009,7 +2021,7 @@ function App() {
       item: {
         type: 'function_call_output',
         call_id: callId,
-        output: JSON.stringify(result),
+        output: realtimeFunctionOutput(result),
       },
     })
     const responseRequested = outputSent && sendRealtimeEvent(responseChannel, { type: 'response.create' })
