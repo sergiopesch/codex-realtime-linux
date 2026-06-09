@@ -231,6 +231,13 @@ function preferredPortForDetectedBoard(detectedPort, ports) {
   return detectedPort
 }
 
+function boardAddressForRequestedPort(requestedPort, ports) {
+  if (!requestedPort || SERIAL_PORT_PATH_PATTERN.test(requestedPort)) return requestedPort
+  if (!SERIAL_BY_ID_PATTERN.test(requestedPort) || !ports.includes(requestedPort)) return requestedPort
+  const ttyPorts = ports.filter((port) => SERIAL_PORT_PATH_PATTERN.test(port))
+  return ttyPorts.length === 1 ? ttyPorts[0] : requestedPort
+}
+
 function normalizeDetectedBoard(entry) {
   if (!entry || typeof entry !== 'object') return null
   const candidateFqbn = limitStatusString(entry.fqbn)
@@ -393,7 +400,8 @@ export async function uploadArduinoSketch(
   const [rawPorts, rawBoards] = await Promise.all([listPorts(), listBoards({ run })])
   const ports = (Array.isArray(rawPorts) ? rawPorts : []).filter((port) => typeof port === 'string' && isSupportedSerialPort(port))
   const boards = (Array.isArray(rawBoards) ? rawBoards : []).map(normalizeDetectedBoard).filter(Boolean)
-  const matchingBoard = request.port ? boards.find((board) => board.address === request.port) : null
+  const boardAddressForRequest = boardAddressForRequestedPort(request.port, ports)
+  const matchingBoard = boardAddressForRequest ? boards.find((board) => board.address === boardAddressForRequest) : null
   const autoDetectedBoard = request.port ? null : boards[0]
   const detectedBoard = matchingBoard ?? autoDetectedBoard
   const detectedPort = detectedBoard?.address && isSupportedSerialPort(detectedBoard.address) ? detectedBoard.address : null

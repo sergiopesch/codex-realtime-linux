@@ -310,6 +310,35 @@ test('uploadArduinoSketch prefers stable serial-by-id port for a single detected
   ])
 })
 
+test('uploadArduinoSketch uses detected board FQBN for an explicit stable serial-by-id port', async () => {
+  const commands = []
+  const run = async (args) => {
+    commands.push(args)
+    return { stdout: `${args[0]} ok`, stderr: '' }
+  }
+
+  const result = await uploadArduinoSketch(
+    { action: 'onboard_led_on', port: '/dev/serial/by-id/usb-Arduino_Nano-if00' },
+    {
+      run,
+      listPorts: async () => ['/dev/serial/by-id/usb-Arduino_Nano-if00', '/dev/ttyUSB0'],
+      listBoards: async () => [{ address: '/dev/ttyUSB0', fqbn: 'arduino:avr:nano', boardName: 'Arduino Nano' }],
+    },
+  )
+
+  assert.equal(result.port, '/dev/serial/by-id/usb-Arduino_Nano-if00')
+  assert.equal(result.fqbn, 'arduino:avr:nano')
+  assert.equal(result.boardName, 'Arduino Nano')
+  assert.deepEqual(commands[0].slice(0, 3), ['compile', '--fqbn', 'arduino:avr:nano'])
+  assert.deepEqual(commands[1].slice(0, 5), [
+    'upload',
+    '-p',
+    '/dev/serial/by-id/usb-Arduino_Nano-if00',
+    '--fqbn',
+    'arduino:avr:nano',
+  ])
+})
+
 test('uploadArduinoSketch bounds compile and upload command output', async () => {
   const run = async (args) => ({
     stdout: `${args[0]} ${'x'.repeat(8_000)}`,

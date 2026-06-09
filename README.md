@@ -261,7 +261,7 @@ ARDUINO_CLI_PATH=/absolute/path/to/arduino-cli
 ARDUINO_DEFAULT_FQBN=arduino:avr:uno
 ```
 
-With voice running and the board connected, say something like: “turn on the Arduino light” or “make the Arduino LED blink”. Realtime calls `arduino_upload_sketch`, the server compiles the sketch, and uploads it to the first detected stable `/dev/serial/by-id/*` link when available, falling back to `/dev/ttyACM*` or `/dev/ttyUSB*` ports. A supported `/dev/ttyACM*`, `/dev/ttyUSB*`, or `/dev/serial/by-id/*` port can also be supplied explicitly.
+With voice running and the board connected, say something like: “turn on the Arduino light” or “make the Arduino LED blink”. Realtime calls `arduino_upload_sketch`, the server compiles the sketch, and uploads it to the first detected stable `/dev/serial/by-id/*` link when available, falling back to `/dev/ttyACM*` or `/dev/ttyUSB*` ports. A supported `/dev/ttyACM*`, `/dev/ttyUSB*`, or `/dev/serial/by-id/*` port can also be supplied explicitly. When an explicit stable by-id port maps unambiguously to one detected tty board, the app still uses that board's detected FQBN for compile/upload instead of falling back to the default Uno target.
 
 You can test the API directly:
 
