@@ -17,7 +17,11 @@ test('classifies generated HTML requests as artifact work', () => {
   assert.equal(isArtifactRequest('Can you put together a slideshow from the images in this workspace?'), true)
   assert.equal(isArtifactRequest('Design a browser preview deck about the attached screenshots.'), true)
   assert.equal(isArtifactRequest('Produce a microsite report from these project files.'), true)
+  assert.equal(isArtifactRequest('Prepare an interactive gallery from the images in this workspace.'), true)
+  assert.equal(isArtifactRequest('Compose a one-pager explainer from these notes.'), true)
+  assert.equal(isArtifactRequest('Assemble a clickable portfolio site from the screenshots.'), true)
   assert.equal(isArtifactRequest('Fix the USB watcher bug in the app.'), false)
+  assert.equal(isArtifactRequest('Fix the file watcher bug in the app.'), false)
 })
 
 test('detects explicit app edit intent separately from artifact creation', () => {
