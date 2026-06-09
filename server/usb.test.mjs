@@ -84,6 +84,19 @@ test('classifyUsbDevice does not treat unrelated USB devices as Arduino boards',
   assert.equal(device.isArduinoLike, false)
 })
 
+test('classifyUsbDevice bounds path metadata before text matching', () => {
+  const device = classifyUsbDevice({
+    ACTION: 'add',
+    SUBSYSTEM: 'tty',
+    DEVNAME: '/dev/ttyUSB0',
+    ID_PATH: `pci-long-path-${'x'.repeat(2_000)}-ch340`,
+    DEVPATH: `kernel-long-path-${'y'.repeat(2_000)}-arduino`,
+  })
+
+  assert.equal(device.isSerialTty, true)
+  assert.equal(device.isArduinoLike, false)
+})
+
 test('readSerialById ignores unsafe or non-serial by-id entries', async (t) => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'codex-usb-by-id-'))
   t.after(() => rm(tempDir, { recursive: true, force: true }))
