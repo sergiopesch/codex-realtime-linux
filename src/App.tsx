@@ -278,8 +278,19 @@ const ARDUINO_UPLOAD_ACTIONS = new Set<ArduinoUploadAction>([
   'custom_sketch',
 ])
 
+const REALTIME_TOOL_NAMES = new Set([
+  'codex_start_task',
+  'codex_steer_task',
+  'codex_interrupt_task',
+  'get_current_weather',
+  'arduino_upload_sketch',
+])
+
 const isArduinoUploadAction = (value: string): value is ArduinoUploadAction =>
   ARDUINO_UPLOAD_ACTIONS.has(value as ArduinoUploadAction)
+
+const isRealtimeToolName = (value: unknown): value is string =>
+  typeof value === 'string' && REALTIME_TOOL_NAMES.has(value)
 
 const boundedApiErrorText = (value: unknown, fallback = '') => {
   const text = typeof value === 'string' && value ? value : fallback
@@ -1773,20 +1784,21 @@ function App() {
     const item = realtimeFunctionCallItem(message)
     if (!item) return
     const responseChannel = dataChannelRef.current
+    const toolName = typeof item.name === 'string' ? item.name : ''
 
     if (typeof item.call_id !== 'string' || !item.call_id.trim()) {
       const error = 'Realtime function call did not include a call_id.'
       setLastError(error)
-      appendEvent('realtime/function-call-invalid', { error, name: item.name })
+      appendEvent('realtime/function-call-invalid', { error, name: toolName })
       return
     }
     const callId = item.call_id.trim()
     if (!rememberRealtimeFunctionCallId(handledRealtimeFunctionCallIdsRef.current, callId)) {
-      appendEvent('realtime/function-call-duplicate-ignored', { name: item.name, callId })
+      appendEvent('realtime/function-call-duplicate-ignored', { name: toolName, callId })
       return
     }
 
-    setActivity('Voice router', item.name ?? 'Tool call')
+    setActivity('Voice router', toolName || 'Tool call')
 
     let payload: Record<string, unknown>
     try {
@@ -1805,7 +1817,11 @@ function App() {
         throw new Error(payload.error)
       }
 
-      if (item.name === 'codex_start_task') {
+      if (!isRealtimeToolName(toolName)) {
+        throw new Error(`Unsupported Realtime tool call: ${toolName || 'unknown'}.`)
+      }
+
+      if (toolName === 'codex_start_task') {
         setActivity('Voice router', 'Codex starting')
         const goal = requireRealtimeToolText(payload.goal, 'A concrete Codex goal')
         const workspacePath = selectedRoutableWorkspacePath(payload.cwd)
@@ -1856,7 +1872,7 @@ function App() {
         }
       }
 
-      if (item.name === 'codex_steer_task' && activeThreadIdRef.current) {
+      if (toolName === 'codex_steer_task' && activeThreadIdRef.current) {
         setActivity('Voice router', 'Codex steering')
         const instruction = requireRealtimeToolText(payload.instruction, 'A steering instruction')
         result = await api('/api/codex/steer', {
@@ -1864,11 +1880,11 @@ function App() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ threadId: activeThreadIdRef.current, instruction }),
         })
-      } else if (item.name === 'codex_steer_task') {
+      } else if (toolName === 'codex_steer_task') {
         result = { error: 'No active Codex task is available to steer. Start a task first.' }
       }
 
-      if (item.name === 'codex_interrupt_task' && activeThreadIdRef.current && activeTurnIdRef.current) {
+      if (toolName === 'codex_interrupt_task' && activeThreadIdRef.current && activeTurnIdRef.current) {
         setActivity('Voice router', 'Codex interrupting')
         result = await api('/api/codex/interrupt', {
           method: 'POST',
@@ -1876,11 +1892,11 @@ function App() {
           body: JSON.stringify({ threadId: activeThreadIdRef.current, turnId: activeTurnIdRef.current }),
         })
         setActiveCodexTurn(activeThreadIdRef.current, null)
-      } else if (item.name === 'codex_interrupt_task') {
+      } else if (toolName === 'codex_interrupt_task') {
         result = { error: 'No active Codex turn is available to interrupt.' }
       }
 
-      if (item.name === 'get_current_weather') {
+      if (toolName === 'get_current_weather') {
         setActivity('Voice router', 'Weather lookup')
         const location = typeof payload.location === 'string' ? payload.location : ''
         const units = payload.units === 'imperial' || payload.units === 'metric' ? payload.units : weatherUnits
@@ -1889,7 +1905,7 @@ function App() {
         showNotice(weather.summary)
       }
 
-      if (item.name === 'arduino_upload_sketch') {
+      if (toolName === 'arduino_upload_sketch') {
         setActivity('Arduino upload', 'Compiling sketch')
         const action = typeof payload.action === 'string' ? payload.action.trim() : ''
         if (!isArduinoUploadAction(action)) {
@@ -1913,7 +1929,7 @@ function App() {
     }
 
     if (!responseChannel || responseChannel !== dataChannelRef.current || responseChannel.readyState !== 'open') {
-      appendEvent('realtime/function-call-output-dropped', { name: item.name, callId: item.call_id })
+      appendEvent('realtime/function-call-output-dropped', { name: toolName, callId: item.call_id })
       return
     }
 
