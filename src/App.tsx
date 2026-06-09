@@ -458,6 +458,7 @@ function App() {
   const pendingArtifactRef = useRef<ArtifactPlan | null>(null)
   const activeThreadIdRef = useRef<string | null>(null)
   const activeTurnIdRef = useRef<string | null>(null)
+  const handledRealtimeFunctionCallIdsRef = useRef<Set<string>>(new Set())
   const selectedWorkspaceRef = useRef(initialWorkspacePath)
   const routableWorkspacePathsRef = useRef<Set<string>>(new Set())
   const seenUsbEventIdsRef = useRef<Set<string>>(new Set())
@@ -1388,6 +1389,12 @@ function App() {
       appendEvent('realtime/function-call-invalid', { error, name: item.name })
       return
     }
+    const callId = item.call_id.trim()
+    if (handledRealtimeFunctionCallIdsRef.current.has(callId)) {
+      appendEvent('realtime/function-call-duplicate-ignored', { name: item.name, callId })
+      return
+    }
+    handledRealtimeFunctionCallIdsRef.current.add(callId)
 
     setActivity('Voice router', item.name ?? 'Tool call')
 
@@ -1527,7 +1534,7 @@ function App() {
         type: 'conversation.item.create',
         item: {
           type: 'function_call_output',
-          call_id: item.call_id,
+          call_id: callId,
           output: JSON.stringify(result),
         },
       }),
@@ -1545,6 +1552,7 @@ function App() {
     setVoiceState('connecting')
     setVoiceMuted(false)
     setRealtimeTranscript([])
+    handledRealtimeFunctionCallIdsRef.current.clear()
     setActivity('Voice router', 'Connecting')
 
     try {
