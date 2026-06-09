@@ -253,7 +253,6 @@ async function writeJsonFileAtomic(filePath, value, { dirMode, fileMode } = {}) 
     `.${path.basename(filePath)}.${process.pid}.${randomUUID()}.tmp`,
   )
   let fileHandle
-  let directoryHandle
   try {
     fileHandle = await open(tempPath, fileMode ? 'wx' : 'w', fileMode)
     await fileHandle.writeFile(`${JSON.stringify(value, null, 2)}\n`)
@@ -263,19 +262,27 @@ async function writeJsonFileAtomic(filePath, value, { dirMode, fileMode } = {}) 
     if (fileMode) await chmod(tempPath, fileMode)
     await rename(tempPath, filePath)
     if (fileMode) await chmod(filePath, fileMode)
-    directoryHandle = await open(directoryPath, 'r')
-    await directoryHandle.sync()
-    await directoryHandle.close()
-    directoryHandle = null
+    await syncDirectoryBestEffort(directoryPath)
   } catch (error) {
     if (fileHandle) await fileHandle.close().catch(() => {})
-    if (directoryHandle) await directoryHandle.close().catch(() => {})
     try {
       await rm(tempPath, { force: true })
     } catch {
       // Ignore cleanup errors; the original write failure is more useful.
     }
     throw error
+  }
+}
+
+async function syncDirectoryBestEffort(directoryPath) {
+  let directoryHandle
+  try {
+    directoryHandle = await open(directoryPath, 'r')
+    await directoryHandle.sync()
+  } catch {
+    // Some filesystems do not support directory fsync; the file write and rename already succeeded.
+  } finally {
+    await directoryHandle?.close().catch(() => {})
   }
 }
 
