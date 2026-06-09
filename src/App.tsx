@@ -941,7 +941,7 @@ const safeConversationsByWorkspace = (value: unknown) => {
     const conversations = rawConversations
       .map((conversation) => safeConversation(conversation, workspacePath))
       .filter((conversation): conversation is AgentConversation => Boolean(conversation))
-    if (conversations.length > 0) {
+    if (conversations.length > 0 || rawConversations.length === 0) {
       groups[workspacePath] = mergeConversations([], conversations)
       normalizedWorkspaceBuckets += 1
       if (normalizedWorkspaceBuckets >= MAX_UI_WORKSPACE_BUCKETS) break
@@ -1975,6 +1975,7 @@ function App() {
 
     try {
       let confirmedConversations = next
+      let serverConfirmedWorkspace = false
       if (deleted?.source === 'codex' && deleted.codexThreadId) {
         await api('/api/codex/thread/archive', {
           method: 'POST',
@@ -1989,7 +1990,9 @@ function App() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ workspacePath, conversationId }),
           })
-          confirmedConversations = safeConversationsByWorkspace(deleteResult.state.conversationsByWorkspace)[workspacePath] ?? []
+          const confirmedConversationState = safeConversationsByWorkspace(deleteResult.state.conversationsByWorkspace)
+          serverConfirmedWorkspace = Object.prototype.hasOwnProperty.call(confirmedConversationState, workspacePath)
+          confirmedConversations = serverConfirmedWorkspace ? confirmedConversationState[workspacePath] : next
         } catch (error) {
           if (deleted.source === 'local') throw error
           appendEvent('app-state/codex-conversation-delete-failed', {
@@ -1998,10 +2001,14 @@ function App() {
         }
       }
 
-      const visibleConversationsAfterDelete = conversationsAfterDelete(current, confirmedConversations, conversationId)
+      const visibleConversationsAfterDelete = serverConfirmedWorkspace
+        ? confirmedConversations
+        : conversationsAfterDelete(current, confirmedConversations, conversationId)
       setConversationsByWorkspace((state) => ({
         ...state,
-        [workspacePath]: conversationsAfterDelete(state[workspacePath] ?? current, confirmedConversations, conversationId),
+        [workspacePath]: serverConfirmedWorkspace
+          ? confirmedConversations
+          : conversationsAfterDelete(state[workspacePath] ?? current, confirmedConversations, conversationId),
       }))
       const deletedWorkspaceWasSelected = sameWorkspacePath(selectedWorkspace, workspacePath)
       const deletedActiveConversation = deletedWorkspaceWasSelected && selectedConversationId === conversationId
