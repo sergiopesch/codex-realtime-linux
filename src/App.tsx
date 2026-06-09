@@ -223,6 +223,7 @@ type GeneratedArtifact = {
 type ArtifactPreviewLease = {
   url: string
   workspacePath: string
+  expiresAt: number
 }
 
 type ArtifactPlan = {
@@ -271,6 +272,7 @@ const MAX_UI_EVENT_OBJECT_KEYS = 30
 const MAX_UI_EVENT_DEPTH = 6
 const MAX_UI_USAGE_BUCKETS = 50
 const MAX_UI_USAGE_LABEL_LENGTH = 120
+const ARTIFACT_PREVIEW_SESSION_MS = 10 * 60 * 1000
 const MAX_SEEN_USB_EVENT_IDS = 240
 const MAX_VISUAL_CONTEXT_IMAGE_FILE_BYTES = 12 * 1024 * 1024
 const VISUAL_CONTEXT_CAPTURE_TIMEOUT_MS = 10_000
@@ -842,6 +844,7 @@ function App() {
     !activeSystemScreen &&
     selectedArtifact &&
     artifactPreviewLease &&
+    artifactPreviewLease.expiresAt > Date.now() &&
     selectedArtifact.workspacePath === selectedWorkspace &&
     selectedArtifact.workspacePath === artifactPreviewLease.workspacePath &&
     selectedArtifact.url === artifactPreviewLease.url &&
@@ -1254,6 +1257,26 @@ function App() {
     setArtifactPreviewLease(null)
   }, [])
 
+  const openArtifactPreview = useCallback((artifact: GeneratedArtifact) => {
+    setSelectedArtifact(artifact)
+    setArtifactPreviewLease({
+      url: artifact.url,
+      workspacePath: artifact.workspacePath,
+      expiresAt: Date.now() + ARTIFACT_PREVIEW_SESSION_MS,
+    })
+  }, [])
+
+  const extendArtifactPreview = useCallback(() => {
+    setArtifactPreviewLease((current) =>
+      current
+        ? {
+            ...current,
+            expiresAt: Date.now() + ARTIFACT_PREVIEW_SESSION_MS,
+          }
+        : current,
+    )
+  }, [])
+
   const requestWeather = async (event?: FormEvent<HTMLFormElement>) => {
     event?.preventDefault()
     const requestId = weatherRequestIdRef.current + 1
@@ -1587,6 +1610,17 @@ function App() {
   }, [pendingArtifact])
 
   useEffect(() => {
+    if (!artifactPreviewLease) return undefined
+    const remainingMs = artifactPreviewLease.expiresAt - Date.now()
+    if (remainingMs <= 0) {
+      closeArtifactPreview()
+      return undefined
+    }
+    const timeout = window.setTimeout(() => closeArtifactPreview(), remainingMs)
+    return () => window.clearTimeout(timeout)
+  }, [artifactPreviewLease, closeArtifactPreview])
+
+  useEffect(() => {
     if (!notice) return undefined
     const timeout = window.setTimeout(() => setNotice(null), 3600)
     return () => window.clearTimeout(timeout)
@@ -1724,11 +1758,7 @@ function App() {
             if (!effectActive) return
             const completedArtifact = artifactData.find((artifact) => artifact.url === pendingArtifactForTurn.url)
             if (completedArtifact) {
-              setSelectedArtifact(completedArtifact)
-              setArtifactPreviewLease({
-                url: completedArtifact.url,
-                workspacePath: completedArtifact.workspacePath,
-              })
+              openArtifactPreview(completedArtifact)
               setDismissedArtifact(null)
               setActivity('Artifact ready', completedArtifact.title)
               showNotice(`Preview ready: ${completedArtifact.relativePath}`)
@@ -1759,7 +1789,7 @@ function App() {
       controller.abort()
       window.clearInterval(interval)
     }
-  }, [markCodexConversationReady, refreshArtifacts])
+  }, [markCodexConversationReady, openArtifactPreview, refreshArtifacts])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -1780,11 +1810,7 @@ function App() {
         const completed = artifactData.find((artifact) => artifact.url === pendingArtifact.url)
         if (!completed) return
 
-        setSelectedArtifact(completed)
-        setArtifactPreviewLease({
-          url: completed.url,
-          workspacePath: completed.workspacePath,
-        })
+        openArtifactPreview(completed)
         const completedThreadId = activeThreadIdRef.current
         setDismissedArtifact(null)
         setPendingArtifact(null)
@@ -1807,7 +1833,7 @@ function App() {
       controller.abort()
       window.clearInterval(interval)
     }
-  }, [markCodexConversationReady, pendingArtifact, refreshArtifacts, refreshOpenArtifact])
+  }, [markCodexConversationReady, openArtifactPreview, pendingArtifact, refreshArtifacts, refreshOpenArtifact])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -2824,6 +2850,8 @@ function App() {
                 <section
                   className={agentIsWorkingOnArtifact ? 'artifact-stage artifact-stage-building' : 'artifact-stage'}
                   aria-label="Generated artifact preview"
+                  onFocus={extendArtifactPreview}
+                  onPointerDown={extendArtifactPreview}
                 >
                   <header>
                     <div>
@@ -2865,6 +2893,7 @@ function App() {
                       src={artifactPreview.url}
                       title={artifactPreview.title}
                       sandbox="allow-scripts"
+                      onLoad={extendArtifactPreview}
                     />
                   ) : null}
                 </section>
