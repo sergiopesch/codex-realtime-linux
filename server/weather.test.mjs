@@ -109,6 +109,21 @@ test('getCurrentWeather rejects oversized location queries before calling upstre
   )
 })
 
+test('getCurrentWeather rejects oversized upstream weather responses', async () => {
+  const fetchImpl = async () =>
+    new Response('x'.repeat(300 * 1024), {
+      headers: { 'Content-Type': 'application/json' },
+    })
+
+  await assert.rejects(
+    () => getCurrentWeather('Madrid', { fetchImpl }),
+    (error) =>
+      error instanceof WeatherServiceError &&
+      error.status === 502 &&
+      error.code === 'weather_geocoding_response_too_large',
+  )
+})
+
 test('getCurrentWeather surfaces not-found locations as a 404', async () => {
   const fetchImpl = async () => Response.json({ results: [] })
 

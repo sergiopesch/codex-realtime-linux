@@ -7,6 +7,7 @@ const MAX_TIMEZONE_LENGTH = 120
 const MAX_WEATHER_TIME_LENGTH = 80
 const MAX_WEATHER_SUMMARY_LENGTH = 500
 const MAX_UPSTREAM_REASON_LENGTH = 300
+const MAX_WEATHER_RESPONSE_BYTES = 256 * 1024
 
 const WEATHER_CODE_LABELS = new Map([
   [0, 'Clear sky'],
@@ -97,10 +98,43 @@ function formatNumber(value) {
   return typeof value === 'number' && Number.isFinite(value) ? Math.round(value * 10) / 10 : null
 }
 
+async function readBoundedResponseText(response, stage) {
+  if (!response.body) return ''
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let totalBytes = 0
+  let text = ''
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      totalBytes += value.byteLength
+      if (totalBytes > MAX_WEATHER_RESPONSE_BYTES) {
+        await reader.cancel().catch(() => {})
+        throw new WeatherServiceError('The weather service response was too large.', {
+          code: `weather_${stage}_response_too_large`,
+          status: 502,
+        })
+      }
+
+      text += decoder.decode(value, { stream: true })
+    }
+    text += decoder.decode()
+    return text
+  } finally {
+    reader.releaseLock()
+  }
+}
+
 async function readJson(response, stage) {
   try {
-    return await response.json()
+    const text = await readBoundedResponseText(response, stage)
+    return text ? JSON.parse(text) : {}
   } catch (error) {
+    if (error instanceof WeatherServiceError) throw error
     throw new WeatherServiceError(`The weather service returned invalid ${stage} data.`, {
       code: `weather_${stage}_invalid_json`,
       status: 502,

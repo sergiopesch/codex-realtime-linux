@@ -504,6 +504,20 @@ test('README documents live release verification for non-automated capabilities'
   assert.match(readme, /explicit port if auto-detection is ambiguous/)
 })
 
+test('weather upstream responses are timeout and size bounded', async () => {
+  const weatherSource = await readFile(path.join(repoRoot, 'server', 'weather.mjs'), 'utf8')
+
+  assert.match(weatherSource, /const DEFAULT_TIMEOUT_MS = 8000/)
+  assert.match(weatherSource, /const MAX_WEATHER_RESPONSE_BYTES = 256 \* 1024/)
+  assert.match(weatherSource, /async function readBoundedResponseText\(response, stage\)/)
+  assert.match(weatherSource, /totalBytes > MAX_WEATHER_RESPONSE_BYTES/)
+  assert.match(weatherSource, /await reader\.cancel\(\)\.catch\(\(\) => \{\}\)/)
+  assert.match(weatherSource, /weather_\$\{stage\}_response_too_large/)
+  assert.match(weatherSource, /const text = await readBoundedResponseText\(response, stage\)/)
+  assert.match(weatherSource, /return text \? JSON\.parse\(text\) : \{\}/)
+  assert.doesNotMatch(weatherSource, /response\.json\(\)/)
+})
+
 test('realtime voice sessions reset transcript state and clean up media resources', async () => {
   const appSource = await readFile(path.join(repoRoot, 'src', 'App.tsx'), 'utf8')
   const serverSource = await readFile(path.join(repoRoot, 'server', 'index.mjs'), 'utf8')
