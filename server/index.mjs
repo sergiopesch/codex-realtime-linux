@@ -21,6 +21,7 @@ const OPENAI_ADMIN_KEY = process.env.OPENAI_ADMIN_KEY ?? process.env.OPENAI_API_
 const ENV_CODEX_API_KEY = process.env.CODEX_API_KEY
 const CODEX_FORCE_API_KEY_AUTH = process.env.CODEX_FORCE_API_KEY_AUTH === 'true'
 const CODEX_BIN = process.env.CODEX_BIN ?? 'codex'
+const DESKTOP_SERVER_TOKEN = process.env.CODEX_DESKTOP_SERVER_TOKEN ?? ''
 const CODEX_MODEL = process.env.CODEX_MODEL ?? 'gpt-5.4'
 const REALTIME_MODEL = process.env.REALTIME_MODEL ?? 'gpt-realtime-2'
 const REALTIME_VOICE = process.env.REALTIME_VOICE ?? 'cedar'
@@ -1498,6 +1499,10 @@ app.get('/api/status', async (_req, res) => {
     realtimeVoice: REALTIME_VOICE,
     appRoot: REPO_ROOT,
     appName: path.basename(REPO_ROOT),
+    desktopServer: {
+      pid: process.pid,
+      token: DESKTOP_SERVER_TOKEN || null,
+    },
     defaultWeatherLocation: REALTIME_USER_LOCATION,
     realtimeUser: {
       name: REALTIME_USER_NAME,

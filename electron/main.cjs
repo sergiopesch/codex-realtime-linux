@@ -2,6 +2,7 @@ require('dotenv/config')
 
 const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron')
 const { spawn } = require('node:child_process')
+const { randomUUID } = require('node:crypto')
 const { closeSync, mkdirSync, openSync, readFileSync, renameSync, statSync, writeSync } = require('node:fs')
 const http = require('node:http')
 const os = require('node:os')
@@ -13,6 +14,8 @@ if (process.platform === 'linux') {
   app.commandLine.appendSwitch('enable-transparent-visuals')
   app.disableHardwareAcceleration()
 }
+const gotSingleInstanceLock = app.requestSingleInstanceLock()
+if (!gotSingleInstanceLock) app.quit()
 
 const defaultApiPort = 3311
 const configuredPort = (value, fallback = defaultApiPort) => {
@@ -45,6 +48,7 @@ const trustedRendererOrigins = new Set([
 ])
 const apiNodeBin = process.env.CODEX_REALTIME_NODE_BIN || process.execPath
 const apiNodeUsesElectronRuntime = !process.env.CODEX_REALTIME_NODE_BIN
+const desktopServerToken = randomUUID()
 const repoRoot = path.join(__dirname, '..')
 const stateHome = configuredAbsoluteDir(process.env.XDG_STATE_HOME, path.join(os.homedir(), '.local', 'state'))
 const stateDir = path.join(stateHome, 'codex-realtime-linux')
@@ -118,20 +122,31 @@ const readJson = (url) =>
     })
   })
 
-const waitForAppServer = (baseUrl, timeoutMs = 15000) =>
+const waitForAppServer = (baseUrl, timeoutMs = 15000, expectedDesktopServerToken = '') =>
   new Promise((resolve, reject) => {
     const deadline = Date.now() + timeoutMs
 
     const attempt = async () => {
       try {
         const status = await readJson(`${baseUrl}/api/status`)
-        if (path.resolve(status?.appRoot || '') === path.resolve(repoRoot)) {
-          resolve(status)
+        if (path.resolve(status?.appRoot || '') !== path.resolve(repoRoot)) {
+          reject(new Error(`Refusing to load unrelated local server at ${baseUrl}`))
           return
         }
-        reject(new Error(`Refusing to load unrelated local server at ${baseUrl}`))
+        if (expectedDesktopServerToken) {
+          const serverToken = status?.desktopServer?.token
+          if (serverToken !== expectedDesktopServerToken) {
+            reject(new Error(`Refusing to load stale local server at ${baseUrl}. Stop the existing Codex desktop server and relaunch.`))
+            return
+          }
+        }
+        resolve(status)
         return
-      } catch {
+      } catch (error) {
+        if (error instanceof Error && error.message.startsWith('Refusing to load')) {
+          reject(error)
+          return
+        }
         retry()
       }
     }
@@ -211,14 +226,16 @@ const ensureApiServer = async () => {
   if (devServerUrl) return devServerUrl
 
   try {
-    await waitForAppServer(apiUrl, 750)
+    await waitForAppServer(apiUrl, 750, desktopServerToken)
     return apiUrl
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('Refusing to load')) throw error
     apiLogFd = createApiLogFd()
     const apiEnv = {
       ...process.env,
       PORT: String(apiPort),
       NODE_ENV: process.env.NODE_ENV || 'production',
+      CODEX_DESKTOP_SERVER_TOKEN: desktopServerToken,
       ...(apiNodeUsesElectronRuntime ? { ELECTRON_RUN_AS_NODE: '1' } : {}),
     }
     apiProcess = spawn(apiNodeBin, ['server/index.mjs'], {
@@ -235,7 +252,7 @@ const ensureApiServer = async () => {
       closeApiLog()
     })
     apiProcess.unref()
-    await waitForAppServer(apiUrl)
+    await waitForAppServer(apiUrl, 15000, desktopServerToken)
     return apiUrl
   }
 }
@@ -298,7 +315,17 @@ const createWindow = async () => {
   }
 }
 
-app.whenReady().then(() => {
+if (gotSingleInstanceLock) {
+  app.on('second-instance', () => {
+    const win = BrowserWindow.getAllWindows()[0]
+    if (!win) return
+    if (win.isMinimized()) win.restore()
+    win.show()
+    win.focus()
+  })
+}
+
+if (gotSingleInstanceLock) app.whenReady().then(() => {
   ipcMain.on('window-control', (event, action) => {
     if (!isTrustedRendererEvent(event)) return
     const win = BrowserWindow.fromWebContents(event.sender)

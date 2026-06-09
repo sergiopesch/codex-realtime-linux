@@ -32,6 +32,10 @@ type Status = {
   realtimeVoice?: string
   appRoot?: string
   appName?: string
+  desktopServer?: {
+    pid: number
+    token: string | null
+  }
   defaultWeatherLocation?: string
   realtimeUser?: {
     name?: string
