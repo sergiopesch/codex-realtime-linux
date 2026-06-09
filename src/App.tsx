@@ -254,6 +254,8 @@ const MAX_UI_EVENT_ARRAY_ITEMS = 20
 const MAX_UI_EVENT_OBJECT_KEYS = 30
 const MAX_UI_EVENT_DEPTH = 6
 const MAX_SEEN_USB_EVENT_IDS = 240
+const MAX_VISUAL_CONTEXT_IMAGE_FILE_BYTES = 12 * 1024 * 1024
+const SUPPORTED_VISUAL_CONTEXT_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
 
 const boundedApiErrorText = (value: unknown, fallback = '') => {
   const text = typeof value === 'string' && value ? value : fallback
@@ -283,6 +285,15 @@ const fetchWithTimeout = async (input: RequestInfo | URL, init: RequestInit = {}
     throw error
   } finally {
     window.clearTimeout(timeout)
+  }
+}
+
+const validateVisualContextImageFile = (file: File) => {
+  if (file.size > MAX_VISUAL_CONTEXT_IMAGE_FILE_BYTES) {
+    throw new Error('Image is too large for visual context.')
+  }
+  if (!SUPPORTED_VISUAL_CONTEXT_IMAGE_TYPES.has(file.type.toLowerCase())) {
+    throw new Error('Use a JPEG, PNG, WebP, or GIF image for visual context.')
   }
 }
 
@@ -808,14 +819,6 @@ function App() {
     tick()
   }
 
-  const fileToDataUrl = (file: File) =>
-    new Promise<string>((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = () => resolve(String(reader.result))
-      reader.onerror = () => reject(reader.error ?? new Error('Failed to read image'))
-      reader.readAsDataURL(file)
-    })
-
   const imageToJpegDataUrl = (image: CanvasImageSource, width: number, height: number, maxSide = 960) => {
     const scale = Math.min(1, maxSide / Math.max(width, height))
     const canvas = document.createElement('canvas')
@@ -828,11 +831,16 @@ function App() {
   }
 
   const dataUrlFromFile = async (file: File) => {
-    const rawDataUrl = await fileToDataUrl(file)
+    validateVisualContextImageFile(file)
+    const objectUrl = URL.createObjectURL(file)
     const image = new Image()
-    image.src = rawDataUrl
-    await image.decode()
-    return imageToJpegDataUrl(image, image.naturalWidth, image.naturalHeight)
+    try {
+      image.src = objectUrl
+      await image.decode()
+      return imageToJpegDataUrl(image, image.naturalWidth, image.naturalHeight)
+    } finally {
+      URL.revokeObjectURL(objectUrl)
+    }
   }
 
   const dataUrlFromVideoFrame = async (stream: MediaStream) => {
@@ -1855,6 +1863,7 @@ function App() {
     if (!file) return
     setLastError(null)
     try {
+      validateVisualContextImageFile(file)
       setAttachedImageName(file.name)
       appendEvent('context/image-attached', { name: file.name, size: file.size, type: file.type })
       const imageDataUrl = await dataUrlFromFile(file)
