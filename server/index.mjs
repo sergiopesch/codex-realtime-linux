@@ -1403,7 +1403,8 @@ app.post('/api/codex/thread/archive', async (req, res) => {
   try {
     const threadId = requireText(req.body?.threadId, 'threadId', { maxLength: 300 })
     await codex.ensure()
-    res.json(await codex.request('thread/archive', { threadId }))
+    await codex.request('thread/archive', { threadId })
+    res.json({ ok: true, thread: { id: normalizeBoundedString(threadId, '', MAX_CONVERSATION_ID_LENGTH) } })
   } catch (error) {
     sendJsonError(res, error, { fallbackStatus: 502, fallbackMessage: 'Failed to archive Codex thread.' })
   }
@@ -1440,10 +1441,11 @@ app.post('/api/codex/steer', async (req, res) => {
     const threadId = requireText(req.body?.threadId, 'threadId', { maxLength: 300 })
     const instruction = requireText(req.body?.instruction, 'instruction')
     await codex.ensure()
-    res.json(await codex.request('turn/steer', {
+    await codex.request('turn/steer', {
       threadId,
       input: [{ type: 'text', text: instruction }],
-    }))
+    })
+    res.json({ ok: true, thread: { id: normalizeBoundedString(threadId, '', MAX_CONVERSATION_ID_LENGTH) } })
   } catch (error) {
     sendJsonError(res, error, { fallbackStatus: 502, fallbackMessage: 'Failed to steer Codex task.' })
   }
@@ -1454,7 +1456,12 @@ app.post('/api/codex/interrupt', async (req, res) => {
     const threadId = requireText(req.body?.threadId, 'threadId', { maxLength: 300 })
     const turnId = requireText(req.body?.turnId, 'turnId', { maxLength: 300 })
     await codex.ensure()
-    res.json(await codex.request('turn/interrupt', { threadId, turnId }))
+    await codex.request('turn/interrupt', { threadId, turnId })
+    res.json({
+      ok: true,
+      thread: { id: normalizeBoundedString(threadId, '', MAX_CONVERSATION_ID_LENGTH) },
+      turn: { id: normalizeBoundedString(turnId, '', MAX_CONVERSATION_ID_LENGTH) },
+    })
   } catch (error) {
     sendJsonError(res, error, { fallbackStatus: 502, fallbackMessage: 'Failed to interrupt Codex task.' })
   }
