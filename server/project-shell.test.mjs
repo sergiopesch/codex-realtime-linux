@@ -581,7 +581,12 @@ test('local API rejects untrusted origins and non-json mutation bodies', async (
 test('Codex app-server RPC bridge has bounded requests and single-flight initialization', async () => {
   const serverSource = await readFile(path.join(repoRoot, 'server', 'index.mjs'), 'utf8')
 
-  assert.match(serverSource, /const CODEX_BIN = process\.env\.CODEX_BIN \?\? 'codex'/)
+  assert.match(serverSource, /const CODEX_BIN = configuredExecutable\(process\.env\.CODEX_BIN, 'codex'\)/)
+  assert.match(serverSource, /function configuredExecutable\(value, fallback\)/)
+  assert.match(serverSource, /path\.basename\(candidate\) !== candidate/)
+  assert.match(serverSource, /path\.isAbsolute\(candidate\) \? path\.resolve\(candidate\) : fallback/)
+  assert.match(serverSource, /\^\[A-Za-z0-9\._\+-\]\+\$/)
+  assert.doesNotMatch(serverSource, /const CODEX_BIN = process\.env\.CODEX_BIN \?\? 'codex'/)
   assert.match(serverSource, /spawn\(CODEX_BIN, \['app-server'\]/)
   assert.match(serverSource, /codexBin: CODEX_BIN/)
   assert.doesNotMatch(serverSource, /spawn\('codex', \['app-server'\]/)
@@ -1048,6 +1053,7 @@ test('README documents live release verification for non-automated capabilities'
   assert.match(readme, /api-server\.log/)
   assert.match(readme, /startup error dialogs include a bounded tail of that API log/)
   assert.match(readme, /The override must be an absolute path; blank or relative values are ignored/)
+  assert.match(readme, /Blank values and relative path-like overrides are ignored/)
   assert.match(readme, /OPENAI_SAFETY_IDENTIFIER=/)
   assert.match(readme, /stable anonymized value from this local installation/)
   assert.match(readme, /runtime strings are trimmed, whitespace-normalized, and bounded/)

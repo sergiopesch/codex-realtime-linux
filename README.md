@@ -98,7 +98,7 @@ Use `CODEX_API_KEY` if Codex local execution should use a different key than Rea
 CODEX_API_KEY=sk-...
 ```
 
-The app starts Codex through `codex app-server` by default. If your standalone desktop environment cannot resolve `codex` from `PATH`, set the executable explicitly:
+The app starts Codex through `codex app-server` by default. If your standalone desktop environment cannot resolve `codex` from `PATH`, set the executable explicitly. Blank values and relative path-like overrides are ignored so app-menu launches do not fail later with a confusing spawn error:
 
 ```bash
 CODEX_BIN=/absolute/path/to/codex

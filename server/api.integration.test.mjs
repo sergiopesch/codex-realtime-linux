@@ -469,7 +469,10 @@ test('server returns json errors for oversized API request bodies', async (t) =>
 })
 
 test('server exposes desktop launch metadata when managed by Electron', async (t) => {
-  const { baseUrl } = await startTestServer(t, { CODEX_DESKTOP_SERVER_TOKEN: 'test-desktop-token' })
+  const { baseUrl } = await startTestServer(t, {
+    CODEX_DESKTOP_SERVER_TOKEN: 'test-desktop-token',
+    CODEX_BIN: './relative-codex',
+  })
 
   const status = await fetch(`${baseUrl}/api/status`)
   assert.equal(status.status, 200)
@@ -477,6 +480,7 @@ test('server exposes desktop launch metadata when managed by Electron', async (t
   const body = await status.json()
   assert.equal(body.desktopServer.token, 'test-desktop-token')
   assert.equal(Number.isInteger(body.desktopServer.pid), true)
+  assert.equal(body.codexBin, 'codex')
 })
 
 test('server only trusts configured loopback API origins', async (t) => {

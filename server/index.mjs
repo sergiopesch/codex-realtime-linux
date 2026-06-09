@@ -20,10 +20,10 @@ const ENV_OPENAI_API_KEY = process.env.OPENAI_API_KEY
 const OPENAI_ADMIN_KEY = process.env.OPENAI_ADMIN_KEY ?? process.env.OPENAI_API_ADMIN_KEY
 const ENV_CODEX_API_KEY = process.env.CODEX_API_KEY
 const CODEX_FORCE_API_KEY_AUTH = process.env.CODEX_FORCE_API_KEY_AUTH === 'true'
-const CODEX_BIN = process.env.CODEX_BIN ?? 'codex'
 const DESKTOP_SERVER_TOKEN = process.env.CODEX_DESKTOP_SERVER_TOKEN ?? ''
 const MAX_RUNTIME_CONFIG_STRING_LENGTH = 240
 const MAX_RUNTIME_PERSONA_LENGTH = 2_000
+const CODEX_BIN = configuredExecutable(process.env.CODEX_BIN, 'codex')
 const DEFAULT_REALTIME_PERSONA = 'Speak naturally, stay technically sharp, keep replies concise, and route concrete work to Codex tools.'
 const CODEX_MODEL = configuredRuntimeString(process.env.CODEX_MODEL, 'gpt-5.4')
 const REALTIME_MODEL = configuredRuntimeString(process.env.REALTIME_MODEL, 'gpt-realtime-2')
@@ -184,6 +184,14 @@ function configuredRuntimeString(value, fallback, maxLength = MAX_RUNTIME_CONFIG
 function configuredAbsolutePath(value, fallback) {
   const candidate = typeof value === 'string' && value.trim() ? value.trim() : fallback
   return path.isAbsolute(candidate) ? path.resolve(candidate) : fallback
+}
+
+function configuredExecutable(value, fallback) {
+  const candidate = typeof value === 'string' && value.trim() ? value.trim() : fallback
+  if (typeof candidate !== 'string' || !candidate || candidate.length > MAX_RUNTIME_CONFIG_STRING_LENGTH) return fallback
+  if (/[\u0000-\u001f\u007f]/.test(candidate)) return fallback
+  if (path.basename(candidate) !== candidate) return path.isAbsolute(candidate) ? path.resolve(candidate) : fallback
+  return /^[A-Za-z0-9._+-]+$/.test(candidate) ? candidate : fallback
 }
 
 function configuredLocalApiOrigin(value) {
