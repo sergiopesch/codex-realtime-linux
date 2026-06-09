@@ -103,6 +103,23 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   assert.equal(artifactBody.data[0].relativePath, 'public/agent-files/sample-report/index.html')
   assert.equal(artifactBody.data.some((artifact) => artifact.relativePath.includes('unsafe report')), false)
 
+  for (let index = 0; index < 45; index += 1) {
+    const extraArtifactDir = path.join(workspacePath, 'public', 'agent-files', `extra-report-${String(index).padStart(2, '0')}`)
+    await mkdir(extraArtifactDir, { recursive: true })
+    await writeFile(path.join(extraArtifactDir, 'index.html'), `<!doctype html><title>Extra ${index}</title>`)
+  }
+  const oversizedName = `a${'b'.repeat(130)}`
+  const oversizedArtifactDir = path.join(workspacePath, 'public', 'agent-files', oversizedName)
+  await mkdir(oversizedArtifactDir, { recursive: true })
+  await writeFile(path.join(oversizedArtifactDir, 'index.html'), '<!doctype html><title>Oversized report</title>')
+
+  const boundedArtifactList = await fetch(`${baseUrl}/api/artifacts?workspacePath=${encodeURIComponent(workspacePath)}`)
+  assert.equal(boundedArtifactList.status, 200)
+  const boundedArtifactBody = await boundedArtifactList.json()
+  assert.equal(boundedArtifactBody.data.length, 40)
+  assert.equal(boundedArtifactBody.data.some((artifact) => artifact.id === oversizedName), false)
+  assert.ok(boundedArtifactBody.data.every((artifact) => artifact.title.length <= 180))
+
   const token = Buffer.from(path.resolve(workspacePath), 'utf8').toString('base64url')
   const preview = await fetch(`${baseUrl}/workspace-artifacts/${token}/sample-report/index.html`)
   assert.equal(preview.status, 200)

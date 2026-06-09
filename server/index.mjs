@@ -47,6 +47,9 @@ const MAX_CONVERSATION_TEXT_LENGTH = 8_000
 const MAX_CONVERSATION_TRACE_LENGTH = 500
 const MAX_CONVERSATION_TRACES = 40
 const MAX_CONVERSATION_TRANSCRIPT_LINES = 200
+const MAX_GENERATED_ARTIFACTS = 40
+const MAX_ARTIFACT_NAME_LENGTH = 120
+const MAX_ARTIFACT_TITLE_LENGTH = 180
 const MAX_USAGE_BUCKETS = 20
 const MAX_USAGE_BUCKET_LABEL_LENGTH = 120
 const MAX_ADMIN_WORKSPACES = 20
@@ -206,7 +209,7 @@ function isPathInside(parent, child) {
 }
 
 function isSafeArtifactName(value) {
-  return /^[a-z0-9][a-z0-9-]*$/i.test(value)
+  return typeof value === 'string' && value.length <= MAX_ARTIFACT_NAME_LENGTH && /^[a-z0-9][a-z0-9-]*$/i.test(value)
 }
 
 function setArtifactPreviewHeaders(res) {
@@ -322,21 +325,24 @@ async function listGeneratedArtifacts(workspacePath = REPO_ROOT) {
     const indexPath = path.join(artifactsDir, entry.name, 'index.html')
     try {
       const details = await stat(indexPath)
+      const title = entry.name.replace(/^\d{8}t?\d{6}-?/i, '').replace(/-/g, ' ') || entry.name
       artifacts.push({
         id: entry.name,
-        title: entry.name.replace(/^\d{8}t?\d{6}-?/i, '').replace(/-/g, ' ') || entry.name,
+        title: normalizeBoundedString(title, entry.name, MAX_ARTIFACT_TITLE_LENGTH),
         url: `/workspace-artifacts/${token}/${entry.name}/index.html`,
         relativePath: `${GENERATED_ARTIFACT_DIR}/${entry.name}/index.html`,
         workspacePath: resolvedWorkspacePath,
         updatedAt: details.mtime.toISOString(),
-        size: details.size,
+        size: finiteNumber(details.size),
       })
     } catch (error) {
       if (error?.code !== 'ENOENT') throw error
     }
   }
 
-  return artifacts.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+  return artifacts
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+    .slice(0, MAX_GENERATED_ARTIFACTS)
 }
 
 function realtimeSessionConfig() {
