@@ -453,6 +453,22 @@ test('runCommand escalates timed-out arduino-cli processes to SIGKILL', async ()
   assert.deepEqual(killedSignals, ['SIGTERM', 'SIGKILL'])
 })
 
+test('runCommand normalizes synchronous arduino-cli startup failures', async () => {
+  await assert.rejects(
+    () => runCommand('arduino-cli', ['version'], {
+      spawnImpl: () => {
+        throw new Error('spawn failed before process creation')
+      },
+    }),
+    (error) =>
+      error instanceof ArduinoUploadError &&
+      error.status === 503 &&
+      error.code === 'arduino_cli_missing' &&
+      error.details === 'spawn failed before process creation' &&
+      /arduino-cli is not available/.test(error.message),
+  )
+})
+
 test('uploadArduinoSketch compiles and uploads through arduino-cli', async () => {
   const commands = []
   const run = async (args) => {

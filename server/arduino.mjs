@@ -274,7 +274,19 @@ function summarizeCommandOutput(stdout, stderr) {
 
 export function runCommand(command, args, { spawnImpl = spawn, timeoutMs = 120_000, killGraceMs = COMMAND_TIMEOUT_KILL_GRACE_MS } = {}) {
   return new Promise((resolve, reject) => {
-    const proc = spawnImpl(command, args, { stdio: ['ignore', 'pipe', 'pipe'] })
+    let proc
+    try {
+      proc = spawnImpl(command, args, { stdio: ['ignore', 'pipe', 'pipe'] })
+    } catch (error) {
+      reject(
+        new ArduinoUploadError('arduino-cli is not available. Install it before uploading sketches.', {
+          code: 'arduino_cli_missing',
+          status: 503,
+          details: error instanceof Error ? error.message : String(error),
+        }),
+      )
+      return
+    }
     let stdout = ''
     let stderr = ''
     let settled = false
