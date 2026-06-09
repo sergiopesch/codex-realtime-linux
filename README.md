@@ -48,6 +48,8 @@ npm run dev
 - Vite renderer on `http://localhost:5173`
 - Electron desktop shell loading the local renderer
 
+The Vite dev server proxies both `/api` and `/workspace-artifacts` to the local API server so generated previews behave the same in dev and in the installed desktop app.
+
 For browser-only development:
 
 ```bash

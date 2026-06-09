@@ -45,6 +45,7 @@ test('artifact previews are served through workspace-scoped routes only', async 
   const serverSource = await readFile(path.join(repoRoot, 'server', 'index.mjs'), 'utf8')
   const policySource = await readFile(path.join(repoRoot, 'server', 'codexPolicy.mjs'), 'utf8')
   const appSource = await readFile(path.join(repoRoot, 'src', 'App.tsx'), 'utf8')
+  const viteSource = await readFile(path.join(repoRoot, 'vite.config.ts'), 'utf8')
 
   assert.match(serverSource, /async function requireWorkspaceDirectory/)
   assert.match(serverSource, /must be an absolute local path/)
@@ -88,6 +89,8 @@ test('artifact previews are served through workspace-scoped routes only', async 
   assert.match(serverSource, /setArtifactPreviewHeaders\(res\)[\s\S]*res\.sendFile\(realRequestedPath/)
   assert.doesNotMatch(serverSource, /app\.use\('\/agent-files'/)
   assert.doesNotMatch(policySource, /url:\s*`\/agent-files/)
+  assert.match(viteSource, /'\/api': 'http:\/\/127\.0\.0\.1:3311'/)
+  assert.match(viteSource, /'\/workspace-artifacts': 'http:\/\/127\.0\.0\.1:3311'/)
   assert.match(appSource, /const selectLatestArtifact = useCallback/)
   assert.match(appSource, /selectLatestArtifact\(artifactData\)/)
   assert.match(appSource, /const finiteTimestamp = \(value: string \| null \| undefined\) =>/)

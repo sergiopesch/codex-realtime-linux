@@ -7,6 +7,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': 'http://127.0.0.1:3311',
+      '/workspace-artifacts': 'http://127.0.0.1:3311',
     },
   },
 })
