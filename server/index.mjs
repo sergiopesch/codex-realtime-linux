@@ -1506,6 +1506,10 @@ function finiteNumber(value, fallback = 0) {
   return Number.isFinite(number) ? number : fallback
 }
 
+function nonNegativeFiniteNumber(value, fallback = 0) {
+  return Math.max(0, finiteNumber(value, fallback))
+}
+
 function finiteTimestamp(value, fallback = 0) {
   const timestamp = typeof value === 'string' ? Date.parse(value) : Number.NaN
   return Number.isFinite(timestamp) ? timestamp : fallback
@@ -1596,11 +1600,11 @@ function normalizeCompletionUsage(usage) {
   for (const bucket of buckets) {
     const results = Array.isArray(bucket?.results) ? bucket.results : []
     for (const result of results) {
-      const input = finiteNumber(result.input_tokens)
-      const output = finiteNumber(result.output_tokens)
-      const cached = finiteNumber(result.input_cached_tokens)
-      const audioInput = finiteNumber(result.input_audio_tokens)
-      const audioOutput = finiteNumber(result.output_audio_tokens)
+      const input = nonNegativeFiniteNumber(result.input_tokens)
+      const output = nonNegativeFiniteNumber(result.output_tokens)
+      const cached = nonNegativeFiniteNumber(result.input_cached_tokens)
+      const audioInput = nonNegativeFiniteNumber(result.input_audio_tokens)
+      const audioOutput = nonNegativeFiniteNumber(result.output_audio_tokens)
       const total = input + output
       const label = normalizeBoundedString(result.model ?? result.object, 'Completions', MAX_USAGE_BUCKET_LABEL_LENGTH)
 
@@ -1610,7 +1614,7 @@ function normalizeCompletionUsage(usage) {
       totals.audioInput += audioInput
       totals.audioOutput += audioOutput
       totals.total += total
-      totals.requests += finiteNumber(result.num_model_requests)
+      totals.requests += nonNegativeFiniteNumber(result.num_model_requests)
       totalsByLabel.set(label, (totalsByLabel.get(label) ?? 0) + total)
     }
   }

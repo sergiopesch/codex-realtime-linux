@@ -763,6 +763,8 @@ test('upstream OpenAI and usage fetches are timeout bounded', async () => {
   assert.match(serverSource, /const rate = configuredUsdToGbpRate\(data\?\.rates\?\.GBP\)/)
   assert.doesNotMatch(serverSource, /const configuredRate = Number\(process\.env\.OPENAI_USAGE_GBP_RATE\)/)
   assert.match(serverSource, /function finiteNumber\(value, fallback = 0\)/)
+  assert.match(serverSource, /function nonNegativeFiniteNumber\(value, fallback = 0\)/)
+  assert.match(serverSource, /return Math\.max\(0, finiteNumber\(value, fallback\)\)/)
   assert.match(serverSource, /function topUsageBuckets\(totalsByLabel\)/)
   assert.match(serverSource, /\.slice\(0, MAX_USAGE_BUCKETS\)/)
   assert.match(serverSource, /function normalizeUsageCurrency\(value, fallback = 'usd'\)/)
@@ -789,7 +791,13 @@ test('upstream OpenAI and usage fetches are timeout bounded', async () => {
     serverSource,
     /normalizeBoundedString\(result\.model \?\? result\.object, 'Completions', MAX_USAGE_BUCKET_LABEL_LENGTH\)/,
   )
-  assert.match(serverSource, /totals\.requests \+= finiteNumber\(result\.num_model_requests\)/)
+  assert.match(serverSource, /const input = nonNegativeFiniteNumber\(result\.input_tokens\)/)
+  assert.match(serverSource, /const output = nonNegativeFiniteNumber\(result\.output_tokens\)/)
+  assert.match(serverSource, /const cached = nonNegativeFiniteNumber\(result\.input_cached_tokens\)/)
+  assert.match(serverSource, /const audioInput = nonNegativeFiniteNumber\(result\.input_audio_tokens\)/)
+  assert.match(serverSource, /const audioOutput = nonNegativeFiniteNumber\(result\.output_audio_tokens\)/)
+  assert.match(serverSource, /totals\.requests \+= nonNegativeFiniteNumber\(result\.num_model_requests\)/)
+  assert.doesNotMatch(serverSource, /totals\.requests \+= finiteNumber\(result\.num_model_requests\)/)
   assert.match(serverSource, /Buffer\.byteLength\(imageDataUrlText, 'utf8'\) > MAX_VISUAL_CONTEXT_DATA_URL_BYTES/)
   assert.match(serverSource, /visual_context_too_large/)
   assert.match(serverSource, /client_secrets'[\s\S]*signal: upstreamSignal\(\)/)
