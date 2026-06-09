@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { chmod, mkdir, mkdtemp, rm, stat, symlink, truncate, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, truncate, writeFile } from 'node:fs/promises'
 import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
@@ -81,6 +81,35 @@ async function readJson(response) {
   } catch {
     return { raw: text }
   }
+}
+
+async function writeFakeCodexAppServer(tempDir) {
+  const fakeCodexPath = path.join(tempDir, 'fake-codex-app-server.mjs')
+  const logPath = path.join(tempDir, 'fake-codex-rpc.log')
+  await writeFile(
+    fakeCodexPath,
+    `#!/usr/bin/env node
+import { appendFileSync } from 'node:fs'
+import { createInterface } from 'node:readline'
+
+const logPath = process.env.FAKE_CODEX_RPC_LOG
+const responses = {
+  initialize: {},
+  'thread/start': { thread: { id: 'thread-ok' } },
+  'turn/start': { turn: { id: 'turn-ok' } },
+}
+
+createInterface({ input: process.stdin }).on('line', (line) => {
+  const message = JSON.parse(line)
+  if (logPath) appendFileSync(logPath, \`\${JSON.stringify(message)}\\n\`)
+  if (message.id == null) return
+  const result = responses[message.method] ?? {}
+  process.stdout.write(\`\${JSON.stringify({ id: message.id, result })}\\n\`)
+})
+`,
+  )
+  await chmod(fakeCodexPath, 0o755)
+  return { fakeCodexPath, logPath }
 }
 
 test('server enforces workspace scoped state and artifact routes over HTTP', async (t) => {
@@ -454,6 +483,59 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   assert.equal(missingConversationDelete.status, 200)
   stateAfterMissingConversationMutation = await missingConversationDelete.json()
   assert.equal(stateAfterMissingConversationMutation.state.conversationsByWorkspace[emptyStateWorkspacePath], undefined)
+})
+
+test('codex task returns public artifact metadata for external workspace artifacts', async (t) => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-fake-codex-'))
+  const workspacePath = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-artifact-task-workspace-'))
+  t.after(() => rm(tempDir, { recursive: true, force: true }))
+  t.after(() => rm(workspacePath, { recursive: true, force: true }))
+  const { fakeCodexPath, logPath } = await writeFakeCodexAppServer(tempDir)
+  const { baseUrl } = await startTestServer(t, {
+    CODEX_BIN: fakeCodexPath,
+    CODEX_API_KEY: '',
+    CODEX_USE_OPENAI_API_KEY: 'false',
+    FAKE_CODEX_RPC_LOG: logPath,
+  })
+
+  const task = await fetch(`${baseUrl}/api/codex/task`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      cwd: workspacePath,
+      goal: 'Create an HTML presentation about this workspace.',
+    }),
+  })
+  assert.equal(task.status, 200)
+  const body = await task.json()
+
+  assert.equal(body.thread.id, 'thread-ok')
+  assert.equal(body.turn.id, 'turn-ok')
+  assert.equal(body.artifact.workspacePath, workspacePath)
+  assert.match(
+    body.artifact.relativeDir,
+    /^public\/agent-files\/\d{8}t\d{6}-create-an-html-presentation-about-this-workspace-[a-z0-9-]+$/,
+  )
+  assert.equal(body.artifact.relativePath, `${body.artifact.relativeDir}/index.html`)
+  assert.equal(
+    body.artifact.url,
+    `/workspace-artifacts/${Buffer.from(workspacePath, 'utf8').toString('base64url')}/${body.artifact.directoryName}/index.html`,
+  )
+  assert.equal('absoluteDir' in body.artifact, false)
+  assert.equal('absolutePath' in body.artifact, false)
+  assert.equal((await stat(path.join(workspacePath, body.artifact.relativeDir))).isDirectory(), true)
+
+  const rpcMessages = (await readFile(logPath, 'utf8'))
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line))
+  const turnStart = rpcMessages.find((message) => message.method === 'turn/start')
+  const escapedRelativePath = body.artifact.relativePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const turnText = turnStart?.params?.input?.[0]?.text ?? ''
+  assert.match(turnText, /Artifact workflow: inspect this selected workspace/)
+  assert.match(turnText, new RegExp(escapedRelativePath))
+  assert.match(turnText, /User goal:\nCreate an HTML presentation about this workspace\./)
+  assert.doesNotMatch(turnText, /absoluteDir|absolutePath/)
 })
 
 test('server returns json errors for oversized API request bodies', async (t) => {
