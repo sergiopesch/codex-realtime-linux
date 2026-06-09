@@ -296,6 +296,7 @@ const MAX_UI_EVENT_OBJECT_KEYS = 30
 const MAX_UI_EVENT_DEPTH = 6
 const MAX_UI_USAGE_BUCKETS = 50
 const MAX_UI_USAGE_LABEL_LENGTH = 120
+const MAX_UI_WEATHER_TEXT_LENGTH = 500
 const ARTIFACT_PREVIEW_SESSION_MS = 3 * 60 * 1000
 const MAX_SEEN_USB_EVENT_IDS = 240
 const MAX_VISUAL_CONTEXT_IMAGE_FILE_BYTES = 12 * 1024 * 1024
@@ -534,6 +535,57 @@ const formatGbp = (value: number | null | undefined) =>
 
 const formatTokens = (value: number | null | undefined) =>
   new Intl.NumberFormat('en-GB', { notation: 'compact', maximumFractionDigits: 1 }).format(finiteUiNumber(value))
+
+const safeWeatherResponse = (value: unknown): WeatherResponse | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const weather = value as UnknownRecord
+  const location = weather.location && typeof weather.location === 'object' && !Array.isArray(weather.location)
+    ? weather.location as UnknownRecord
+    : null
+  const units = weather.units && typeof weather.units === 'object' && !Array.isArray(weather.units)
+    ? weather.units as UnknownRecord
+    : null
+  const current = weather.current && typeof weather.current === 'object' && !Array.isArray(weather.current)
+    ? weather.current as UnknownRecord
+    : null
+  if (!location || !units || !current) return null
+
+  const name = boundedPlainString(location.name, '', MAX_UI_WEATHER_TEXT_LENGTH)
+  const temperature = finiteUiNumber(current.temperature, Number.NaN)
+  const latitude = finiteUiNumber(location.latitude, Number.NaN)
+  const longitude = finiteUiNumber(location.longitude, Number.NaN)
+  if (!name || !Number.isFinite(temperature) || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return null
+
+  const mode = units.mode === 'imperial' ? 'imperial' : 'metric'
+  return {
+    source: boundedPlainString(weather.source, 'weather-api', MAX_UI_WEATHER_TEXT_LENGTH),
+    query: boundedPlainString(weather.query, name, MAX_UI_WEATHER_TEXT_LENGTH),
+    summary: boundedPlainString(weather.summary, `Current weather for ${name}.`, MAX_UI_WEATHER_TEXT_LENGTH),
+    location: {
+      name,
+      admin1: boundedPlainString(location.admin1, '', MAX_UI_WEATHER_TEXT_LENGTH) || undefined,
+      country: boundedPlainString(location.country, '', MAX_UI_WEATHER_TEXT_LENGTH) || undefined,
+      latitude,
+      longitude,
+      timezone: boundedPlainString(location.timezone, '', MAX_UI_WEATHER_TEXT_LENGTH) || undefined,
+    },
+    units: {
+      mode,
+      temperature: boundedPlainString(units.temperature, mode === 'imperial' ? '°F' : '°C', MAX_UI_WEATHER_TEXT_LENGTH),
+      windSpeed: boundedPlainString(units.windSpeed, mode === 'imperial' ? 'mph' : 'km/h', MAX_UI_WEATHER_TEXT_LENGTH),
+    },
+    current: {
+      time: boundedPlainString(current.time, '', MAX_UI_WEATHER_TEXT_LENGTH),
+      temperature,
+      apparentTemperature: typeof current.apparentTemperature === 'number' && Number.isFinite(current.apparentTemperature) ? current.apparentTemperature : null,
+      relativeHumidity: typeof current.relativeHumidity === 'number' && Number.isFinite(current.relativeHumidity) ? Math.max(0, current.relativeHumidity) : null,
+      windSpeed: typeof current.windSpeed === 'number' && Number.isFinite(current.windSpeed) ? Math.max(0, current.windSpeed) : null,
+      weatherCode: typeof current.weatherCode === 'number' && Number.isInteger(current.weatherCode) ? current.weatherCode : null,
+      condition: boundedPlainString(current.condition, 'Current conditions unavailable', MAX_UI_WEATHER_TEXT_LENGTH),
+      isDay: typeof current.isDay === 'boolean' ? current.isDay : null,
+    },
+  }
+}
 
 const randomLocalConversationToken = () =>
   globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`
@@ -1685,12 +1737,15 @@ function App() {
     setStatus(await api<Status>('/api/status'))
   }
 
-  const fetchWeather = async (location: string, units: 'metric' | 'imperial' = weatherUnits) =>
-    api<WeatherResponse>('/api/weather/current', {
+  const fetchWeather = async (location: string, units: 'metric' | 'imperial' = weatherUnits) => {
+    const weather = safeWeatherResponse(await api<unknown>('/api/weather/current', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ location, units }),
-    })
+    }))
+    if (!weather) throw new Error('Weather response did not include valid current conditions.')
+    return weather
+  }
 
   const uploadArduinoSketch = async (payload: Record<string, unknown>) =>
     api<ArduinoUploadResponse>('/api/arduino/upload', {
@@ -2688,8 +2743,8 @@ function App() {
         setActivity('Voice router', 'Weather lookup')
         const location = typeof payload.location === 'string' ? payload.location : ''
         const units = payload.units === 'imperial' || payload.units === 'metric' ? payload.units : weatherUnits
-        result = await fetchWeather(location, units)
-        const weather = result as WeatherResponse
+        const weather = await fetchWeather(location, units)
+        result = weather
         showNotice(weather.summary)
       }
 
