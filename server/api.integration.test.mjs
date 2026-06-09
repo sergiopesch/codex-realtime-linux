@@ -106,6 +106,7 @@ const responses = {
         cwd: process.env.FAKE_CODEX_THREAD_CWD,
         updatedAt: 1e20,
         status: { type: 'complete' },
+        debugPayload: 'x'.repeat(5_000),
       },
     ],
   },
@@ -624,6 +625,8 @@ test('codex task returns public artifact metadata for external workspace artifac
   assert.equal(threadsBody.conversations[0].id, 'thread-large-time')
   assert.equal(threadsBody.conversations[0].workspacePath, workspacePath)
   assert.match(threadsBody.conversations[0].updatedAt, /^\d{4}-\d{2}-\d{2}T/)
+  assert.equal(threadsBody.data.length, 1)
+  assert.equal(threadsBody.data[0].debugPayload.length, 1000)
 })
 
 test('server returns json errors for oversized API request bodies', async (t) => {

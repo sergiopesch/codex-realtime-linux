@@ -96,6 +96,7 @@ const MAX_USAGE_BUCKET_LABEL_LENGTH = 120
 const MAX_USAGE_CURRENCY_LENGTH = 12
 const MAX_IGNORED_USAGE_CURRENCIES = 5
 const MAX_ADMIN_WORKSPACES = 20
+const MAX_CODEX_THREADS = 100
 const MAX_CODEX_NOTIFICATIONS = 160
 const MAX_CODEX_METADATA_STRING_LENGTH = 1_000
 const MAX_CODEX_METADATA_ARRAY_ITEMS = 50
@@ -1517,6 +1518,17 @@ function threadToConversation(thread) {
   }
 }
 
+function normalizeCodexThreadListResponse(result) {
+  const normalizedResult = normalizeCodexMetadataValue(result)
+  const response = normalizedResult && typeof normalizedResult === 'object' && !Array.isArray(normalizedResult) ? normalizedResult : {}
+  const threads = Array.isArray(result?.data) ? result.data.slice(0, MAX_CODEX_THREADS) : []
+  return {
+    ...response,
+    data: Array.isArray(response.data) ? response.data : [],
+    conversations: threads.map(threadToConversation),
+  }
+}
+
 function normalizeCodexEntityId(entity, label) {
   const id = normalizeBoundedString(entity?.id, '', MAX_CONVERSATION_ID_LENGTH)
   if (!id) {
@@ -1984,10 +1996,7 @@ app.get('/api/codex/threads', async (req, res) => {
     if (typeof req.query.cwd === 'string' && req.query.cwd) params.cwd = await requireWorkspaceDirectory(req.query.cwd, 'cwd')
 
     const result = await codex.request('thread/list', params)
-    res.json({
-      ...result,
-      conversations: (result.data ?? []).map(threadToConversation),
-    })
+    res.json(normalizeCodexThreadListResponse(result))
   } catch (error) {
     sendJsonError(res, error, { fallbackStatus: 502, fallbackMessage: 'Failed to list Codex threads.' })
   }
