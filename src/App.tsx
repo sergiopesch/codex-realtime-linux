@@ -334,7 +334,12 @@ const savedConversationPayload = (conversation: AgentConversation) => ({
 
 const eventKey = (event: EventRecord) => `${event.method ?? 'event'}::${event.receivedAt ?? ''}`
 const workspacePathFor = (workspace: Workspace) => workspace.path ?? workspace.id
-const isAbsoluteLocalWorkspacePath = (workspacePath: string) => workspacePath.startsWith('/')
+const normalizeAbsoluteLocalWorkspacePath = (workspacePath: string) => {
+  const trimmed = workspacePath.trim()
+  if (!trimmed.startsWith('/')) return trimmed
+  return trimmed.replace(/\/+$/g, '') || '/'
+}
+const isAbsoluteLocalWorkspacePath = (workspacePath: string) => normalizeAbsoluteLocalWorkspacePath(workspacePath).startsWith('/')
 
 const realtimeFunctionCallItem = (message: Record<string, unknown>): RealtimeFunctionCallItem | null => {
   const eventType = typeof message.type === 'string' ? message.type : ''
@@ -515,7 +520,12 @@ function App() {
     if (!routableWorkspacePathsRef.current.has(selected)) {
       throw new Error('The selected workspace is not available for Codex routing.')
     }
-    if (typeof requestedCwd === 'string' && requestedCwd.trim() && requestedCwd.trim() !== selected) {
+    const normalizedSelected = normalizeAbsoluteLocalWorkspacePath(selected)
+    const normalizedRequestedCwd =
+      typeof requestedCwd === 'string' && requestedCwd.trim()
+        ? normalizeAbsoluteLocalWorkspacePath(requestedCwd)
+        : ''
+    if (normalizedRequestedCwd && normalizedRequestedCwd !== normalizedSelected) {
       throw new Error('Realtime requested a workspace that is not currently selected. Select that workspace first.')
     }
     return selected
