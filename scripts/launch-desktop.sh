@@ -72,7 +72,7 @@ renderer_input_newer_than_build() {
     find "$build_input" -path "$generated_artifact_dir" -prune -o -type f -newer "$renderer_build_stamp" -print -quit
     return
   fi
-  find "$build_input" -newer "$renderer_build_stamp" -print -quit
+  find "$build_input" -type f -newer "$renderer_build_stamp" -print -quit
 }
 
 if [ ! -f "$renderer_build_stamp" ]; then
