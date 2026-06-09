@@ -564,15 +564,15 @@ const valueContainsString = (value: unknown, needle: string): boolean => {
   return Object.values(value as UnknownRecord).some((item) => valueContainsString(item, needle))
 }
 
-const valueContainsCompletedCodexStatus = (value: unknown): boolean => {
-  if (typeof value === 'string') return completedCodexTurnWords.has(value.toLowerCase())
+const valueContainsCompletedCodexStatus = (value: unknown, statusContext = false): boolean => {
+  if (typeof value === 'string') return statusContext && completedCodexTurnWords.has(value.toLowerCase())
   if (!value || typeof value !== 'object') return false
-  if (Array.isArray(value)) return value.some(valueContainsCompletedCodexStatus)
+  if (Array.isArray(value)) return statusContext && value.some((item) => valueContainsCompletedCodexStatus(item, true))
 
   return Object.entries(value as UnknownRecord).some(([key, item]) => {
     const statusKey = /status|state|type|outcome|phase/i.test(key)
     if (statusKey && typeof item === 'string' && completedCodexTurnWords.has(item.toLowerCase())) return true
-    return valueContainsCompletedCodexStatus(item)
+    return valueContainsCompletedCodexStatus(item, statusContext || statusKey)
   })
 }
 
