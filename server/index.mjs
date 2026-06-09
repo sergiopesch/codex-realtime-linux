@@ -559,8 +559,9 @@ class CodexRpc {
       }
     })
 
-    this.proc.once('exit', (code) => {
-      this.#resetProcessState(new Error(`codex app-server exited with code ${code}`))
+    this.proc.once('exit', (code, signal) => {
+      const reason = signal ? `signal ${signal}` : `code ${code}`
+      this.#resetProcessState(new Error(`codex app-server exited with ${reason}`))
     })
 
     this.rl = createInterface({ input: this.proc.stdout })
@@ -651,6 +652,12 @@ class CodexRpc {
   notify(method, params = {}) {
     if (!this.proc?.stdin?.writable) return
     this.proc.stdin.write(`${JSON.stringify({ method, params })}\n`)
+  }
+
+  dispose(reason = 'codex app-server stopped.') {
+    const proc = this.proc
+    if (proc && !proc.killed) proc.kill()
+    this.#resetProcessState(new Error(reason))
   }
 }
 
@@ -1408,14 +1415,18 @@ app.get(/^(?!\/api(?:\/|$)).*/, (_req, res) => {
 await loadLocalSecrets()
 usbMonitor.start()
 
-process.once('SIGINT', () => {
+function shutdown(exitCode, reason) {
   usbMonitor.stop()
-  process.exit(130)
+  codex.dispose(reason)
+  process.exit(exitCode)
+}
+
+process.once('SIGINT', () => {
+  shutdown(130, 'Codex Realtime Linux server received SIGINT.')
 })
 
 process.once('SIGTERM', () => {
-  usbMonitor.stop()
-  process.exit(143)
+  shutdown(143, 'Codex Realtime Linux server received SIGTERM.')
 })
 
 app.listen(PORT, '127.0.0.1', () => {

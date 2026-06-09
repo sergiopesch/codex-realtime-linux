@@ -130,9 +130,15 @@ test('Codex app-server RPC bridge has bounded requests and single-flight initial
   assert.match(serverSource, /initPromise = null/)
   assert.match(serverSource, /if \(this\.initPromise\) return this\.initPromise/)
   assert.match(serverSource, /codex app-server request timed out/)
+  assert.match(serverSource, /codex app-server exited with \$\{reason\}/)
   assert.match(serverSource, /clearTimeout\(timeout\)/)
   assert.match(serverSource, /#resetProcessState\(error\)/)
   assert.match(serverSource, /if \(!this\.proc\?\.stdin\?\.writable\)/)
+  assert.match(serverSource, /dispose\(reason = 'codex app-server stopped\.'\)/)
+  assert.match(serverSource, /if \(proc && !proc\.killed\) proc\.kill\(\)/)
+  assert.match(serverSource, /function shutdown\(exitCode, reason\)/)
+  assert.match(serverSource, /codex\.dispose\(reason\)/)
+  assert.match(serverSource, /shutdown\(143, 'Codex Realtime Linux server received SIGTERM\.'\)/)
 })
 
 test('upstream OpenAI and usage fetches are timeout bounded', async () => {
