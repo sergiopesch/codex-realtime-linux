@@ -1197,8 +1197,7 @@ async function mutateAppState(updater) {
 }
 
 function threadToConversation(thread) {
-  const fallbackPreview = 'Resume this Codex conversation.'
-  const preview = normalizeBoundedString(thread?.preview, fallbackPreview, MAX_CONVERSATION_TEXT_LENGTH)
+  const preview = normalizeBoundedString(thread?.preview, '', MAX_CONVERSATION_TEXT_LENGTH)
   const title = normalizeBoundedString(
     thread?.name,
     normalizeBoundedString(thread?.preview, 'Codex conversation', MAX_CONVERSATION_TITLE_LENGTH),
