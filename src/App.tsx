@@ -320,6 +320,11 @@ const slug = (value: string) =>
 
 const briefThreadTitle = (value: string) => value.trim().split(/\s+/).slice(0, 4).join(' ') || 'Untitled'
 
+const finiteTimestamp = (value: string | null | undefined) => {
+  const timestamp = typeof value === 'string' ? Date.parse(value) : Number.NaN
+  return Number.isFinite(timestamp) ? timestamp : null
+}
+
 const titleFromGoal = (goal: string) => {
   const brief = briefThreadTitle(goal.replace(/[.?!]+$/g, ''))
   return brief === 'Untitled' ? 'Voice routed work' : brief
@@ -962,10 +967,13 @@ function App() {
   const selectLatestArtifact = useCallback((artifactData: GeneratedArtifact[]) => {
     setSelectedArtifact((current) => {
       if (current && artifactData.some((artifact) => artifact.url === current.url)) return current
-      const dismissedTime = dismissedArtifact ? Date.parse(dismissedArtifact.updatedAt) : null
+      const dismissedTime = finiteTimestamp(dismissedArtifact?.updatedAt)
       return artifactData.find((artifact) => {
         if (artifact.url === dismissedArtifact?.url) return false
-        if (dismissedTime != null) return Date.parse(artifact.updatedAt) > dismissedTime
+        if (dismissedTime != null) {
+          const artifactTime = finiteTimestamp(artifact.updatedAt)
+          return artifactTime != null && artifactTime > dismissedTime
+        }
         return true
       }) ?? null
     })
