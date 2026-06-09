@@ -76,6 +76,7 @@ test('artifact previews are served through workspace-scoped routes only', async 
   const serverSource = await readFile(path.join(repoRoot, 'server', 'index.mjs'), 'utf8')
   const policySource = await readFile(path.join(repoRoot, 'server', 'codexPolicy.mjs'), 'utf8')
   const appSource = await readFile(path.join(repoRoot, 'src', 'App.tsx'), 'utf8')
+  const cssSource = await readFile(path.join(repoRoot, 'src', 'App.css'), 'utf8')
   const viteSource = await readFile(path.join(repoRoot, 'vite.config.ts'), 'utf8')
 
   assert.match(serverSource, /async function requireWorkspaceDirectory/)
@@ -161,8 +162,8 @@ test('artifact previews are served through workspace-scoped routes only', async 
   assert.doesNotMatch(appSource, /Date\.parse\(artifact\.updatedAt\) > dismissedTime/)
   assert.doesNotMatch(appSource, /selectedArtifact\.url !== dismissedArtifact\?\.url/)
   assert.match(appSource, /const codexTurnInProgress = Boolean\(activeTurnId\)/)
-  assert.match(appSource, /const showSubagentPreview = codexTurnInProgress/)
   assert.match(appSource, /const agentIsWorkingOnArtifact = Boolean\(pendingArtifact && codexTurnInProgress\)/)
+  assert.match(appSource, /const showSubagentPreview = codexTurnInProgress && !agentIsWorkingOnArtifact/)
   assert.match(appSource, /const pendingArtifactRef = useRef<ArtifactPlan \| null>\(null\)/)
   assert.match(appSource, /const eventCompletesActiveCodexTurn = \(event: EventRecord, turnId: string \| null\) =>/)
   assert.match(appSource, /valueContainsString\(event\.params, turnId\)/)
@@ -189,6 +190,7 @@ test('artifact previews are served through workspace-scoped routes only', async 
   assert.doesNotMatch(appSource, /const agentIsWorkingOnArtifact = Boolean\(pendingArtifact && activeThreadId\)/)
   assert.match(appSource, /sandbox="allow-scripts"/)
   assert.doesNotMatch(appSource, /sandbox="allow-scripts allow-same-origin"/)
+  assert.doesNotMatch(cssSource, /\.preview-shell\s*\{[^}]*height:\s*220px/)
 })
 
 test('persisted workspaces and conversations require absolute workspace paths', async () => {
