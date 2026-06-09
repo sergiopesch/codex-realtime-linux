@@ -2172,6 +2172,22 @@ function App() {
             ...current,
             [workspacePath]: mergeConversations(current[workspacePath] ?? [], [routedConversation]),
           }))
+          void api<{ conversation: AgentConversation }>('/api/app-state/conversations', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ workspacePath, conversation: savedConversationPayload(routedConversation) }),
+          })
+            .then((savedConversation) => {
+              setConversationsByWorkspace((current) => ({
+                ...current,
+                [workspacePath]: mergeConversations(current[workspacePath] ?? [], [savedConversation.conversation]),
+              }))
+            })
+            .catch((error: unknown) => {
+              appendEvent('app-state/codex-conversation-save-failed', {
+                message: displayErrorMessage(error, 'Failed to save routed Codex conversation'),
+              })
+            })
           openConversationWindow(workspacePath, routedConversation.id)
           showNotice(artifact ? `Codex is building a preview at ${artifact.relativePath}.` : 'Realtime routed this work to Codex.')
         }
