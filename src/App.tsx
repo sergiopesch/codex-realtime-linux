@@ -2552,7 +2552,7 @@ function App() {
       aria-label="Voice command composer"
     >
       <div className="voice-composer-controls">
-        {voiceState === 'live' ? (
+        {voiceState !== 'idle' ? (
           <>
             <button
               className={transcriptOpen ? 'voice-action active' : 'voice-action'}
@@ -2563,36 +2563,48 @@ function App() {
             >
               <Captions size={18} />
             </button>
+            {voiceState === 'live' && (
+              <button
+                className={voiceMuted ? 'voice-action active' : 'voice-action'}
+                type="button"
+                onClick={toggleVoiceMute}
+                aria-label={voiceMuted ? 'Unmute microphone' : 'Mute microphone'}
+                title={voiceMuted ? 'Unmute' : 'Mute'}
+              >
+                {voiceMuted ? <MicOff size={compact ? 17 : 20} /> : <Mic size={compact ? 17 : 20} />}
+              </button>
+            )}
             <button
-              className={voiceMuted ? 'voice-action active' : 'voice-action'}
+              className="voice-action danger"
               type="button"
-              onClick={toggleVoiceMute}
-              aria-label={voiceMuted ? 'Unmute microphone' : 'Mute microphone'}
-              title={voiceMuted ? 'Unmute' : 'Mute'}
+              onClick={stopVoice}
+              aria-label={voiceState === 'connecting' ? 'Cancel voice connection' : 'Stop voice'}
+              title={voiceState === 'connecting' ? 'Cancel voice' : 'Stop voice'}
             >
-              {voiceMuted ? <MicOff size={compact ? 17 : 20} /> : <Mic size={compact ? 17 : 20} />}
-            </button>
-            <button className="voice-action danger" type="button" onClick={stopVoice} aria-label="Stop voice" title="Stop voice">
               <X size={compact ? 18 : 21} />
             </button>
-            <button
-              className={screenShared ? 'voice-action active' : 'voice-action'}
-              type="button"
-              onClick={() => void shareScreen()}
-              aria-label="Share screen"
-              title="Share screen"
-            >
-              <MonitorUp size={18} />
-            </button>
-            <button
-              className={attachedImageName ? 'voice-action active' : 'voice-action'}
-              type="button"
-              onClick={() => imageInputRef.current?.click()}
-              aria-label="Attach image"
-              title="Attach image"
-            >
-              <ImagePlus size={18} />
-            </button>
+            {voiceState === 'live' && (
+              <>
+                <button
+                  className={screenShared ? 'voice-action active' : 'voice-action'}
+                  type="button"
+                  onClick={() => void shareScreen()}
+                  aria-label="Share screen"
+                  title="Share screen"
+                >
+                  <MonitorUp size={18} />
+                </button>
+                <button
+                  className={attachedImageName ? 'voice-action active' : 'voice-action'}
+                  type="button"
+                  onClick={() => imageInputRef.current?.click()}
+                  aria-label="Attach image"
+                  title="Attach image"
+                >
+                  <ImagePlus size={18} />
+                </button>
+              </>
+            )}
           </>
         ) : (
           <>
@@ -2600,8 +2612,8 @@ function App() {
               className="voice-action primary"
               type="button"
               onClick={startVoice}
-              disabled={voiceState === 'connecting' || (status !== null && !voiceReady)}
-              aria-label={voiceState === 'connecting' ? 'Connecting voice' : 'Start voice'}
+              disabled={status !== null && !voiceReady}
+              aria-label="Start voice"
               title={status !== null && !voiceReady ? 'Add OPENAI_API_KEY to start voice' : 'Start voice'}
             >
               <Mic size={compact ? 19 : 24} />

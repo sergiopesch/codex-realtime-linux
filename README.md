@@ -10,13 +10,13 @@ This is an independent prototype. It does not reverse engineer the closed Codex 
 
 ## Solution Overview
 
-The current solution is a standalone Linux desktop app with a realtime voice-first center surface. The primary flow is deliberately minimal: start voice, add transcript/screen/image context when needed, and while voice is live switch to mute and stop controls. Codex work runs through the app-server bridge in the selected workspace, while generated HTML presentations and previews are written under that workspace and rendered inside the app browser preview.
+The current solution is a standalone Linux desktop app with a realtime voice-first center surface. The primary flow is deliberately minimal: start voice, cancel if connection setup stalls, add transcript/screen/image context when needed, and while voice is live switch to mute and stop controls. Codex work runs through the app-server bridge in the selected workspace, while generated HTML presentations and previews are written under that workspace and rendered inside the app browser preview.
 
 ## Current Shape
 
 - Electron desktop shell for Linux.
 - Realtime API over WebRTC for live voice.
-- Minimal voice control surface: idle mode offers voice plus optional context actions; live mode offers transcript, mute/unmute, and stop.
+- Minimal voice control surface: idle mode offers voice plus optional context actions, connecting mode offers cancel, and live mode offers transcript, mute/unmute, and stop.
 - Live transcript panel for the current Realtime session; it opens empty until the active voice session emits transcript events.
 - Responses API vision bridge for image uploads and screen snapshots.
 - Current weather lookup via Open-Meteo, available to the Realtime voice tool flow and from Settings.
@@ -224,7 +224,7 @@ Automated tests cover routing, persistence, preview policy, API guards, and buil
 3. Workspace routing: add a real local workspace folder in the sidebar, select it, and start a voice instruction that creates an HTML presentation from files or images in that workspace. Generated files must land under that workspace's `public/agent-files/` folder, not under this app source tree.
 4. In-app browser preview: when the Codex task finishes, confirm the generated presentation opens inside the app preview, can be clicked through like a browser page, and can be closed without leaving a hardcoded viewer behind. Leave the preview idle and confirm it clears after the 3-minute viewing window. Restart the app and switch workspaces; old previews must stay hidden until a new generated result needs to be shown.
 5. Subagent activity: while Codex is working, confirm agent activity is subtle and local to the relevant selected workspace area of the app. It must not take over the full window or follow workspace navigation into unrelated contexts.
-6. Realtime voice and transcript: start voice, speak, open the transcript, and verify both user and Codex transcript lines appear. Mute, unmute, and stop must work, user-initiated stop must show the normal stopped notice instead of a stale Realtime close error, shorter final transcript events and final response payload fallbacks must not erase text that arrived as deltas, and input transcription failures must appear as bounded transcript errors instead of an empty panel.
+6. Realtime voice and transcript: start voice, confirm the connecting state can be cancelled, speak, open the transcript, and verify both user and Codex transcript lines appear. Mute, unmute, and stop must work, user-initiated stop must show the normal stopped notice instead of a stale Realtime close error, shorter final transcript events and final response payload fallbacks must not erase text that arrived as deltas, and input transcription failures must appear as bounded transcript errors instead of an empty panel.
 7. Visual context: attach an image or share a screen frame while voice is active. Confirm the app reports context collection, sends the visual summary into the conversation, does not carry context captured during an ended voice session into a later session, and does not leave screen sharing stuck on.
 8. Weather: enter a real location in Settings or ask by voice, then confirm the result is live data for that location rather than a placeholder.
 9. USB detection: with voice running, connect the board and run `curl "http://127.0.0.1:3311/api/usb/events?scan=true"`. The app should briefly acknowledge the detected board without pretending to read sketch or serial data.
