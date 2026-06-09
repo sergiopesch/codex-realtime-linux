@@ -272,6 +272,9 @@ const MAX_REALTIME_TRANSCRIPT_ID_LENGTH = 240
 const MAX_REALTIME_TRANSCRIPT_TEXT_LENGTH = 8_000
 const MAX_REALTIME_RESPONSE_OUTPUT_ITEMS = 20
 const MAX_REALTIME_RESPONSE_CONTENT_PARTS = 20
+const MAX_UI_WORKSPACES = 40
+const MAX_UI_HIDDEN_WORKSPACES = 80
+const MAX_UI_WORKSPACE_BUCKETS = 40
 const MAX_UI_CONVERSATIONS_PER_WORKSPACE = 80
 const MAX_UI_CONVERSATION_TITLE_LENGTH = 180
 const MAX_UI_ERROR_MESSAGE_LENGTH = 500
@@ -549,6 +552,19 @@ const mergeConversations = (current: AgentConversation[], incoming: AgentConvers
     .slice(0, MAX_UI_CONVERSATIONS_PER_WORKSPACE)
 }
 
+const conversationsAfterDelete = (
+  existing: AgentConversation[],
+  confirmedConversations: AgentConversation[],
+  conversationId: string,
+) => {
+  const confirmedWithoutDeleted = confirmedConversations.filter((conversation) => conversation.id !== conversationId)
+  const confirmedIds = new Set(confirmedWithoutDeleted.map((conversation) => conversation.id))
+  const retainedConversations = existing.filter(
+    (conversation) => conversation.id !== conversationId && !confirmedIds.has(conversation.id),
+  )
+  return mergeConversations(retainedConversations, confirmedWithoutDeleted)
+}
+
 const savedConversationPayload = (conversation: AgentConversation) => ({
   ...conversation,
   source: conversation.source === 'codex' ? 'codex' : 'local',
@@ -777,6 +793,93 @@ const normalizeAbsoluteLocalWorkspacePath = (workspacePath: string) => {
   }
   return `/${parts.join('/')}`
 }
+const safeWorkspace = (value: unknown): Workspace | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const workspace = value as UnknownRecord
+  const workspacePath = normalizeAbsoluteLocalWorkspacePath(
+    typeof workspace.path === 'string'
+      ? workspace.path
+      : typeof workspace.id === 'string'
+        ? workspace.id
+        : '',
+  )
+  if (!workspacePath.startsWith('/')) return null
+  return {
+    id: workspacePath,
+    path: workspacePath,
+    name: boundedPlainString(workspace.name, workspacePath.split('/').filter(Boolean).at(-1) ?? workspacePath, MAX_UI_CONVERSATION_TITLE_LENGTH),
+    status: boundedPlainString(workspace.status, 'local', MAX_UI_ACTIVITY_LENGTH),
+  }
+}
+const safeWorkspaces = (values: unknown, maxItems = MAX_UI_WORKSPACES) => {
+  const seen = new Set<string>()
+  return Array.isArray(values)
+    ? values
+        .map(safeWorkspace)
+        .filter((workspace): workspace is Workspace => {
+          if (!workspace || seen.has(workspace.path ?? workspace.id)) return false
+          seen.add(workspace.path ?? workspace.id)
+          return true
+        })
+        .slice(0, maxItems)
+    : []
+}
+const safeConversationTranscript = (value: unknown) =>
+  Array.isArray(value)
+    ? value
+        .map((line) => {
+          if (!line || typeof line !== 'object' || Array.isArray(line)) return null
+          const transcriptLine = line as UnknownRecord
+          const speaker = transcriptLine.speaker === 'codex' ? 'codex' : transcriptLine.speaker === 'user' ? 'user' : null
+          const text = boundedPlainString(transcriptLine.text, '', MAX_REALTIME_TRANSCRIPT_TEXT_LENGTH)
+          return speaker && text ? { speaker, text } : null
+        })
+        .filter((line): line is { speaker: 'user' | 'codex'; text: string } => Boolean(line))
+        .slice(0, MAX_REALTIME_TRANSCRIPT_LINES)
+    : []
+const safeConversation = (value: unknown, workspacePath: string): AgentConversation | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const conversation = value as UnknownRecord
+  const title = boundedPlainString(conversation.title, 'Untitled conversation', MAX_UI_CONVERSATION_TITLE_LENGTH)
+  const id = boundedPlainString(conversation.id, `${workspacePath}::${slug(title)}`, MAX_REALTIME_FUNCTION_CALL_ID_LENGTH)
+  if (!id) return null
+  const status = conversation.status === 'ready' || conversation.status === 'running' || conversation.status === 'draft' ? conversation.status : 'draft'
+  return {
+    id,
+    title,
+    age: boundedPlainString(conversation.age, 'saved', MAX_UI_ACTIVITY_LENGTH),
+    status,
+    prompt: boundedPlainString(conversation.prompt, '', MAX_REALTIME_TOOL_TEXT_LENGTH),
+    response: boundedPlainString(conversation.response, '', MAX_REALTIME_TOOL_TEXT_LENGTH),
+    traces: Array.isArray(conversation.traces)
+      ? conversation.traces.map((trace) => boundedPlainString(trace, '', MAX_UI_EVENT_STRING_LENGTH)).filter(Boolean).slice(0, MAX_UI_EVENT_ARRAY_ITEMS)
+      : [],
+    transcript: safeConversationTranscript(conversation.transcript),
+    source: conversation.source === 'codex' ? 'codex' : 'local',
+    codexThreadId: typeof conversation.codexThreadId === 'string' ? boundedPlainString(conversation.codexThreadId, '', MAX_REALTIME_FUNCTION_CALL_ID_LENGTH) : null,
+    workspacePath,
+    createdAt: typeof conversation.createdAt === 'string' ? conversation.createdAt : undefined,
+    updatedAt: typeof conversation.updatedAt === 'string' ? conversation.updatedAt : undefined,
+  }
+}
+const safeConversationsByWorkspace = (value: unknown) => {
+  const groups: Record<string, AgentConversation[]> = {}
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return groups
+  for (const [rawWorkspacePath, rawConversations] of Object.entries(value).slice(0, MAX_UI_WORKSPACE_BUCKETS)) {
+    const workspacePath = normalizeAbsoluteLocalWorkspacePath(rawWorkspacePath)
+    if (!workspacePath.startsWith('/') || !Array.isArray(rawConversations) || groups[workspacePath]) continue
+    const conversations = rawConversations
+      .map((conversation) => safeConversation(conversation, workspacePath))
+      .filter((conversation): conversation is AgentConversation => Boolean(conversation))
+    if (conversations.length > 0) groups[workspacePath] = mergeConversations([], conversations)
+  }
+  return groups
+}
+const safeHiddenWorkspacePaths = (values: unknown) =>
+  Array.isArray(values)
+    ? [...new Set(values.map((value) => normalizeAbsoluteLocalWorkspacePath(typeof value === 'string' ? value : '')).filter((value) => value.startsWith('/')))]
+        .slice(0, MAX_UI_HIDDEN_WORKSPACES)
+    : []
 const safeGeneratedArtifact = (value: unknown): GeneratedArtifact | null => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const artifact = value as UnknownRecord
@@ -1724,12 +1827,16 @@ function App() {
         }
       }
 
-      setConversationsByWorkspace((state) => ({ ...state, [workspacePath]: confirmedConversations }))
+      const visibleConversationsAfterDelete = conversationsAfterDelete(current, confirmedConversations, conversationId)
+      setConversationsByWorkspace((state) => ({
+        ...state,
+        [workspacePath]: conversationsAfterDelete(state[workspacePath] ?? current, confirmedConversations, conversationId),
+      }))
       const deletedActiveConversation = selectedConversationId === conversationId
       const deletedWorkspaceWasSelected = normalizeAbsoluteLocalWorkspacePath(selectedWorkspace) === normalizeAbsoluteLocalWorkspacePath(workspacePath)
-      const workspaceIsEmptyAfterDelete = confirmedConversations.length === 0
+      const workspaceIsEmptyAfterDelete = visibleConversationsAfterDelete.length === 0
       if (deletedActiveConversation) {
-        const fallback = confirmedConversations[0]
+        const fallback = visibleConversationsAfterDelete[0]
         if (fallback) {
           openConversationWindow(workspacePath, fallback.id)
         } else {
@@ -1903,13 +2010,11 @@ function App() {
           api<AppStateResponse>('/api/app-state', { signal: controller.signal }),
         ])
         if (!effectActive) return
-        const localWorkspaceData = workspaceData.data.filter((workspace) => isAbsoluteLocalWorkspacePath(workspacePathFor(workspace)))
+        const localWorkspaceData = safeWorkspaces(workspaceData.data)
         const roots = localWorkspaceData.slice(0, 5)
-        const savedWorkspaces = (appStateData.workspaces ?? []).filter((workspace) =>
-          isAbsoluteLocalWorkspacePath(workspacePathFor(workspace)),
-        )
-        const hiddenPaths = (appStateData.hiddenWorkspacePaths ?? []).map(normalizeAbsoluteLocalWorkspacePath)
-        const savedConversationState = appStateData.conversationsByWorkspace ?? {}
+        const savedWorkspaces = safeWorkspaces(appStateData.workspaces)
+        const hiddenPaths = safeHiddenWorkspacePaths(appStateData.hiddenWorkspacePaths)
+        const savedConversationState = safeConversationsByWorkspace(appStateData.conversationsByWorkspace)
         const visibleRoots = roots.filter((workspace) => !hiddenPaths.includes(workspacePathFor(workspace)))
         const visibleSavedWorkspaces = savedWorkspaces.filter((workspace) => !hiddenPaths.includes(workspacePathFor(workspace)))
         const firstPath = visibleRoots[0] ? workspacePathFor(visibleRoots[0]) : ''

@@ -532,6 +532,17 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   assert.equal(conflictingPatchBody.state.conversationsByWorkspace[workspacePath][1].id, 'ok')
   assert.equal(conflictingPatchBody.state.conversationsByWorkspace[emptyStateWorkspacePath], undefined)
 
+  const deleteOneConversation = await fetch(`${baseUrl}/api/app-state/conversations/delete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspacePath, conversationId: 'ok' }),
+  })
+  assert.equal(deleteOneConversation.status, 200)
+  const deleteOneConversationBody = await deleteOneConversation.json()
+  assert.equal(deleteOneConversationBody.state.conversationsByWorkspace[workspacePath].length, 1)
+  assert.equal(deleteOneConversationBody.state.conversationsByWorkspace[workspacePath][0].id, boundedBody.conversation.id)
+  assert.equal(deleteOneConversationBody.state.conversationsByWorkspace[emptyStateWorkspacePath], undefined)
+
   const invalidConversationDelete = await fetch(`${baseUrl}/api/app-state/conversations/delete`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
