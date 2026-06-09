@@ -865,13 +865,18 @@ const safeConversation = (value: unknown, workspacePath: string): AgentConversat
 const safeConversationsByWorkspace = (value: unknown) => {
   const groups: Record<string, AgentConversation[]> = {}
   if (!value || typeof value !== 'object' || Array.isArray(value)) return groups
-  for (const [rawWorkspacePath, rawConversations] of Object.entries(value).slice(0, MAX_UI_WORKSPACE_BUCKETS)) {
+  let normalizedWorkspaceBuckets = 0
+  for (const [rawWorkspacePath, rawConversations] of Object.entries(value)) {
     const workspacePath = normalizeAbsoluteLocalWorkspacePath(rawWorkspacePath)
     if (!workspacePath.startsWith('/') || !Array.isArray(rawConversations) || groups[workspacePath]) continue
     const conversations = rawConversations
       .map((conversation) => safeConversation(conversation, workspacePath))
       .filter((conversation): conversation is AgentConversation => Boolean(conversation))
-    if (conversations.length > 0) groups[workspacePath] = mergeConversations([], conversations)
+    if (conversations.length > 0) {
+      groups[workspacePath] = mergeConversations([], conversations)
+      normalizedWorkspaceBuckets += 1
+      if (normalizedWorkspaceBuckets >= MAX_UI_WORKSPACE_BUCKETS) break
+    }
   }
   return groups
 }
