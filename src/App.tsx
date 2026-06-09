@@ -729,6 +729,7 @@ function App() {
   const waveformFrameRef = useRef<number | null>(null)
   const voiceStateRef = useRef<'idle' | 'connecting' | 'live'>('idle')
   const voiceSessionIdRef = useRef(0)
+  const voiceAbortControllerRef = useRef<AbortController | null>(null)
   const microphoneStreamRef = useRef<MediaStream | null>(null)
   const screenStreamRef = useRef<MediaStream | null>(null)
   const screenEndedTrackRef = useRef<MediaStreamTrack | null>(null)
@@ -973,10 +974,13 @@ function App() {
     if (invalidateSession) voiceSessionIdRef.current += 1
     const peer = peerRef.current
     const microphoneStream = microphoneStreamRef.current
+    const voiceAbortController = voiceAbortControllerRef.current
     peerRef.current = null
     dataChannelRef.current = null
+    voiceAbortControllerRef.current = null
     microphoneStreamRef.current = null
 
+    voiceAbortController?.abort()
     peer?.getSenders().forEach((sender) => sender.track?.stop())
     peer?.close()
     microphoneStream?.getTracks().forEach((track) => track.stop())
@@ -2031,8 +2035,15 @@ function App() {
     setActivity('Voice router', 'Connecting')
     const sessionId = voiceSessionIdRef.current + 1
     voiceSessionIdRef.current = sessionId
+    const sessionAbortController = new AbortController()
+    voiceAbortControllerRef.current = sessionAbortController
     let pc: RTCPeerConnection | null = null
-    const isCurrentVoiceSession = () => voiceSessionIdRef.current === sessionId && peerRef.current === pc
+    const ownsCurrentVoiceSession = () =>
+      peerRef.current === pc || voiceAbortControllerRef.current === sessionAbortController
+    const isCurrentVoiceSession = () =>
+      voiceSessionIdRef.current === sessionId &&
+      peerRef.current === pc &&
+      voiceAbortControllerRef.current === sessionAbortController
 
     try {
       pc = new RTCPeerConnection()
@@ -2114,7 +2125,7 @@ function App() {
 
       const tokenData = await api<Record<string, unknown>>(
         '/api/realtime/token',
-        { method: 'POST' },
+        { method: 'POST', signal: sessionAbortController.signal },
         { timeoutMs: REALTIME_CONNECTION_TIMEOUT_MS },
       )
       if (!isCurrentVoiceSession()) return
@@ -2134,6 +2145,7 @@ function App() {
             Authorization: `Bearer ${ephemeralKey}`,
             'Content-Type': 'application/sdp',
           },
+          signal: sessionAbortController.signal,
           body: offer.sdp,
         },
         REALTIME_CONNECTION_TIMEOUT_MS,
@@ -2151,8 +2163,8 @@ function App() {
       setActivity('Voice router', 'Listening')
       showNotice('Voice is live.')
     } catch (error) {
-      const sessionStillCurrent = voiceSessionIdRef.current === sessionId
-      cleanupVoiceSession(false)
+      const sessionStillCurrent = isCurrentVoiceSession()
+      if (ownsCurrentVoiceSession()) cleanupVoiceSession(false)
       if (sessionStillCurrent) {
         setVoiceLifecycleState('idle')
         setActivity('Voice router idle')
