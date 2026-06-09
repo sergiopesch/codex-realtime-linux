@@ -181,7 +181,7 @@ test('artifact previews are served through workspace-scoped routes only', async 
   assert.match(appSource, /const finiteTimestamp = \(value: string \| null \| undefined\) =>/)
   assert.match(appSource, /Number\.isFinite\(timestamp\) \? timestamp : null/)
   assert.match(appSource, /workspacePath: string \} \| null>\(null\)/)
-  assert.match(appSource, /const ARTIFACT_PREVIEW_SESSION_MS = 10 \* 60 \* 1000/)
+  assert.match(appSource, /const ARTIFACT_PREVIEW_SESSION_MS = 3 \* 60 \* 1000/)
   assert.match(appSource, /type ArtifactPreviewLease = \{[\s\S]*url: string[\s\S]*workspacePath: string[\s\S]*expiresAt: number[\s\S]*\}/)
   assert.match(appSource, /const \[artifactPreviewLease, setArtifactPreviewLease\] = useState<ArtifactPreviewLease \| null>\(null\)/)
   assert.match(appSource, /const artifactMatchesDismissal = \(/)
