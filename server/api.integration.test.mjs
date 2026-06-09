@@ -182,6 +182,26 @@ test('server returns json errors for oversized API request bodies', async (t) =>
   assert.equal((await readJson(oversizedJson)).code, 'payload_too_large')
 })
 
+test('settings OpenAI key route returns stable json validation errors', async (t) => {
+  const { baseUrl } = await startTestServer(t)
+
+  const missingKey = await fetch(`${baseUrl}/api/settings/openai-key`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  })
+  assert.equal(missingKey.status, 400)
+  assert.equal((await readJson(missingKey)).code, 'api_key_required')
+
+  const invalidKey = await fetch(`${baseUrl}/api/settings/openai-key`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ apiKey: 'not-a-key' }),
+  })
+  assert.equal(invalidKey.status, 400)
+  assert.equal((await readJson(invalidKey)).code, 'invalid_openai_api_key')
+})
+
 test('server returns json errors for unmatched API routes and unhandled route failures', async (t) => {
   const badSecretsPath = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-secrets-dir-'))
   t.after(() => rm(badSecretsPath, { recursive: true, force: true }))
@@ -197,5 +217,5 @@ test('server returns json errors for unmatched API routes and unhandled route fa
   })
   assert.equal(failedSecretWrite.status, 500)
   assert.equal(failedSecretWrite.headers.get('content-type')?.includes('application/json'), true)
-  assert.equal((await readJson(failedSecretWrite)).code, 'api_request_failed')
+  assert.equal((await readJson(failedSecretWrite)).code, 'openai_key_remove_failed')
 })

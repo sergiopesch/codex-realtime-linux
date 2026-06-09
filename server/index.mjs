@@ -188,10 +188,11 @@ function httpError(message, { statusCode = 400, code = 'bad_request' } = {}) {
   return error
 }
 
-function sendJsonError(res, error, { fallbackStatus = 500, fallbackMessage = 'Request failed.' } = {}) {
+function sendJsonError(res, error, { fallbackStatus = 500, fallbackMessage = 'Request failed.', fallbackCode } = {}) {
+  const code = error?.statusCode && error?.code ? error.code : fallbackCode
   res.status(error?.statusCode || fallbackStatus).json({
     error: error instanceof Error ? error.message : fallbackMessage,
-    ...(error?.code ? { code: error.code } : {}),
+    ...(code ? { code } : {}),
   })
 }
 
@@ -1077,17 +1078,15 @@ app.post('/api/arduino/upload', async (req, res) => {
 })
 
 app.post('/api/settings/openai-key', async (req, res) => {
-  const apiKey = typeof req.body?.apiKey === 'string' ? req.body.apiKey.trim() : ''
-  if (!apiKey) {
-    res.status(400).json({ error: 'apiKey is required' })
-    return
-  }
-  if (!apiKey.startsWith('sk-')) {
-    res.status(400).json({ error: 'This does not look like an OpenAI API key.' })
-    return
-  }
-
   try {
+    const apiKey = typeof req.body?.apiKey === 'string' ? req.body.apiKey.trim() : ''
+    if (!apiKey) {
+      throw httpError('apiKey is required', { statusCode: 400, code: 'api_key_required' })
+    }
+    if (!apiKey.startsWith('sk-')) {
+      throw httpError('This does not look like an OpenAI API key.', { statusCode: 400, code: 'invalid_openai_api_key' })
+    }
+
     await createRealtimeClientSecret(apiKey)
     await writeLocalSecrets({ ...localSecrets, openaiApiKey: apiKey })
     res.json({
@@ -1096,17 +1095,21 @@ app.post('/api/settings/openai-key', async (req, res) => {
       secretsPath: SECRETS_PATH,
     })
   } catch (error) {
-    res.status(502).json({ error: error.message })
+    sendJsonError(res, error, { fallbackStatus: 502, fallbackMessage: 'Failed to save OpenAI API key.', fallbackCode: 'openai_key_save_failed' })
   }
 })
 
 app.delete('/api/settings/openai-key', async (_req, res) => {
-  const { openaiApiKey: _removed, ...nextSecrets } = localSecrets
-  await writeLocalSecrets(nextSecrets)
-  res.json({
-    realtime: Boolean(getOpenAiApiKey()),
-    openAiKeySource: getOpenAiKeySource(),
-  })
+  try {
+    const { openaiApiKey: _removed, ...nextSecrets } = localSecrets
+    await writeLocalSecrets(nextSecrets)
+    res.json({
+      realtime: Boolean(getOpenAiApiKey()),
+      openAiKeySource: getOpenAiKeySource(),
+    })
+  } catch (error) {
+    sendJsonError(res, error, { fallbackStatus: 500, fallbackMessage: 'Failed to remove saved OpenAI API key.', fallbackCode: 'openai_key_remove_failed' })
+  }
 })
 
 app.get('/api/codex/account', async (_req, res) => {
