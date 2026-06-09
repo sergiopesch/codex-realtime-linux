@@ -517,6 +517,8 @@ const normalizeAbsoluteLocalWorkspacePath = (workspacePath: string) => {
   if (!trimmed.startsWith('/')) return trimmed
   return trimmed.replace(/\/+$/g, '') || '/'
 }
+const basenameFromWorkspacePath = (workspacePath: string) =>
+  normalizeAbsoluteLocalWorkspacePath(workspacePath).split('/').filter(Boolean).at(-1) ?? ''
 const workspacePathFor = (workspace: Workspace) => normalizeAbsoluteLocalWorkspacePath(workspace.path ?? workspace.id)
 const isAbsoluteLocalWorkspacePath = (workspacePath: string) => normalizeAbsoluteLocalWorkspacePath(workspacePath).startsWith('/')
 
@@ -655,8 +657,6 @@ function App() {
     requests: 0,
   }
 
-  const accountHandle = selectedWorkspace.split('/').filter(Boolean)[1] ?? status?.realtimeUser?.name ?? 'local'
-  const accountInitials = accountHandle.slice(0, 2).toUpperCase()
   const hasDesktopWindowControls = Boolean((window as DesktopWindow).desktopWindow)
   const workspaceSource = useMemo(() => {
     const seen = new Set<string>()
@@ -680,17 +680,17 @@ function App() {
     const conversations = conversationsByWorkspace[workspacePath] ?? []
     return { workspace, workspacePath, conversations }
   })
-  const selectedWorkspaceConversations =
-    workspaceRoots.find(({ workspacePath }) => workspacePath === selectedWorkspace)?.conversations ?? []
+  const selectedWorkspaceRoot = workspaceRoots.find(({ workspacePath }) => workspacePath === selectedWorkspace)
+  const selectedWorkspaceConversations = selectedWorkspaceRoot?.conversations ?? []
   const activeConversation =
     selectedWorkspaceConversations.find((conversation) => conversation.id === selectedConversationId) ??
     selectedWorkspaceConversations[0]
   const transcriptLines = realtimeTranscript
   const voiceReady = status?.realtime ?? false
-  const selectedWorkspaceName =
-    workspaceRoots.find(({ workspacePath }) => workspacePath === selectedWorkspace)?.workspace.name ??
-    workspaceRoots[0]?.workspace.name ??
-    'No workspace'
+  const selectedWorkspaceLabel = selectedWorkspaceRoot?.workspace.name ?? basenameFromWorkspacePath(selectedWorkspace)
+  const selectedWorkspaceName = selectedWorkspaceLabel || 'No workspace'
+  const accountHandle = status?.realtimeUser?.name || basenameFromWorkspacePath(selectedWorkspace) || 'local'
+  const accountInitials = accountHandle.slice(0, 2).toUpperCase()
   const voiceHeadline =
     voiceState === 'live'
       ? activeThreadId

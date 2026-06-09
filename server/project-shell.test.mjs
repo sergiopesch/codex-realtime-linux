@@ -32,6 +32,28 @@ test('renderer does not seed hardcoded demo conversations', async () => {
   }
 })
 
+test('renderer labels identity and voice context from runtime workspace state', async () => {
+  const appSource = await readFile(path.join(repoRoot, 'src', 'App.tsx'), 'utf8')
+
+  assert.match(appSource, /const basenameFromWorkspacePath = \(workspacePath: string\) =>/)
+  assert.match(
+    appSource,
+    /const selectedWorkspaceRoot = workspaceRoots\.find\(\(\{ workspacePath \}\) => workspacePath === selectedWorkspace\)/,
+  )
+  assert.match(appSource, /const selectedWorkspaceConversations = selectedWorkspaceRoot\?\.conversations \?\? \[\]/)
+  assert.match(
+    appSource,
+    /const selectedWorkspaceLabel = selectedWorkspaceRoot\?\.workspace\.name \?\? basenameFromWorkspacePath\(selectedWorkspace\)/,
+  )
+  assert.match(appSource, /const selectedWorkspaceName = selectedWorkspaceLabel \|\| 'No workspace'/)
+  assert.match(
+    appSource,
+    /const accountHandle = status\?\.realtimeUser\?\.name \|\| basenameFromWorkspacePath\(selectedWorkspace\) \|\| 'local'/,
+  )
+  assert.doesNotMatch(appSource, /selectedWorkspace\.split\('\/'\)\.filter\(Boolean\)\[1\]/)
+  assert.doesNotMatch(appSource, /workspaceRoots\[0\]\?\.workspace\.name\s+\?\?\s+'No workspace'/)
+})
+
 test('public assets do not include fixed demo presentation routes', async () => {
   const publicEntries = await readdir(path.join(repoRoot, 'public'), { recursive: true })
   const publicPaths = publicEntries.map((entry) => entry.toString())
