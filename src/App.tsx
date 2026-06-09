@@ -326,6 +326,8 @@ const savedConversationPayload = (conversation: AgentConversation) => ({
 })
 
 const eventKey = (event: EventRecord) => `${event.method ?? 'event'}::${event.receivedAt ?? ''}`
+const workspacePathFor = (workspace: Workspace) => workspace.path ?? workspace.id
+const isAbsoluteLocalWorkspacePath = (workspacePath: string) => workspacePath.startsWith('/')
 
 const mergeEvents = (current: EventRecord[], incoming: EventRecord[]) => {
   const seen = new Set<string>()
@@ -407,34 +409,24 @@ function App() {
   const accountHandle = selectedWorkspace.split('/').filter(Boolean)[1] ?? status?.realtimeUser?.name ?? 'local'
   const accountInitials = accountHandle.slice(0, 2).toUpperCase()
   const hasDesktopWindowControls = Boolean((window as DesktopWindow).desktopWindow)
-  const defaultWorkspacePath = status?.appRoot ?? initialWorkspacePath
-  const fallbackWorkspaces = useMemo<Workspace[]>(() => {
-    if (!defaultWorkspacePath) return []
-    return [{
-      id: defaultWorkspacePath,
-      name: status?.appName ?? defaultWorkspacePath.split('/').filter(Boolean).pop() ?? 'Local workspace',
-      path: defaultWorkspacePath,
-    }]
-  }, [defaultWorkspacePath, status?.appName])
-
   const workspaceSource = useMemo(() => {
-    const discovered = workspaces.length > 0 ? workspaces : fallbackWorkspaces
     const seen = new Set<string>()
 
-    return [...userWorkspaces, ...discovered].filter((workspace) => {
-      const workspacePath = workspace.path ?? workspace.id
+    return [...userWorkspaces, ...workspaces].filter((workspace) => {
+      const workspacePath = workspacePathFor(workspace)
+      if (!isAbsoluteLocalWorkspacePath(workspacePath)) return false
       if (hiddenWorkspacePaths.includes(workspacePath)) return false
       if (seen.has(workspacePath)) return false
       seen.add(workspacePath)
       return true
     })
-  }, [fallbackWorkspaces, hiddenWorkspacePaths, userWorkspaces, workspaces])
+  }, [hiddenWorkspacePaths, userWorkspaces, workspaces])
   const routableWorkspacePaths = useMemo(
-    () => workspaceSource.map((workspace) => workspace.path ?? workspace.id).filter(Boolean),
+    () => workspaceSource.map(workspacePathFor).filter(Boolean),
     [workspaceSource],
   )
   const workspaceRoots = workspaceSource.slice(0, 8).map((workspace) => {
-    const workspacePath = workspace.path ?? workspace.id
+    const workspacePath = workspacePathFor(workspace)
     const conversations = conversationsByWorkspace[workspacePath] ?? []
     return { workspace, workspacePath, conversations }
   })
@@ -771,7 +763,7 @@ function App() {
       body: JSON.stringify(payload),
     })
 
-  const refreshArtifacts = useCallback(async (workspacePath = selectedWorkspaceRef.current || status?.appRoot || initialWorkspacePath) => {
+  const refreshArtifacts = useCallback(async (workspacePath = selectedWorkspaceRef.current) => {
     if (!workspacePath) {
       setArtifacts([])
       return []
@@ -779,7 +771,7 @@ function App() {
     const data = await fetchGeneratedArtifacts(workspacePath)
     setArtifacts(data.data)
     return data.data
-  }, [status?.appRoot])
+  }, [])
 
   const selectLatestArtifact = useCallback((artifactData: GeneratedArtifact[]) => {
     setSelectedArtifact((current) => {
@@ -858,7 +850,7 @@ function App() {
   }
 
   const createConversation = async (targetWorkspacePath?: string) => {
-    const workspacePath = targetWorkspacePath || selectedWorkspace || workspaceRoots[0]?.workspacePath || status?.appRoot || initialWorkspacePath
+    const workspacePath = targetWorkspacePath || selectedWorkspace || workspaceRoots[0]?.workspacePath || initialWorkspacePath
     if (!workspacePath) {
       showNotice('Add or select a workspace before starting a voice build.')
       return
@@ -1094,28 +1086,24 @@ function App() {
           api<SpendResponse>('/api/spend'),
           api<AppStateResponse>('/api/app-state'),
         ])
-        const runtimeFallbackWorkspaces = statusData.appRoot
-          ? [{
-              id: statusData.appRoot,
-              name: statusData.appName ?? statusData.appRoot.split('/').filter(Boolean).pop() ?? 'Local workspace',
-              path: statusData.appRoot,
-            }]
-          : []
-        const roots = (workspaceData.data.length > 0 ? workspaceData.data : runtimeFallbackWorkspaces).slice(0, 5)
-        const savedWorkspaces = appStateData.workspaces ?? []
+        const localWorkspaceData = workspaceData.data.filter((workspace) => isAbsoluteLocalWorkspacePath(workspacePathFor(workspace)))
+        const roots = localWorkspaceData.slice(0, 5)
+        const savedWorkspaces = (appStateData.workspaces ?? []).filter((workspace) =>
+          isAbsoluteLocalWorkspacePath(workspacePathFor(workspace)),
+        )
         const hiddenPaths = appStateData.hiddenWorkspacePaths ?? []
         const savedConversationState = appStateData.conversationsByWorkspace ?? {}
-        const visibleRoots = roots.filter((workspace) => !hiddenPaths.includes(workspace.path ?? workspace.id))
-        const visibleSavedWorkspaces = savedWorkspaces.filter((workspace) => !hiddenPaths.includes(workspace.path ?? workspace.id))
-        const firstPath = visibleRoots[0]?.path ?? visibleRoots[0]?.id ?? ''
-        const preferredPath = visibleSavedWorkspaces[0]?.path ?? visibleSavedWorkspaces[0]?.id ?? firstPath
+        const visibleRoots = roots.filter((workspace) => !hiddenPaths.includes(workspacePathFor(workspace)))
+        const visibleSavedWorkspaces = savedWorkspaces.filter((workspace) => !hiddenPaths.includes(workspacePathFor(workspace)))
+        const firstPath = visibleRoots[0] ? workspacePathFor(visibleRoots[0]) : ''
+        const preferredPath = visibleSavedWorkspaces[0] ? workspacePathFor(visibleSavedWorkspaces[0]) : firstPath
         const shouldLoadCodexHistory = Boolean(
-          preferredPath && visibleSavedWorkspaces.some((workspace) => (workspace.path ?? workspace.id) === preferredPath),
+          preferredPath && visibleSavedWorkspaces.some((workspace) => workspacePathFor(workspace) === preferredPath),
         )
         const firstConversation = preferredPath ? savedConversationState[preferredPath]?.[0] ?? null : null
 
         setStatus(statusData)
-        setWorkspaces(workspaceData.data)
+        setWorkspaces(localWorkspaceData)
         setUserWorkspaces(savedWorkspaces)
         setHiddenWorkspacePaths(appStateData.hiddenWorkspacePaths ?? [])
         setSpend(spendData)
@@ -1133,7 +1121,7 @@ function App() {
         setConversationsByWorkspace(() => {
           const next = { ...savedConversationState }
           roots.forEach((workspace) => {
-            const workspacePath = workspace.path ?? workspace.id
+            const workspacePath = workspacePathFor(workspace)
             if (!next[workspacePath]) next[workspacePath] = []
           })
           return next
