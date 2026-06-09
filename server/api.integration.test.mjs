@@ -704,6 +704,17 @@ test('server returns normalized app state after mutations', async (t) => {
   assert.equal(workspaceDeleteBody.state.workspaces.some((workspace) => workspace.path === workspacePath), false)
   assert.equal(workspaceDeleteBody.state.hiddenWorkspacePaths.includes(workspacePath), true)
   assert.equal(workspaceDeleteBody.state.conversationsByWorkspace[workspacePath], undefined)
+
+  const workspaceReAdd = await fetch(`${baseUrl}/api/app-state/workspaces`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspace: { id: workspacePath, path: workspacePath, name: 'Mutation workspace restored' } }),
+  })
+  assert.equal(workspaceReAdd.status, 200)
+  const workspaceReAddBody = await workspaceReAdd.json()
+  assert.equal(workspaceReAddBody.state.workspaces[0].path, workspacePath)
+  assert.equal(workspaceReAddBody.state.hiddenWorkspacePaths.includes(workspacePath), false)
+  assert.equal(workspaceReAddBody.state.conversationsByWorkspace[workspacePath], undefined)
 })
 
 test('server ignores oversized persisted app state and secrets files', async (t) => {

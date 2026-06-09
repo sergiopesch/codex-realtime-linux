@@ -400,6 +400,7 @@ test('persisted workspaces and conversations require absolute workspace paths', 
   assert.match(serverSource, /firstUniqueBy\([\s\S]*\(conversation\) => conversation\.id,[\s\S]*\)\.slice\(0, MAX_LOCAL_CONVERSATIONS_PER_WORKSPACE\)/)
   assert.doesNotMatch(serverSource, /Object\.entries\(input\.conversationsByWorkspace\)\.slice\(0, MAX_LOCAL_WORKSPACE_BUCKETS\)/)
   assert.match(serverSource, /\.slice\(0, MAX_LOCAL_CONVERSATIONS_PER_WORKSPACE\)/)
+  assert.match(serverSource, /state\.hiddenWorkspacePaths = state\.hiddenWorkspacePaths\.filter\(\(item\) => item !== workspacePath\)/)
   assert.match(serverSource, /delete state\.conversationsByWorkspace\[workspacePath\]/)
   assert.match(serverSource, /details\.size > MAX_APP_STATE_FILE_BYTES/)
   assert.match(serverSource, /details\.size > MAX_SECRETS_FILE_BYTES/)
