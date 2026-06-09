@@ -2091,6 +2091,7 @@ function App() {
         }
       })
       dataChannel.addEventListener('open', () => {
+        if (dataChannelRef.current !== dataChannel) return
         setActivity('Voice router', 'Realtime ready')
         flushPendingVisualContext()
       })
