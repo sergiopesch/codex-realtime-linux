@@ -146,6 +146,16 @@ test('Codex app-server RPC bridge has bounded requests and single-flight initial
   assert.match(serverSource, /shutdown\(143, 'Codex Realtime Linux server received SIGTERM\.'\)/)
 })
 
+test('renderer loads Codex thread history only for explicit saved workspaces', async () => {
+  const appSource = await readFile(path.join(repoRoot, 'src', 'App.tsx'), 'utf8')
+
+  assert.match(appSource, /const shouldLoadCodexHistory = Boolean\(/)
+  assert.match(appSource, /visibleSavedWorkspaces\.some\(\(workspace\) => \(workspace\.path \?\? workspace\.id\) === preferredPath\)/)
+  assert.match(appSource, /if \(shouldLoadCodexHistory\) \{/)
+  assert.match(appSource, /\/api\/codex\/threads\?limit=40&cwd=\$\{encodeURIComponent\(preferredPath\)\}/)
+  assert.doesNotMatch(appSource, /api<CodexThreadsResponse>\('\/api\/codex\/threads\?limit=40'\)/)
+})
+
 test('upstream OpenAI and usage fetches are timeout bounded', async () => {
   const serverSource = await readFile(path.join(repoRoot, 'server', 'index.mjs'), 'utf8')
 

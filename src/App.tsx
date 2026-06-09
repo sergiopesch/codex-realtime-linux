@@ -1110,6 +1110,9 @@ function App() {
         const visibleSavedWorkspaces = savedWorkspaces.filter((workspace) => !hiddenPaths.includes(workspace.path ?? workspace.id))
         const firstPath = visibleRoots[0]?.path ?? visibleRoots[0]?.id ?? ''
         const preferredPath = visibleSavedWorkspaces[0]?.path ?? visibleSavedWorkspaces[0]?.id ?? firstPath
+        const shouldLoadCodexHistory = Boolean(
+          preferredPath && visibleSavedWorkspaces.some((workspace) => (workspace.path ?? workspace.id) === preferredPath),
+        )
         const firstConversation = preferredPath ? savedConversationState[preferredPath]?.[0] ?? null : null
 
         setStatus(statusData)
@@ -1139,39 +1142,41 @@ function App() {
         setSelectedWorkspace(preferredPath)
         setSelectedConversationId(firstConversation?.id ?? '')
 
-        api<CodexThreadsResponse>('/api/codex/threads?limit=40')
-          .then((threadData) => {
-            const codexConversationsByWorkspace = (threadData.conversations ?? []).reduce<Record<string, AgentConversation[]>>(
-              (groups, conversation) => {
-                const workspacePath = conversation.workspacePath
-                if (!workspacePath) return groups
-                groups[workspacePath] = groups[workspacePath] ?? []
-                groups[workspacePath].push(conversation)
-                return groups
-              },
-              {},
-            )
+        if (shouldLoadCodexHistory) {
+          api<CodexThreadsResponse>(`/api/codex/threads?limit=40&cwd=${encodeURIComponent(preferredPath)}`)
+            .then((threadData) => {
+              const codexConversationsByWorkspace = (threadData.conversations ?? []).reduce<Record<string, AgentConversation[]>>(
+                (groups, conversation) => {
+                  const workspacePath = conversation.workspacePath
+                  if (!workspacePath) return groups
+                  groups[workspacePath] = groups[workspacePath] ?? []
+                  groups[workspacePath].push(conversation)
+                  return groups
+                },
+                {},
+              )
 
-            setConversationsByWorkspace((current) => {
-              const next = { ...current }
-              Object.entries(codexConversationsByWorkspace).forEach(([workspacePath, codexConversations]) => {
-                next[workspacePath] = mergeConversations(
-                  (next[workspacePath] ?? []).filter((conversation) => conversation.source !== 'codex'),
-                  codexConversations,
-                )
+              setConversationsByWorkspace((current) => {
+                const next = { ...current }
+                Object.entries(codexConversationsByWorkspace).forEach(([workspacePath, codexConversations]) => {
+                  next[workspacePath] = mergeConversations(
+                    (next[workspacePath] ?? []).filter((conversation) => conversation.source !== 'codex'),
+                    codexConversations,
+                  )
+                })
+                return next
               })
-              return next
             })
-          })
-          .catch((error: unknown) => {
-            setEvents((current) =>
-              mergeEvents(current, [{
-                method: 'codex/thread-list-unavailable',
-                receivedAt: new Date().toISOString(),
-                params: { message: error instanceof Error ? error.message : 'Codex app-server thread list failed' },
-              }]),
-            )
-          })
+            .catch((error: unknown) => {
+              setEvents((current) =>
+                mergeEvents(current, [{
+                  method: 'codex/thread-list-unavailable',
+                  receivedAt: new Date().toISOString(),
+                  params: { message: error instanceof Error ? error.message : 'Codex app-server thread list failed' },
+                }]),
+              )
+            })
+        }
       } catch (error) {
         setLastError(error instanceof Error ? error.message : 'Failed to load app state')
       }
