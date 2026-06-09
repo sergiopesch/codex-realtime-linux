@@ -1090,6 +1090,14 @@ function App() {
       return
     }
 
+    if (type === 'conversation.item.retrieved') {
+      const speaker = item?.role === 'assistant' ? 'codex' : 'user'
+      const prefix = speaker === 'codex' ? 'codex' : 'user'
+      const parts = realtimeOutputItemTranscriptParts(item, itemId, '')
+      parts.forEach((part) => updateTranscriptLine(`${prefix}-${part.transcriptId}`, speaker, part.text, 'replace', 'done'))
+      return
+    }
+
     if (type === 'response.output_audio_transcript.delta' || type === 'response.output_text.delta') {
       updateTranscriptLine(`codex-${transcriptId}`, 'codex', typeof message.delta === 'string' ? message.delta : '', 'append', 'streaming')
       return
