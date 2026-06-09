@@ -456,9 +456,10 @@ function App() {
         : 'Tell Codex what to build'
       : `What should we build in ${selectedWorkspaceName}?`
   const primaryActivity = [routingActivity[0] ?? 'Voice router idle', visualContextLabel].filter(Boolean).join(' · ')
-  const showSubagentPreview = Boolean(activeThreadId)
+  const codexTurnInProgress = Boolean(activeTurnId)
+  const showSubagentPreview = codexTurnInProgress
   const artifactPreview = selectedArtifact && selectedArtifact.url !== dismissedArtifact?.url ? selectedArtifact : null
-  const agentIsWorkingOnArtifact = Boolean(pendingArtifact && activeThreadId)
+  const agentIsWorkingOnArtifact = Boolean(pendingArtifact && codexTurnInProgress)
   const subagentTitle = activeConversation?.title ? briefThreadTitle(activeConversation.title) : 'Codex'
   const subagentHint =
     activeConversation?.prompt || activeConversation?.response || 'Working through the active Codex turn.'
