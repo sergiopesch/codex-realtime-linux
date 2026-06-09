@@ -1380,6 +1380,7 @@ function App() {
   const handleRealtimeToolCall = async (message: Record<string, unknown>) => {
     const item = realtimeFunctionCallItem(message)
     if (!item) return
+    const responseChannel = dataChannelRef.current
 
     if (typeof item.call_id !== 'string' || !item.call_id.trim()) {
       const error = 'Realtime function call did not include a call_id.'
@@ -1516,7 +1517,12 @@ function App() {
       result = { error: message }
     }
 
-    dataChannelRef.current?.send(
+    if (!responseChannel || responseChannel !== dataChannelRef.current || responseChannel.readyState !== 'open') {
+      appendEvent('realtime/function-call-output-dropped', { name: item.name, callId: item.call_id })
+      return
+    }
+
+    responseChannel.send(
       JSON.stringify({
         type: 'conversation.item.create',
         item: {
@@ -1526,7 +1532,7 @@ function App() {
         },
       }),
     )
-    dataChannelRef.current?.send(JSON.stringify({ type: 'response.create' }))
+    responseChannel.send(JSON.stringify({ type: 'response.create' }))
   }
 
   const startVoice = async () => {
