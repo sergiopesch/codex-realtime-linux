@@ -110,6 +110,20 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   assert.equal(invalidToken.status, 400)
   assert.match(await invalidToken.text(), /workspace token must be an absolute local path/)
 
+  const blockedOrigin = await fetch(`${baseUrl}/api/status`, {
+    headers: { Origin: 'https://example.invalid' },
+  })
+  assert.equal(blockedOrigin.status, 403)
+  assert.equal((await readJson(blockedOrigin)).code, 'origin_not_allowed')
+
+  const formUpload = await fetch(`${baseUrl}/api/arduino/upload`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: 'action=onboard_led_on',
+  })
+  assert.equal(formUpload.status, 415)
+  assert.equal((await readJson(formUpload)).code, 'json_required')
+
   const missingTaskWorkspace = await fetch(`${baseUrl}/api/codex/task`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -131,7 +145,7 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
 
   const validSave = await fetch(`${baseUrl}/api/app-state/conversations`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Origin: 'http://127.0.0.1:5173' },
     body: JSON.stringify({
       workspacePath,
       conversation: { id: 'ok', title: 'OK' },

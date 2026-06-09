@@ -102,6 +102,18 @@ test('Codex task routes require explicit user goals and IDs before app-server ca
   assert.doesNotMatch(appSource, /Inspect this project and summarize the next best implementation step/)
 })
 
+test('local API rejects untrusted origins and non-json mutation bodies', async () => {
+  const serverSource = await readFile(path.join(repoRoot, 'server', 'index.mjs'), 'utf8')
+
+  assert.match(serverSource, /const ALLOWED_API_ORIGINS = new Set/)
+  assert.match(serverSource, /CODEX_REALTIME_ALLOWED_ORIGINS/)
+  assert.match(serverSource, /function guardLocalApiRequests/)
+  assert.match(serverSource, /origin_not_allowed/)
+  assert.match(serverSource, /Content-Type must be application\/json/)
+  assert.match(serverSource, /json_required/)
+  assert.match(serverSource, /app\.use\(guardLocalApiRequests\)/)
+})
+
 test('Codex app-server RPC bridge has bounded requests and single-flight initialization', async () => {
   const serverSource = await readFile(path.join(repoRoot, 'server', 'index.mjs'), 'utf8')
 

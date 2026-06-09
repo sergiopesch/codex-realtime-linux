@@ -50,7 +50,45 @@ let localSecrets = {}
 
 const app = express()
 const usbMonitor = new UsbDeviceMonitor()
+const ALLOWED_API_ORIGINS = new Set([
+  `http://127.0.0.1:${PORT}`,
+  `http://localhost:${PORT}`,
+  'http://127.0.0.1:5173',
+  'http://localhost:5173',
+  ...normalizeString(process.env.CODEX_REALTIME_ALLOWED_ORIGINS)
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean),
+])
 
+function apiRouteRequiresJsonBody(req) {
+  if (!req.path.startsWith('/api/')) return false
+  if (!['POST', 'PATCH', 'PUT'].includes(req.method)) return false
+  if (req.method === 'POST' && req.path === '/api/realtime/token') return false
+  return true
+}
+
+function guardLocalApiRequests(req, res, next) {
+  if (!req.path.startsWith('/api/')) {
+    next()
+    return
+  }
+
+  const origin = req.get('origin')
+  if (origin && !ALLOWED_API_ORIGINS.has(origin)) {
+    res.status(403).json({ error: 'Request origin is not allowed.', code: 'origin_not_allowed' })
+    return
+  }
+
+  if (apiRouteRequiresJsonBody(req) && !req.is('application/json')) {
+    res.status(415).json({ error: 'Content-Type must be application/json.', code: 'json_required' })
+    return
+  }
+
+  next()
+}
+
+app.use(guardLocalApiRequests)
 app.use(express.json({ limit: '25mb' }))
 
 async function loadLocalSecrets() {

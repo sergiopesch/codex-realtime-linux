@@ -123,6 +123,12 @@ REALTIME_USER_LOCATION=
 REALTIME_PERSONA=
 ```
 
+The local API accepts app requests from the desktop origin and Vite dev origins only. To trust another local development origin, add it explicitly:
+
+```bash
+CODEX_REALTIME_ALLOWED_ORIGINS=http://127.0.0.1:6006
+```
+
 Local sidebar state is saved outside the repo by default. To override it, use an absolute path:
 
 ```bash
@@ -158,6 +164,7 @@ OPENAI_USAGE_GBP_RATE_API=https://api.frankfurter.app/latest?from=USD&to=GBP
 - `/api/arduino/upload` compiles and uploads sketches with `arduino-cli`; defaults to `ARDUINO_DEFAULT_FQBN=arduino:avr:uno`.
 - `/api/vision/context` analyzes image and screen context with Responses vision, then the renderer sends the summary into the active Realtime data channel.
 - `/api/codex/task` requires an explicit existing workspace `cwd`; Realtime voice routing only accepts the workspace currently selected in the app.
+- Mutating `/api/*` routes reject untrusted browser origins, and routes with JSON payloads reject form-style requests before they can touch state, Codex, or Arduino hardware.
 - The server persists this client's local workspace/thread state to `CODEX_REALTIME_STATE_PATH`, defaulting to `~/.local/state/codex-realtime-linux/app-state.json`.
 - The server persists Settings-saved API secrets to `CODEX_REALTIME_SECRETS_PATH`, defaulting to `~/.config/codex-realtime-linux/secrets.json`.
 - Removing a workspace in the app hides that workspace from this client's sidebar state only; it does not delete the local folder.
