@@ -366,6 +366,11 @@ test('upstream OpenAI and usage fetches are timeout bounded', async () => {
 test('Arduino explicit-port uploads do not borrow unrelated detected board metadata', async () => {
   const arduinoSource = await readFile(path.join(repoRoot, 'server', 'arduino.mjs'), 'utf8')
 
+  assert.match(arduinoSource, /function normalizeDetectedBoard\(entry\)/)
+  assert.match(arduinoSource, /const DEFAULT_FQBN = FQBN_PATTERN\.test\(CONFIGURED_DEFAULT_FQBN\) \? CONFIGURED_DEFAULT_FQBN : 'arduino:avr:uno'/)
+  assert.match(arduinoSource, /fqbn: candidateFqbn && FQBN_PATTERN\.test\(candidateFqbn\) \? candidateFqbn : null/)
+  assert.match(arduinoSource, /const ports = \(Array\.isArray\(rawPorts\) \? rawPorts : \[\]\)\.filter\(\(port\) => typeof port === 'string' && isSupportedSerialPort\(port\)\)/)
+  assert.match(arduinoSource, /const boards = \(Array\.isArray\(rawBoards\) \? rawBoards : \[\]\)\.map\(normalizeDetectedBoard\)\.filter\(Boolean\)/)
   assert.match(arduinoSource, /const matchingBoard = request\.port \? boards\.find\(\(board\) => board\.address === request\.port\) : null/)
   assert.match(arduinoSource, /const autoDetectedBoard = request\.port \? null : boards\[0\]/)
   assert.match(arduinoSource, /const detectedBoard = matchingBoard \?\? autoDetectedBoard/)

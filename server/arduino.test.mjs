@@ -6,6 +6,7 @@ import path from 'node:path'
 import {
   ArduinoUploadError,
   getArduinoCliStatus,
+  listArduinoBoards,
   listSerialPorts,
   normalizeUploadRequest,
   sketchForAction,
@@ -94,6 +95,21 @@ test('getArduinoCliStatus bounds version, command, and error fields', async () =
   assert.equal(unavailable.error.endsWith('...'), true)
 })
 
+test('invalid ARDUINO_DEFAULT_FQBN falls back to a safe Uno target', async () => {
+  const previousDefault = process.env.ARDUINO_DEFAULT_FQBN
+  process.env.ARDUINO_DEFAULT_FQBN = 'invalid default fqbn'
+  try {
+    const module = await import(`./arduino.mjs?invalid-default-${Date.now()}`)
+    const status = await module.getArduinoCliStatus({
+      run: async () => ({ stdout: 'Version 1.0.0', stderr: '' }),
+    })
+    assert.equal(status.defaultFqbn, 'arduino:avr:uno')
+  } finally {
+    if (previousDefault === undefined) delete process.env.ARDUINO_DEFAULT_FQBN
+    else process.env.ARDUINO_DEFAULT_FQBN = previousDefault
+  }
+})
+
 test('listSerialPorts returns ttyACM and ttyUSB devices', async () => {
   const devDir = await mkdtemp(path.join(os.tmpdir(), 'codex-arduino-dev-'))
   await writeFile(path.join(devDir, 'ttyACM0'), '')
@@ -104,6 +120,59 @@ test('listSerialPorts returns ttyACM and ttyUSB devices', async () => {
     path.join(devDir, 'ttyACM0'),
     path.join(devDir, 'ttyUSB1'),
   ])
+})
+
+test('listArduinoBoards bounds detected board metadata and rejects malformed FQBNs', async () => {
+  const boards = await listArduinoBoards({
+    run: async () => ({
+      stdout: JSON.stringify({
+        detected_ports: [
+          {
+            port: {
+              address: `/dev/ttyACM0${'1'.repeat(900)}`,
+              label: 'USB serial board '.repeat(80),
+              protocol: 'serial'.repeat(120),
+            },
+            matching_boards: [
+              {
+                name: 'Arduino Nano '.repeat(80),
+                fqbn: 'not a fqbn '.repeat(80),
+              },
+            ],
+          },
+        ],
+      }),
+      stderr: '',
+    }),
+  })
+
+  assert.equal(boards.length, 1)
+  assert.equal(boards[0].address.length <= 500, true)
+  assert.equal(boards[0].label.length <= 500, true)
+  assert.equal(boards[0].protocol.length <= 500, true)
+  assert.equal(boards[0].boardName.length <= 500, true)
+  assert.equal(boards[0].fqbn, null)
+})
+
+test('uploadArduinoSketch ignores malformed detected board FQBNs', async () => {
+  const commands = []
+  const run = async (args) => {
+    commands.push(args)
+    return { stdout: `${args[0]} ok`, stderr: '' }
+  }
+
+  const result = await uploadArduinoSketch(
+    { action: 'onboard_led_on' },
+    {
+      run,
+      listPorts: async () => ['/dev/ttyUSB0', '/tmp/not-a-serial-port'],
+      listBoards: async () => [{ address: '/dev/ttyUSB0', fqbn: 'bad fqbn', boardName: 'Arduino Uno' }],
+    },
+  )
+
+  assert.equal(result.fqbn, 'arduino:avr:uno')
+  assert.deepEqual(commands[0].slice(0, 3), ['compile', '--fqbn', 'arduino:avr:uno'])
+  assert.deepEqual(commands[1].slice(0, 5), ['upload', '-p', '/dev/ttyUSB0', '--fqbn', 'arduino:avr:uno'])
 })
 
 test('uploadArduinoSketch ignores unsupported detected board addresses and falls back to scanned serial ports', async () => {

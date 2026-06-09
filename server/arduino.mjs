@@ -4,7 +4,9 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const DEFAULT_FQBN = process.env.ARDUINO_DEFAULT_FQBN ?? 'arduino:avr:uno'
+const FQBN_PATTERN = /^[a-zA-Z0-9_.-]+:[a-zA-Z0-9_.-]+:[a-zA-Z0-9_.-]+(?::[a-zA-Z0-9_.=,-]+)?$/
+const CONFIGURED_DEFAULT_FQBN = process.env.ARDUINO_DEFAULT_FQBN ?? 'arduino:avr:uno'
+const DEFAULT_FQBN = FQBN_PATTERN.test(CONFIGURED_DEFAULT_FQBN) ? CONFIGURED_DEFAULT_FQBN : 'arduino:avr:uno'
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const ARDUINO_CLI_PATH = process.env.ARDUINO_CLI_PATH || path.join(REPO_ROOT, 'bin', 'arduino-cli')
 const DEFAULT_SKETCH_NAME = 'CodexRealtimeSketch'
@@ -14,7 +16,6 @@ const MAX_STATUS_FIELD_CHARS = 500
 const SERIAL_PORT_PATTERN = /^tty(?:ACM|USB)\d+$/
 const SERIAL_PORT_PATH_PATTERN = /^\/dev\/tty(?:ACM|USB)\d+$/
 const SERIAL_BY_ID_PATTERN = /^\/dev\/serial\/by-id\/[a-zA-Z0-9._:-]+$/
-const FQBN_PATTERN = /^[a-zA-Z0-9_.-]+:[a-zA-Z0-9_.-]+:[a-zA-Z0-9_.-]+(?::[a-zA-Z0-9_.=,-]+)?$/
 
 export class ArduinoUploadError extends Error {
   constructor(message, { code = 'arduino_error', status = 500, details } = {}) {
@@ -151,6 +152,21 @@ function isSupportedSerialPort(port) {
   return SERIAL_PORT_PATH_PATTERN.test(port) || SERIAL_BY_ID_PATTERN.test(port)
 }
 
+function normalizeDetectedBoard(entry) {
+  if (!entry || typeof entry !== 'object') return null
+  const candidateFqbn = limitStatusString(entry.fqbn)
+  const address = limitStatusString(entry.address)
+  if (!address) return null
+
+  return {
+    address,
+    label: limitStatusString(entry.label) || null,
+    protocol: limitStatusString(entry.protocol) || null,
+    boardName: limitStatusString(entry.boardName) || null,
+    fqbn: candidateFqbn && FQBN_PATTERN.test(candidateFqbn) ? candidateFqbn : null,
+  }
+}
+
 function summarizeCommandOutput(stdout, stderr) {
   return `${stderr || stdout || ''}`
     .split('\n')
@@ -232,15 +248,15 @@ function parseBoardListJson(value) {
       const matchingBoards = Array.isArray(entry?.matching_boards) ? entry.matching_boards : []
       const matchingBoard = matchingBoards.find((board) => typeof board?.fqbn === 'string') ?? matchingBoards[0]
       const port = entry?.port ?? {}
-      return {
+      return normalizeDetectedBoard({
         address: typeof port?.address === 'string' ? port.address : null,
         label: typeof port?.label === 'string' ? port.label : null,
         protocol: typeof port?.protocol === 'string' ? port.protocol : null,
         boardName: typeof matchingBoard?.name === 'string' ? matchingBoard.name : null,
         fqbn: typeof matchingBoard?.fqbn === 'string' ? matchingBoard.fqbn : null,
-      }
+      })
     })
-    .filter((entry) => entry.address)
+    .filter(Boolean)
 }
 
 export async function listArduinoBoards({ run = runArduinoCli } = {}) {
@@ -277,7 +293,9 @@ export async function uploadArduinoSketch(
   { run = runArduinoCli, listPorts = listSerialPorts, listBoards = listArduinoBoards } = {},
 ) {
   const request = normalizeUploadRequest(input)
-  const [ports, boards] = await Promise.all([listPorts(), listBoards({ run })])
+  const [rawPorts, rawBoards] = await Promise.all([listPorts(), listBoards({ run })])
+  const ports = (Array.isArray(rawPorts) ? rawPorts : []).filter((port) => typeof port === 'string' && isSupportedSerialPort(port))
+  const boards = (Array.isArray(rawBoards) ? rawBoards : []).map(normalizeDetectedBoard).filter(Boolean)
   const matchingBoard = request.port ? boards.find((board) => board.address === request.port) : null
   const autoDetectedBoard = request.port ? null : boards[0]
   const detectedBoard = matchingBoard ?? autoDetectedBoard
@@ -295,6 +313,7 @@ export async function uploadArduinoSketch(
     })
   }
   const fqbn = request.fqbn ?? detectedBoard?.fqbn ?? DEFAULT_FQBN
+  const targetLabel = detectedBoard?.boardName ?? fqbn
 
   const sketchRoot = await mkdtemp(path.join(os.tmpdir(), 'codex-arduino-'))
   const sketchDir = path.join(sketchRoot, request.sketchName)
@@ -323,10 +342,10 @@ export async function uploadArduinoSketch(
       },
       summary:
         request.action === 'onboard_led_on'
-          ? `Uploaded onboard LED on sketch to ${detectedBoard?.boardName ?? fqbn} on ${port}.`
+          ? `Uploaded onboard LED on sketch to ${targetLabel} on ${port}.`
           : request.action === 'onboard_led_blink'
-            ? `Uploaded onboard LED blink sketch to ${detectedBoard?.boardName ?? fqbn} on ${port}.`
-            : `Uploaded custom sketch to ${detectedBoard?.boardName ?? fqbn} on ${port}.`,
+            ? `Uploaded onboard LED blink sketch to ${targetLabel} on ${port}.`
+            : `Uploaded custom sketch to ${targetLabel} on ${port}.`,
     }
   } finally {
     await rm(sketchRoot, { recursive: true, force: true })
