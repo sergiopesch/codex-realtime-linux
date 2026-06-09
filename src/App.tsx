@@ -300,11 +300,32 @@ const boundedApiErrorText = (value: unknown, fallback = '') => {
 }
 
 const readBoundedApiText = async (response: Response, maxLength = MAX_API_RESPONSE_TEXT_LENGTH) => {
-  const text = await response.text()
-  if (text.length > maxLength) {
-    throw new Error(`API response was too large. Maximum response length is ${maxLength} characters.`)
+  if (!response.body) return ''
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let text = ''
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      text += decoder.decode(value, { stream: true })
+      if (text.length > maxLength) {
+        await reader.cancel().catch(() => {})
+        throw new Error(`API response was too large. Maximum response length is ${maxLength} characters.`)
+      }
+    }
+
+    text += decoder.decode()
+    if (text.length > maxLength) {
+      throw new Error(`API response was too large. Maximum response length is ${maxLength} characters.`)
+    }
+    return text
+  } finally {
+    reader.releaseLock()
   }
-  return text
 }
 
 const fetchWithTimeout = async (input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = DEFAULT_API_TIMEOUT_MS) => {
