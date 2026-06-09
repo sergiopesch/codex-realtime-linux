@@ -1242,6 +1242,7 @@ function normalizeConversation(input, workspacePath) {
     transcript: normalizeTranscript(input?.transcript),
     source: ['local', 'codex'].includes(input?.source) ? input.source : 'local',
     codexThreadId: normalizeBoundedString(input?.codexThreadId, '', MAX_CONVERSATION_ID_LENGTH) || null,
+    workspacePath,
     createdAt: typeof input?.createdAt === 'string' ? input.createdAt : new Date().toISOString(),
     updatedAt: typeof input?.updatedAt === 'string' ? input.updatedAt : new Date().toISOString(),
   })

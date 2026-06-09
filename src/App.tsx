@@ -456,6 +456,7 @@ const makeDraftConversation = (
     age,
     status,
     source: 'local',
+    workspacePath,
   }
 }
 

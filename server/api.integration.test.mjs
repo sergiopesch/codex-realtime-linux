@@ -541,6 +541,7 @@ test('server bounds persisted app state loaded from disk', async (t) => {
   assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id].length, 80)
   assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id].some((conversation) => conversation.title === 'Voice conversation 7'), false)
   assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id][0].title, 'Conversation 1')
+  assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id][0].workspacePath, manyWorkspaces[0].id)
   assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id][0].transcript[0].text, 'hello')
   assert.equal(state.conversationsByWorkspace[emptyVoiceDraftWorkspace], undefined)
 })
@@ -598,6 +599,7 @@ test('server returns normalized app state after mutations', async (t) => {
   const conversationBody = await conversationSave.json()
   assert.equal(conversationBody.state.conversationsByWorkspace[workspacePath].length, 80)
   assert.equal(conversationBody.state.conversationsByWorkspace[workspacePath][0].id, 'new-conversation')
+  assert.equal(conversationBody.state.conversationsByWorkspace[workspacePath][0].workspacePath, workspacePath)
 
   const workspaceDelete = await fetch(`${baseUrl}/api/app-state/workspaces/delete`, {
     method: 'POST',
