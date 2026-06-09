@@ -246,12 +246,14 @@ function normalizeLocalSecrets(value) {
 }
 
 async function writeJsonFileAtomic(filePath, value, { dirMode, fileMode } = {}) {
-  await mkdir(path.dirname(filePath), { recursive: true, ...(dirMode ? { mode: dirMode } : {}) })
+  const directoryPath = path.dirname(filePath)
+  await mkdir(directoryPath, { recursive: true, ...(dirMode ? { mode: dirMode } : {}) })
   const tempPath = path.join(
-    path.dirname(filePath),
+    directoryPath,
     `.${path.basename(filePath)}.${process.pid}.${randomUUID()}.tmp`,
   )
   let fileHandle
+  let directoryHandle
   try {
     fileHandle = await open(tempPath, fileMode ? 'wx' : 'w', fileMode)
     await fileHandle.writeFile(`${JSON.stringify(value, null, 2)}\n`)
@@ -261,8 +263,13 @@ async function writeJsonFileAtomic(filePath, value, { dirMode, fileMode } = {}) 
     if (fileMode) await chmod(tempPath, fileMode)
     await rename(tempPath, filePath)
     if (fileMode) await chmod(filePath, fileMode)
+    directoryHandle = await open(directoryPath, 'r')
+    await directoryHandle.sync()
+    await directoryHandle.close()
+    directoryHandle = null
   } catch (error) {
     if (fileHandle) await fileHandle.close().catch(() => {})
+    if (directoryHandle) await directoryHandle.close().catch(() => {})
     try {
       await rm(tempPath, { force: true })
     } catch {
