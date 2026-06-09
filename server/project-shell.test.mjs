@@ -399,9 +399,15 @@ test('Arduino explicit-port uploads do not borrow unrelated detected board metad
   assert.match(arduinoSource, /function normalizeDetectedBoard\(entry\)/)
   assert.match(arduinoSource, /const DEFAULT_FQBN = FQBN_PATTERN\.test\(CONFIGURED_DEFAULT_FQBN\) \? CONFIGURED_DEFAULT_FQBN : 'arduino:avr:uno'/)
   assert.match(arduinoSource, /const MAX_COMMAND_CAPTURE_CHARS = 16_000/)
+  assert.match(arduinoSource, /const MAX_SERIAL_PORT_SCAN_ENTRIES = 400/)
+  assert.match(arduinoSource, /const MAX_SERIAL_PORTS = 80/)
   assert.match(arduinoSource, /function appendCommandOutput\(current, chunk\)/)
   assert.match(arduinoSource, /stdout = appendCommandOutput\(stdout, chunk\)/)
   assert.match(arduinoSource, /stderr = appendCommandOutput\(stderr, chunk\)/)
+  assert.match(arduinoSource, /directory = await opendir\(devDir\)/)
+  assert.match(arduinoSource, /scannedEntries > MAX_SERIAL_PORT_SCAN_ENTRIES \|\| ports\.length >= MAX_SERIAL_PORTS/)
+  assert.match(arduinoSource, /await directory\.close\(\)\.catch\(\(\) => \{\}\)/)
+  assert.doesNotMatch(arduinoSource, /entries = await readdir\(devDir\)/)
   assert.match(arduinoSource, /fqbn: candidateFqbn && FQBN_PATTERN\.test\(candidateFqbn\) \? candidateFqbn : null/)
   assert.match(arduinoSource, /const ports = \(Array\.isArray\(rawPorts\) \? rawPorts : \[\]\)\.filter\(\(port\) => typeof port === 'string' && isSupportedSerialPort\(port\)\)/)
   assert.match(arduinoSource, /const boards = \(Array\.isArray\(rawBoards\) \? rawBoards : \[\]\)\.map\(normalizeDetectedBoard\)\.filter\(Boolean\)/)
@@ -520,6 +526,17 @@ test('weather upstream responses are timeout and size bounded', async () => {
   assert.match(weatherSource, /const text = await readBoundedResponseText\(response, stage\)/)
   assert.match(weatherSource, /return text \? JSON\.parse\(text\) : \{\}/)
   assert.doesNotMatch(weatherSource, /response\.json\(\)/)
+})
+
+test('USB serial-by-id scans are bounded', async () => {
+  const usbSource = await readFile(path.join(repoRoot, 'server', 'usb.mjs'), 'utf8')
+
+  assert.match(usbSource, /const MAX_SERIAL_BY_ID_SCAN_ENTRIES = 400/)
+  assert.match(usbSource, /const MAX_SERIAL_BY_ID_DEVICES = 80/)
+  assert.match(usbSource, /directory = await opendir\(serialByIdDir\)/)
+  assert.match(usbSource, /scannedEntries > MAX_SERIAL_BY_ID_SCAN_ENTRIES \|\| devices\.length >= MAX_SERIAL_BY_ID_DEVICES/)
+  assert.match(usbSource, /await directory\.close\(\)\.catch\(\(\) => \{\}\)/)
+  assert.doesNotMatch(usbSource, /entries = await readdir\(serialByIdDir\)/)
 })
 
 test('realtime voice sessions reset transcript state and clean up media resources', async () => {

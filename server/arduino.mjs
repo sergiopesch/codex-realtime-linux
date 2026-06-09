@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, opendir, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -14,6 +14,8 @@ const MAX_SKETCH_BYTES = 64 * 1024
 const MAX_COMMAND_CAPTURE_CHARS = 16_000
 const MAX_COMMAND_OUTPUT_CHARS = 4_000
 const MAX_STATUS_FIELD_CHARS = 500
+const MAX_SERIAL_PORT_SCAN_ENTRIES = 400
+const MAX_SERIAL_PORTS = 80
 const SERIAL_PORT_PATTERN = /^tty(?:ACM|USB)\d+$/
 const SERIAL_PORT_PATH_PATTERN = /^\/dev\/tty(?:ACM|USB)\d+$/
 const SERIAL_BY_ID_PATTERN = /^\/dev\/serial\/by-id\/[a-zA-Z0-9._:-]+$/
@@ -143,17 +145,26 @@ export function normalizeUploadRequest(input = {}) {
 }
 
 export async function listSerialPorts({ devDir = '/dev' } = {}) {
-  let entries
+  let directory
   try {
-    entries = await readdir(devDir)
+    directory = await opendir(devDir)
   } catch {
     return []
   }
 
-  return entries
-    .filter((entry) => SERIAL_PORT_PATTERN.test(entry))
-    .sort()
-    .map((entry) => path.join(devDir, entry))
+  const ports = []
+  let scannedEntries = 0
+  try {
+    for await (const entry of directory) {
+      scannedEntries += 1
+      if (scannedEntries > MAX_SERIAL_PORT_SCAN_ENTRIES || ports.length >= MAX_SERIAL_PORTS) break
+      if (SERIAL_PORT_PATTERN.test(entry.name)) ports.push(path.join(devDir, entry.name))
+    }
+  } finally {
+    await directory.close().catch(() => {})
+  }
+
+  return ports.sort()
 }
 
 function isSupportedSerialPort(port) {

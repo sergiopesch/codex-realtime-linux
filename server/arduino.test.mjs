@@ -122,6 +122,20 @@ test('listSerialPorts returns ttyACM and ttyUSB devices', async () => {
   ])
 })
 
+test('listSerialPorts bounds returned serial ports', async (t) => {
+  const devDir = await mkdtemp(path.join(os.tmpdir(), 'codex-arduino-dev-'))
+  t.after(() => rm(devDir, { recursive: true, force: true }))
+
+  await Promise.all(
+    Array.from({ length: 100 }, (_, index) => writeFile(path.join(devDir, `ttyUSB${index}`), '')),
+  )
+
+  const ports = await listSerialPorts({ devDir })
+
+  assert.equal(ports.length, 80)
+  assert.ok(ports.every((port) => port.startsWith(devDir)))
+})
+
 test('listArduinoBoards bounds detected board metadata and rejects malformed FQBNs', async () => {
   const boards = await listArduinoBoards({
     run: async () => ({

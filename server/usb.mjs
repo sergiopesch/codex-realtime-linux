@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { readdir, readlink, stat } from 'node:fs/promises'
+import { opendir, readlink, stat } from 'node:fs/promises'
 import path from 'node:path'
 
 const DEFAULT_EVENT_LIMIT = 80
@@ -10,6 +10,8 @@ const MAX_USB_RAW_PROPERTIES = 40
 const MAX_USB_RAW_KEY_LENGTH = 80
 const MAX_USB_RAW_VALUE_LENGTH = 500
 const MAX_USB_STATUS_ERROR_LENGTH = 500
+const MAX_SERIAL_BY_ID_SCAN_ENTRIES = 400
+const MAX_SERIAL_BY_ID_DEVICES = 80
 const SERIAL_TTY_PATTERN = /^\/dev\/tty(?:ACM|USB)\d+$/
 const ARDUINO_VENDOR_IDS = new Set(['2341', '2a03', '1a86', '10c4', '0403', '1b4f'])
 const ARDUINO_TEXT_PATTERNS = [
@@ -218,32 +220,39 @@ export class UsbDeviceMonitor {
 }
 
 export async function readSerialById(serialByIdDir = DEFAULT_SERIAL_BY_ID_DIR) {
-  let entries
+  let directory
   try {
-    entries = await readdir(serialByIdDir)
+    directory = await opendir(serialByIdDir)
   } catch {
     return []
   }
 
   const devices = []
-  for (const entry of entries) {
-    const linkPath = path.join(serialByIdDir, entry)
-    try {
-      const target = await readlink(linkPath)
-      const devname = path.resolve(serialByIdDir, target)
-      const info = await stat(devname)
-      if (!info.isCharacterDevice()) continue
-      const cleaned = entry.replace(/^usb-/, '').replace(/-if\d+-port\d+$/i, '')
-      const parts = cleaned.split('_')
-      devices.push({
-        devname,
-        vendor: parts[0]?.replace(/-/g, ' ') || null,
-        model: parts.slice(1, -1).join(' ').replace(/-/g, ' ') || cleaned.replace(/_/g, ' '),
-        serial: parts.at(-1) || entry,
-      })
-    } catch {
-      // Ignore stale symlinks while devices are being attached or removed.
+  let scannedEntries = 0
+  try {
+    for await (const entry of directory) {
+      scannedEntries += 1
+      if (scannedEntries > MAX_SERIAL_BY_ID_SCAN_ENTRIES || devices.length >= MAX_SERIAL_BY_ID_DEVICES) break
+      const linkPath = path.join(serialByIdDir, entry.name)
+      try {
+        const target = await readlink(linkPath)
+        const devname = path.resolve(serialByIdDir, target)
+        const info = await stat(devname)
+        if (!info.isCharacterDevice()) continue
+        const cleaned = entry.name.replace(/^usb-/, '').replace(/-if\d+-port\d+$/i, '')
+        const parts = cleaned.split('_')
+        devices.push({
+          devname,
+          vendor: parts[0]?.replace(/-/g, ' ') || null,
+          model: parts.slice(1, -1).join(' ').replace(/-/g, ' ') || cleaned.replace(/_/g, ' '),
+          serial: parts.at(-1) || entry.name,
+        })
+      } catch {
+        // Ignore stale symlinks while devices are being attached or removed.
+      }
     }
+  } finally {
+    await directory.close().catch(() => {})
   }
 
   return devices
