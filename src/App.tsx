@@ -840,6 +840,21 @@ function App() {
     setActiveTurnId(turnId)
   }
 
+  const markCodexConversationReady = useCallback((threadId: string | null) => {
+    if (!threadId) return
+    setConversationsByWorkspace((current) => {
+      const next = { ...current }
+      for (const [workspacePath, conversations] of Object.entries(next)) {
+        next[workspacePath] = conversations.map((conversation) =>
+          conversation.id === threadId
+            ? { ...conversation, status: 'ready', updatedAt: new Date().toISOString() }
+            : conversation,
+        )
+      }
+      return next
+    })
+  }, [])
+
   const selectedRoutableWorkspacePath = (requestedCwd: unknown) => {
     const selected = selectedWorkspaceRef.current
     const normalizedSelected = normalizeAbsoluteLocalWorkspacePath(selected)
@@ -1667,18 +1682,7 @@ function App() {
           }
 
           setActiveCodexTurn(completedThreadId, null)
-          setConversationsByWorkspace((current) => {
-            if (!completedThreadId) return current
-            const next = { ...current }
-            for (const [workspacePath, conversations] of Object.entries(next)) {
-              next[workspacePath] = conversations.map((conversation) =>
-                conversation.id === completedThreadId
-                  ? { ...conversation, status: 'ready', updatedAt: new Date().toISOString() }
-                  : conversation,
-              )
-            }
-            return next
-          })
+          markCodexConversationReady(completedThreadId)
         }
       } catch {
         if (!effectActive || controller.signal.aborted) return
@@ -1695,7 +1699,7 @@ function App() {
       controller.abort()
       window.clearInterval(interval)
     }
-  }, [refreshArtifacts])
+  }, [markCodexConversationReady, refreshArtifacts])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -1721,9 +1725,11 @@ function App() {
           url: completed.url,
           workspacePath: completed.workspacePath,
         })
+        const completedThreadId = activeThreadIdRef.current
         setDismissedArtifact(null)
         setPendingArtifact(null)
-        setActiveCodexTurn(activeThreadIdRef.current, null)
+        setActiveCodexTurn(completedThreadId, null)
+        markCodexConversationReady(completedThreadId)
         setActivity('Artifact ready', completed.title)
         showNotice(`Preview ready: ${completed.relativePath}`)
       } catch {
@@ -1741,7 +1747,7 @@ function App() {
       controller.abort()
       window.clearInterval(interval)
     }
-  }, [pendingArtifact, refreshArtifacts, refreshOpenArtifact])
+  }, [markCodexConversationReady, pendingArtifact, refreshArtifacts, refreshOpenArtifact])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -1933,12 +1939,16 @@ function App() {
 
       if (toolName === 'codex_interrupt_task' && activeThreadIdRef.current && activeTurnIdRef.current) {
         setActivity('Voice router', 'Codex interrupting')
+        const interruptedThreadId = activeThreadIdRef.current
         result = await api('/api/codex/interrupt', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ threadId: activeThreadIdRef.current, turnId: activeTurnIdRef.current }),
+          body: JSON.stringify({ threadId: interruptedThreadId, turnId: activeTurnIdRef.current }),
         })
-        setActiveCodexTurn(activeThreadIdRef.current, null)
+        setActiveCodexTurn(interruptedThreadId, null)
+        setPendingArtifact(null)
+        markCodexConversationReady(interruptedThreadId)
+        setActivity('Codex interrupted')
       } else if (toolName === 'codex_interrupt_task') {
         result = { error: 'No active Codex turn is available to interrupt.' }
       }
