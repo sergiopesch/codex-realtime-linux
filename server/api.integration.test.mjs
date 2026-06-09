@@ -222,6 +222,19 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   assert.equal(formUpload.status, 415)
   assert.equal((await readJson(formUpload)).code, 'json_required')
 
+  const appShell = await fetch(`${baseUrl}/`)
+  assert.equal(appShell.status, 200)
+  assert.equal(appShell.headers.has('x-powered-by'), false)
+  assert.match(appShell.headers.get('content-security-policy') ?? '', /connect-src 'self' https:\/\/api\.openai\.com/)
+  assert.match(appShell.headers.get('content-security-policy') ?? '', /frame-ancestors 'none'/)
+  assert.match(appShell.headers.get('permissions-policy') ?? '', /microphone=\(self\)/)
+  assert.match(appShell.headers.get('permissions-policy') ?? '', /display-capture=\(self\)/)
+  assert.equal(appShell.headers.get('x-frame-options'), 'DENY')
+  assert.equal(appShell.headers.get('x-content-type-options'), 'nosniff')
+  assert.equal(appShell.headers.get('referrer-policy'), 'no-referrer')
+  assert.equal(appShell.headers.get('cache-control'), 'no-store')
+  assert.match(await appShell.text(), /<div id="root"><\/div>/)
+
   const malformedJson = await fetch(`${baseUrl}/api/app-state/conversations`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
