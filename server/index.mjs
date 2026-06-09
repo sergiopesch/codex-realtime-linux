@@ -16,7 +16,7 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const DIST_DIR = path.join(REPO_ROOT, 'dist')
 const DEFAULT_PORT = 3311
 const PORT = configuredPort(process.env.PORT)
-const ENV_OPENAI_API_KEY = process.env.OPENAI_API_KEY
+const ENV_OPENAI_API_KEY = normalizedOpenAiApiKey(process.env.OPENAI_API_KEY)
 const OPENAI_ADMIN_KEY = process.env.OPENAI_ADMIN_KEY ?? process.env.OPENAI_API_ADMIN_KEY
 const ENV_CODEX_API_KEY = process.env.CODEX_API_KEY
 const CODEX_FORCE_API_KEY_AUTH = process.env.CODEX_FORCE_API_KEY_AUTH === 'true'
@@ -330,6 +330,11 @@ function isPlausibleOpenAiApiKey(value) {
   return apiKey.startsWith('sk-') && apiKey.length <= MAX_OPENAI_API_KEY_LENGTH
 }
 
+function normalizedOpenAiApiKey(value) {
+  const apiKey = typeof value === 'string' ? value.trim() : ''
+  return isPlausibleOpenAiApiKey(apiKey) ? apiKey : ''
+}
+
 function defaultOpenAiSafetyIdentifier() {
   const source = [
     'codex-realtime-linux',
@@ -353,7 +358,8 @@ function normalizeOpenAiSafetyIdentifier(value) {
 
 function normalizeLocalSecrets(value) {
   const nextSecrets = {}
-  if (isPlausibleOpenAiApiKey(value?.openaiApiKey)) nextSecrets.openaiApiKey = value.openaiApiKey.trim()
+  const openaiApiKey = normalizedOpenAiApiKey(value?.openaiApiKey)
+  if (openaiApiKey) nextSecrets.openaiApiKey = openaiApiKey
   return nextSecrets
 }
 

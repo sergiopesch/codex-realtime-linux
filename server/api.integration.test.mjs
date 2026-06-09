@@ -1293,6 +1293,24 @@ test('server ignores malformed persisted settings secrets', async (t) => {
   assert.equal(status.openAiKeySource, 'missing')
 })
 
+test('server ignores malformed OPENAI_API_KEY environment values', async (t) => {
+  const { baseUrl } = await startTestServer(t, {
+    OPENAI_API_KEY: 'not-a-key',
+    CODEX_USE_OPENAI_API_KEY: 'true',
+  })
+
+  const status = await (await fetch(`${baseUrl}/api/status`)).json()
+  assert.equal(status.realtime, false)
+  assert.equal(status.openAiKeySource, 'missing')
+  assert.equal(status.codexApiKey, false)
+
+  const missingKey = await fetch(`${baseUrl}/api/realtime/token`, {
+    method: 'POST',
+  })
+  assert.equal(missingKey.status, 503)
+  assert.equal((await readJson(missingKey)).code, 'openai_api_key_required')
+})
+
 test('settings and app-state writes tighten existing directory and file permissions', async (t) => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-secrets-mode-'))
   t.after(() => rm(tempDir, { recursive: true, force: true }))
