@@ -41,7 +41,7 @@ test('renderer labels identity and voice context from runtime workspace state', 
     appSource,
     /const selectedWorkspaceRoot = workspaceRoots\.find\(\(\{ workspacePath \}\) => workspacePath === selectedWorkspace\)/,
   )
-  assert.match(appSource, /const conversations = conversationsByWorkspace\[workspacePath\] \?\? \[\]/)
+  assert.match(appSource, /const conversations = \(conversationsByWorkspace\[workspacePath\] \?\? \[\]\)\.filter/)
   assert.match(
     appSource,
     /const selectedWorkspaceLabel = selectedWorkspaceRoot\?\.workspace\.name \?\? basenameFromWorkspacePath\(selectedWorkspace\)/,
@@ -517,6 +517,13 @@ test('persisted workspaces and conversations require absolute workspace paths', 
   assert.match(serverSource, /path\.isAbsolute\(workspacePath\)/)
   assert.match(serverSource, /function normalizeWorkspacePathList\(values, maxItems\)/)
   assert.match(serverSource, /\[\.\.\.new Set\(values\.map\(normalizeWorkspacePath\)\.filter\(Boolean\)\)\]\.slice\(0, maxItems\)/)
+  assert.match(serverSource, /hiddenCodexThreadIdsByWorkspace: \{\}/)
+  assert.match(serverSource, /function normalizeHiddenCodexThreadIdsByWorkspace\(input, savedWorkspacePaths\)/)
+  assert.match(serverSource, /state\.hiddenCodexThreadIdsByWorkspace = normalizeHiddenCodexThreadIdsByWorkspace\(/)
+  assert.match(serverSource, /app\.post\('\/api\/app-state\/codex-threads\/hide'/)
+  assert.match(serverSource, /state\.hiddenCodexThreadIdsByWorkspace\[workspacePath\] = \[threadId, \.\.\.current\.filter\(\(item\) => item !== threadId\)\]/)
+  assert.match(serverSource, /delete state\.hiddenCodexThreadIdsByWorkspace\[workspacePath\]/)
+  assert.match(serverSource, /filterHiddenCodexThreads\(result, hiddenThreadIds\)/)
   assert.match(serverSource, /function firstUniqueBy\(values, keyForValue\)/)
   assert.match(serverSource, /if \(!key \|\| seen\.has\(key\)\) return false/)
   assert.match(serverSource, /seen\.add\(key\)/)
@@ -693,7 +700,14 @@ test('Codex task routes require explicit user goals and IDs before app-server ca
   assert.match(appSource, /const confirmedConversationState = safeConversationsByWorkspace\(deleteResult\.state\.conversationsByWorkspace\)/)
   assert.match(appSource, /serverConfirmedWorkspace = Object\.prototype\.hasOwnProperty\.call\(confirmedConversationState, workspacePath\)/)
   assert.match(appSource, /confirmedConversations = serverConfirmedWorkspace \? confirmedConversationState\[workspacePath\] : next/)
-  assert.match(appSource, /deleted\?\.source === 'codex' && deleted\.codexThreadId/)
+  assert.match(appSource, /const \[hiddenCodexThreadIdsByWorkspace, setHiddenCodexThreadIdsByWorkspace\] = useState<Record<string, string\[\]>>\(\{\}\)/)
+  assert.match(appSource, /const safeHiddenCodexThreadIdsByWorkspace = \(value: unknown\) =>/)
+  assert.match(appSource, /const hiddenCodexThreadIds = new Set\(hiddenCodexThreadIdsByWorkspace\[workspacePath\] \?\? \[\]\)/)
+  assert.match(appSource, /conversation\.source !== 'codex' \|\| !hiddenCodexThreadIds\.has\(conversation\.codexThreadId \|\| conversation\.id\)/)
+  assert.match(appSource, /const deletedCodexThreadId = deleted\?\.source === 'codex' \? deleted\.codexThreadId \|\| deleted\.id : ''/)
+  assert.match(appSource, /api<\{ state: AppStateResponse \}>\('\/api\/app-state\/codex-threads\/hide'/)
+  assert.match(appSource, /setHiddenCodexThreadIdsByWorkspace\(safeHiddenCodexThreadIdsByWorkspace\(hideResult\.state\.hiddenCodexThreadIdsByWorkspace\)\)/)
+  assert.doesNotMatch(appSource, /\/api\/codex\/thread\/archive/)
   assert.match(appSource, /if \(deleted\.source === 'local'\) throw error/)
   assert.match(appSource, /app-state\/codex-conversation-delete-failed/)
   assert.match(appSource, /const randomLocalConversationToken = \(\) =>[\s\S]*globalThis\.crypto\?\.randomUUID\?\.\(\)/)
@@ -961,7 +975,8 @@ test('renderer loads Codex thread history only for explicit saved workspaces', a
   assert.doesNotMatch(serverSource, /const threadId = normalizeBoundedString\(thread\?\.id, `codex-\$\{updatedAt\}`, MAX_CONVERSATION_ID_LENGTH\)/)
   assert.match(serverSource, /const workspacePath = normalizeBoundedString\(normalizeWorkspacePath\(thread\?\.cwd\), '', MAX_CONVERSATION_TEXT_LENGTH\)/)
   assert.match(serverSource, /traces: normalizeStringList\(/)
-  assert.match(serverSource, /res\.json\(normalizeCodexThreadListResponse\(result\)\)/)
+  assert.match(serverSource, /const hiddenThreadIds = new Set\(appState\.hiddenCodexThreadIdsByWorkspace\[cwd\] \?\? \[\]\)/)
+  assert.match(serverSource, /res\.json\(normalizeCodexThreadListResponse\(filterHiddenCodexThreads\(result, hiddenThreadIds\)\)\)/)
   assert.doesNotMatch(serverSource, /res\.json\(\{\s+\.\.\.result,\s+conversations: \(result\.data \?\? \[\]\)\.map\(threadToConversation\),\s+\}\)/)
   assert.doesNotMatch(serverSource, /id: thread\.id/)
   assert.doesNotMatch(serverSource, /new Date\(thread\.updatedAt \* 1000\)\.toISOString\(\)/)

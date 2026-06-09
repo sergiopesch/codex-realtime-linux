@@ -799,6 +799,29 @@ test('codex task returns public artifact metadata for external workspace artifac
   assert.equal(threadsBody.data[0].debugPayload.length, 1000)
   assert.equal(threadsBody.conversations.some((conversation) => /^codex-\d{4}-/.test(conversation.id)), false)
 
+  const savedWorkspace = await fetch(`${baseUrl}/api/app-state/workspaces`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspace: { path: workspacePath, name: 'Artifact task workspace' } }),
+  })
+  assert.equal(savedWorkspace.status, 200)
+
+  const hideThread = await fetch(`${baseUrl}/api/app-state/codex-threads/hide`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspacePath, threadId: 'thread-large-time' }),
+  })
+  assert.equal(hideThread.status, 200)
+  const hideThreadBody = await hideThread.json()
+  assert.deepEqual(hideThreadBody.state.hiddenCodexThreadIdsByWorkspace[workspacePath], ['thread-large-time'])
+
+  const hiddenThreads = await fetch(`${baseUrl}/api/codex/threads?limit=10&cwd=${encodeURIComponent(workspacePath)}`)
+  assert.equal(hiddenThreads.status, 200)
+  const hiddenThreadsBody = await hiddenThreads.json()
+  assert.equal(hiddenThreadsBody.conversations.length, 0)
+  assert.equal(hiddenThreadsBody.data.length, 1)
+  assert.equal(hiddenThreadsBody.data.some((thread) => thread.id === 'thread-large-time'), false)
+
   const unscopedThreads = await fetch(`${baseUrl}/api/codex/threads?limit=10`)
   assert.equal(unscopedThreads.status, 400)
   assert.equal((await readJson(unscopedThreads)).code, 'invalid_workspace_path')
@@ -808,8 +831,9 @@ test('codex task returns public artifact metadata for external workspace artifac
     .split('\n')
     .map((line) => JSON.parse(line))
   const threadListMessages = rpcMessagesAfterThreads.filter((message) => message.method === 'thread/list')
-  assert.equal(threadListMessages.length, 1)
+  assert.equal(threadListMessages.length, 2)
   assert.equal(threadListMessages[0].params.cwd, workspacePath)
+  assert.equal(threadListMessages[1].params.cwd, workspacePath)
 })
 
 test('codex app-source tasks require an explicit environment opt-in', async (t) => {

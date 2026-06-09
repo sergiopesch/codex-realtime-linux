@@ -75,6 +75,7 @@ const MAX_LOCAL_WORKSPACES = 40
 const MAX_LOCAL_HIDDEN_WORKSPACES = 80
 const MAX_LOCAL_WORKSPACE_BUCKETS = 40
 const MAX_LOCAL_CONVERSATIONS_PER_WORKSPACE = 80
+const MAX_HIDDEN_CODEX_THREADS_PER_WORKSPACE = 200
 const LEGACY_DRAFT_PROMPT = 'Describe the next build step out loud.'
 const LEGACY_DRAFT_RESPONSE = 'This agent conversation is ready for realtime voice direction.'
 const LEGACY_DRAFT_TRACES = ['Workspace selected', 'Voice direction pending', 'Codex execution ready']
@@ -1295,6 +1296,7 @@ const emptyAppState = () => ({
   workspaces: [],
   conversationsByWorkspace: {},
   hiddenWorkspacePaths: [],
+  hiddenCodexThreadIdsByWorkspace: {},
 })
 
 function normalizeString(value, fallback = '') {
@@ -1399,6 +1401,31 @@ function normalizeWorkspacePathList(values, maxItems) {
   return [...new Set(values.map(normalizeWorkspacePath).filter(Boolean))].slice(0, maxItems)
 }
 
+function normalizeUniqueStringList(values, maxItems, maxLength) {
+  return [...new Set(normalizeStringList(values, maxItems, maxLength))].slice(0, maxItems)
+}
+
+function normalizeHiddenCodexThreadIdsByWorkspace(input, savedWorkspacePaths) {
+  const groups = {}
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return groups
+  let normalizedWorkspaceBuckets = 0
+  for (const [workspacePath, threadIds] of Object.entries(input)) {
+    if (normalizedWorkspaceBuckets >= MAX_LOCAL_WORKSPACE_BUCKETS) break
+    const normalizedWorkspacePath = normalizeWorkspacePath(workspacePath)
+    if (!normalizedWorkspacePath || groups[normalizedWorkspacePath]) continue
+    if (savedWorkspacePaths && !savedWorkspacePaths.has(normalizedWorkspacePath)) continue
+    const normalizedThreadIds = normalizeUniqueStringList(
+      threadIds,
+      MAX_HIDDEN_CODEX_THREADS_PER_WORKSPACE,
+      MAX_CONVERSATION_ID_LENGTH,
+    )
+    if (normalizedThreadIds.length === 0) continue
+    groups[normalizedWorkspacePath] = normalizedThreadIds
+    normalizedWorkspaceBuckets += 1
+  }
+  return groups
+}
+
 function firstUniqueBy(values, keyForValue) {
   const seen = new Set()
   return values.filter((value) => {
@@ -1500,6 +1527,10 @@ function normalizeAppState(input) {
     : []
   state.hiddenWorkspacePaths = normalizeWorkspacePathList(input?.hiddenWorkspacePaths, MAX_LOCAL_HIDDEN_WORKSPACES)
   const savedWorkspacePaths = new Set(state.workspaces.map((workspace) => workspace.path))
+  state.hiddenCodexThreadIdsByWorkspace = normalizeHiddenCodexThreadIdsByWorkspace(
+    input?.hiddenCodexThreadIdsByWorkspace,
+    savedWorkspacePaths,
+  )
   let normalizedWorkspaceBuckets = 0
 
   if (input?.conversationsByWorkspace && typeof input.conversationsByWorkspace === 'object') {
@@ -1654,6 +1685,14 @@ function normalizeCodexThreadListResponse(result) {
     ...response,
     data: Array.isArray(response.data) ? response.data : [],
     conversations: threads.map(threadToConversation).filter(Boolean),
+  }
+}
+
+function filterHiddenCodexThreads(result, hiddenThreadIds) {
+  if (!hiddenThreadIds || hiddenThreadIds.size === 0 || !Array.isArray(result?.data)) return result
+  return {
+    ...result,
+    data: result.data.filter((thread) => !hiddenThreadIds.has(normalizeBoundedString(thread?.id, '', MAX_CONVERSATION_ID_LENGTH))),
   }
 }
 
@@ -2129,7 +2168,9 @@ app.get('/api/codex/threads', async (req, res) => {
 
     await codex.ensure()
     const result = await codex.request('thread/list', params)
-    res.json(normalizeCodexThreadListResponse(result))
+    const appState = await readAppState()
+    const hiddenThreadIds = new Set(appState.hiddenCodexThreadIdsByWorkspace[cwd] ?? [])
+    res.json(normalizeCodexThreadListResponse(filterHiddenCodexThreads(result, hiddenThreadIds)))
   } catch (error) {
     sendJsonError(res, error, { fallbackStatus: 502, fallbackMessage: 'Failed to list Codex threads.' })
   }
@@ -2273,6 +2314,53 @@ app.post('/api/app-state/workspaces/delete', async (req, res) => {
       state.workspaces = state.workspaces.filter((item) => (item.path ?? item.id) !== workspacePath)
       state.hiddenWorkspacePaths = [...new Set([...(state.hiddenWorkspacePaths ?? []), workspacePath])]
       delete state.conversationsByWorkspace[workspacePath]
+      delete state.hiddenCodexThreadIdsByWorkspace[workspacePath]
+    })
+    res.json({ state })
+  } catch (error) {
+    sendJsonError(res, error, {
+      fallbackStatus: 500,
+      fallbackMessage: 'Failed to update saved app state.',
+      fallbackCode: 'app_state_write_failed',
+    })
+  }
+})
+
+app.post('/api/app-state/codex-threads/hide', async (req, res) => {
+  let body
+  try {
+    body = requireObjectBody(req.body, 'App-state Codex thread hide request')
+  } catch (error) {
+    sendJsonError(res, error, { fallbackStatus: 400, fallbackCode: 'invalid_request' })
+    return
+  }
+
+  const threadId = normalizeBoundedString(body.threadId, '', MAX_CONVERSATION_ID_LENGTH)
+  if (!threadId) {
+    sendJsonError(
+      res,
+      httpError('threadId is required', {
+        statusCode: 400,
+        code: 'invalid_request',
+      }),
+      { fallbackStatus: 400, fallbackCode: 'invalid_request' },
+    )
+    return
+  }
+
+  let workspacePath
+  try {
+    workspacePath = await requireWorkspaceDirectory(body.workspacePath, 'workspacePath')
+  } catch (error) {
+    sendJsonError(res, error, { fallbackStatus: 400, fallbackMessage: 'Invalid workspace path.' })
+    return
+  }
+
+  try {
+    const { state } = await mutateAppState(async (state) => {
+      const current = state.hiddenCodexThreadIdsByWorkspace[workspacePath] ?? []
+      state.hiddenCodexThreadIdsByWorkspace[workspacePath] = [threadId, ...current.filter((item) => item !== threadId)]
+        .slice(0, MAX_HIDDEN_CODEX_THREADS_PER_WORKSPACE)
     })
     res.json({ state })
   } catch (error) {

@@ -137,6 +137,7 @@ type AppStateResponse = {
   workspaces: Workspace[]
   conversationsByWorkspace: Record<string, AgentConversation[]>
   hiddenWorkspacePaths?: string[]
+  hiddenCodexThreadIdsByWorkspace?: Record<string, string[]>
 }
 
 type CodexThreadsResponse = {
@@ -1013,6 +1014,25 @@ const safeHiddenWorkspacePaths = (values: unknown) =>
         .slice(0, MAX_UI_HIDDEN_WORKSPACES)
     : []
 
+const safeHiddenCodexThreadIdsByWorkspace = (value: unknown) => {
+  const groups: Record<string, string[]> = {}
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return groups
+  let normalizedWorkspaceBuckets = 0
+  for (const [rawWorkspacePath, rawThreadIds] of Object.entries(value)) {
+    const workspacePath = normalizeAbsoluteLocalWorkspacePath(rawWorkspacePath)
+    if (!workspacePath.startsWith('/') || !Array.isArray(rawThreadIds) || groups[workspacePath]) continue
+    const threadIds = [...new Set(rawThreadIds
+      .map((threadId) => boundedPlainString(threadId, '', MAX_REALTIME_FUNCTION_CALL_ID_LENGTH))
+      .filter(Boolean))]
+      .slice(0, MAX_UI_CONVERSATIONS_PER_WORKSPACE * 3)
+    if (threadIds.length === 0) continue
+    groups[workspacePath] = threadIds
+    normalizedWorkspaceBuckets += 1
+    if (normalizedWorkspaceBuckets >= MAX_UI_WORKSPACE_BUCKETS) break
+  }
+  return groups
+}
+
 const safeArtifactNamePattern = /^[a-z0-9][a-z0-9-]*$/i
 
 const base64UrlEncode = (value: string) => {
@@ -1151,6 +1171,7 @@ function App() {
   const [userWorkspaces, setUserWorkspaces] = useState<Workspace[]>([])
   const [conversationsByWorkspace, setConversationsByWorkspace] = useState<Record<string, AgentConversation[]>>({})
   const [hiddenWorkspacePaths, setHiddenWorkspacePaths] = useState<string[]>([])
+  const [hiddenCodexThreadIdsByWorkspace, setHiddenCodexThreadIdsByWorkspace] = useState<Record<string, string[]>>({})
   const [collapsedWorkspaces, setCollapsedWorkspaces] = useState<string[]>([])
   const [selectedWorkspace, setSelectedWorkspace] = useState(initialWorkspacePath)
   const [selectedConversationId, setSelectedConversationId] = useState('')
@@ -1240,7 +1261,10 @@ function App() {
   )
   const workspaceRoots = workspaceSource.map((workspace) => {
     const workspacePath = workspacePathFor(workspace)
-    const conversations = conversationsByWorkspace[workspacePath] ?? []
+    const hiddenCodexThreadIds = new Set(hiddenCodexThreadIdsByWorkspace[workspacePath] ?? [])
+    const conversations = (conversationsByWorkspace[workspacePath] ?? []).filter((conversation) => (
+      conversation.source !== 'codex' || !hiddenCodexThreadIds.has(conversation.codexThreadId || conversation.id)
+    ))
     return { workspace, workspacePath, conversations }
   })
   const selectedWorkspaceRoot = workspaceRoots.find(({ workspacePath }) => workspacePath === selectedWorkspace)
@@ -1975,6 +1999,7 @@ function App() {
 
       setUserWorkspaces(savedWorkspaces)
       setHiddenWorkspacePaths(safeHiddenWorkspacePaths(savedWorkspace.state.hiddenWorkspacePaths))
+      setHiddenCodexThreadIdsByWorkspace(safeHiddenCodexThreadIdsByWorkspace(savedWorkspace.state.hiddenCodexThreadIdsByWorkspace))
       setConversationsByWorkspace((current) => ({
         ...current,
         [savedWorkspacePath]: current[savedWorkspacePath] ?? savedConversationState[savedWorkspacePath] ?? [],
@@ -2037,12 +2062,14 @@ function App() {
     try {
       let confirmedConversations = next
       let serverConfirmedWorkspace = false
-      if (deleted?.source === 'codex' && deleted.codexThreadId) {
-        await api('/api/codex/thread/archive', {
+      const deletedCodexThreadId = deleted?.source === 'codex' ? deleted.codexThreadId || deleted.id : ''
+      if (deletedCodexThreadId) {
+        const hideResult = await api<{ state: AppStateResponse }>('/api/app-state/codex-threads/hide', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ threadId: deleted.codexThreadId }),
+          body: JSON.stringify({ workspacePath, threadId: deletedCodexThreadId }),
         })
+        setHiddenCodexThreadIdsByWorkspace(safeHiddenCodexThreadIdsByWorkspace(hideResult.state.hiddenCodexThreadIdsByWorkspace))
       }
       if (deleted?.source === 'local' || deleted?.source === 'codex') {
         try {
@@ -2054,6 +2081,7 @@ function App() {
           const confirmedConversationState = safeConversationsByWorkspace(deleteResult.state.conversationsByWorkspace)
           serverConfirmedWorkspace = Object.prototype.hasOwnProperty.call(confirmedConversationState, workspacePath)
           confirmedConversations = serverConfirmedWorkspace ? confirmedConversationState[workspacePath] : next
+          setHiddenCodexThreadIdsByWorkspace(safeHiddenCodexThreadIdsByWorkspace(deleteResult.state.hiddenCodexThreadIdsByWorkspace))
         } catch (error) {
           if (deleted.source === 'local') throw error
           appendEvent('app-state/codex-conversation-delete-failed', {
@@ -2114,6 +2142,7 @@ function App() {
 
       const savedWorkspaces = safeWorkspaces(deleteResult.state.workspaces)
       setHiddenWorkspacePaths(safeHiddenWorkspacePaths(deleteResult.state.hiddenWorkspacePaths))
+      setHiddenCodexThreadIdsByWorkspace(safeHiddenCodexThreadIdsByWorkspace(deleteResult.state.hiddenCodexThreadIdsByWorkspace))
       setUserWorkspaces(savedWorkspaces)
       setCollapsedWorkspaces((current) => current.filter((item) => normalizeAbsoluteLocalWorkspacePath(item) !== targetWorkspacePath))
       setConversationsByWorkspace((current) => {
@@ -2315,6 +2344,7 @@ function App() {
         const roots = localWorkspaceData.slice(0, MAX_UI_WORKSPACES)
         const savedWorkspaces = safeWorkspaces(appStateData.workspaces)
         const hiddenPaths = safeHiddenWorkspacePaths(appStateData.hiddenWorkspacePaths)
+        const hiddenCodexThreadIds = safeHiddenCodexThreadIdsByWorkspace(appStateData.hiddenCodexThreadIdsByWorkspace)
         const savedConversationState = safeConversationsByWorkspace(appStateData.conversationsByWorkspace)
         const visibleRoots = roots.filter((workspace) => !hiddenPaths.includes(workspacePathFor(workspace)))
         const visibleSavedWorkspaces = savedWorkspaces.filter((workspace) => !hiddenPaths.includes(workspacePathFor(workspace)))
@@ -2329,6 +2359,7 @@ function App() {
         setWorkspaces(localWorkspaceData)
         setUserWorkspaces(savedWorkspaces)
         setHiddenWorkspacePaths(hiddenPaths)
+        setHiddenCodexThreadIdsByWorkspace(hiddenCodexThreadIds)
         setSpend(spendData)
         setWeatherLocationInput((current) =>
           current.trim() || !statusData.defaultWeatherLocation ? current : statusData.defaultWeatherLocation ?? '',
@@ -2355,6 +2386,8 @@ function App() {
                 (groups, conversation) => {
                   const workspacePath = conversation.workspacePath
                   if (!workspacePath) return groups
+                  const hiddenThreadIds = new Set(hiddenCodexThreadIds[workspacePath] ?? [])
+                  if (hiddenThreadIds.has(conversation.codexThreadId || conversation.id)) return groups
                   groups[workspacePath] = groups[workspacePath] ?? []
                   groups[workspacePath].push(conversation)
                   return groups
