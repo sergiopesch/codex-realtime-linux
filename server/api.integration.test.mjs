@@ -94,6 +94,9 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   await mkdir(artifactDir, { recursive: true })
   await writeFile(path.join(artifactDir, 'index.html'), '<!doctype html><title>Sample report</title>')
   await writeFile(path.join(artifactDir, 'notes.txt'), 'workspace note')
+  await writeFile(path.join(artifactDir, '.env'), 'OPENAI_API_KEY=secret')
+  await mkdir(path.join(artifactDir, 'assets', '.private'), { recursive: true })
+  await writeFile(path.join(artifactDir, 'assets', '.private', 'secret.txt'), 'hidden generated file')
   const unsafeArtifactDir = path.join(workspacePath, 'public', 'agent-files', 'unsafe report')
   await mkdir(unsafeArtifactDir, { recursive: true })
   await writeFile(path.join(unsafeArtifactDir, 'index.html'), '<!doctype html><title>Unsafe report</title>')
@@ -157,8 +160,14 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   assert.doesNotMatch(preview.headers.get('content-security-policy') ?? '', /connect-src 'self'/)
   assert.match(await preview.text(), /Sample report/)
 
+  const hiddenPreviewFile = await fetch(`${baseUrl}/workspace-artifacts/${token}/sample-report/.env`)
+  assert.equal(hiddenPreviewFile.status, 404)
+
+  const nestedHiddenPreviewFile = await fetch(`${baseUrl}/workspace-artifacts/${token}/sample-report/assets/.private/secret.txt`)
+  assert.equal(nestedHiddenPreviewFile.status, 404)
+
   const traversal = await fetch(`${baseUrl}/workspace-artifacts/${token}/sample-report/..%2F..%2F..%2Fpackage.json`)
-  assert.equal(traversal.status, 403)
+  assert.equal(traversal.status, 404)
 
   const outsidePreviewFile = path.join(workspacePath, 'outside-preview-secret.txt')
   await writeFile(outsidePreviewFile, 'outside artifact root')

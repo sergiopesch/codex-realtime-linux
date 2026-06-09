@@ -85,6 +85,7 @@ const MAX_GENERATED_ARTIFACTS = 40
 const MAX_ARTIFACT_DIRECTORY_SCAN_ENTRIES = 400
 const MAX_ARTIFACT_NAME_LENGTH = 120
 const MAX_ARTIFACT_TITLE_LENGTH = 180
+const MAX_ARTIFACT_PREVIEW_PATH_LENGTH = 1024
 const MAX_ARTIFACT_PREVIEW_FILE_BYTES = 25 * 1024 * 1024
 const MAX_WORKSPACE_TOKEN_LENGTH = 8192
 const MAX_USAGE_BUCKETS = 20
@@ -400,6 +401,11 @@ function isPathInside(parent, child) {
 
 function isSafeArtifactName(value) {
   return typeof value === 'string' && value.length <= MAX_ARTIFACT_NAME_LENGTH && /^[a-z0-9][a-z0-9-]*$/i.test(value)
+}
+
+function isSafeArtifactPreviewPath(value) {
+  if (typeof value !== 'string' || !value || value.length > MAX_ARTIFACT_PREVIEW_PATH_LENGTH || value.includes('\0')) return false
+  return value.split('/').every((segment) => segment && segment !== '.' && segment !== '..' && !segment.startsWith('.'))
 }
 
 function isIgnorableArtifactEntryError(error) {
@@ -2170,6 +2176,10 @@ app.get(/^\/workspace-artifacts\/([^/]+)\/([^/]+)\/(.+)$/, async (req, res) => {
     const filePath = req.params[2]
     if (!isSafeArtifactName(artifactName)) {
       res.status(400).send('Invalid artifact name')
+      return
+    }
+    if (!isSafeArtifactPreviewPath(filePath)) {
+      res.status(404).send('Not found')
       return
     }
     const workspacePath = await requireWorkspaceDirectory(workspaceFromToken(token), 'workspace token')
