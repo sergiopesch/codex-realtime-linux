@@ -274,6 +274,21 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   assert.equal(protectedAppSubdirArtifactTask.status, 400)
   assert.equal((await readJson(protectedAppSubdirArtifactTask)).code, 'protected_app_workspace')
 
+  const symlinkedAppWorkspaceRoot = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-app-symlink-workspace-'))
+  t.after(() => rm(symlinkedAppWorkspaceRoot, { recursive: true, force: true }))
+  const symlinkedAppWorkspace = path.join(symlinkedAppWorkspaceRoot, 'linked-app')
+  await symlink(repoRoot, symlinkedAppWorkspace, 'dir')
+  const protectedSymlinkedAppArtifactTask = await fetch(`${baseUrl}/api/codex/task`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      cwd: symlinkedAppWorkspace,
+      goal: 'Create an HTML presentation about this symlinked workspace.',
+    }),
+  })
+  assert.equal(protectedSymlinkedAppArtifactTask.status, 400)
+  assert.equal((await readJson(protectedSymlinkedAppArtifactTask)).code, 'protected_app_workspace')
+
   const missingArtifactWorkspace = await fetch(`${baseUrl}/api/artifacts?workspacePath=${encodeURIComponent(path.join(os.tmpdir(), 'missing-codex-realtime-artifacts'))}`)
   assert.equal(missingArtifactWorkspace.status, 404)
   assert.equal((await readJson(missingArtifactWorkspace)).code, 'workspace_not_found')

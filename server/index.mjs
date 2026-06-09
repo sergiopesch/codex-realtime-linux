@@ -485,12 +485,13 @@ async function readUpstreamJson(response, fallbackMessage = 'Upstream response w
   }
 }
 
-function artifactPlanForWorkspace(cwd, goal) {
+async function artifactPlanForWorkspace(cwd, goal) {
   const basePlan = artifactPlanForGoal(goal, new Date(), randomUUID().slice(0, 8))
   if (!basePlan) return null
 
   const workspacePath = path.resolve(cwd)
-  if (isPathInside(REPO_ROOT, workspacePath)) {
+  const [realRepoRoot, realWorkspacePath] = await Promise.all([realpath(REPO_ROOT), realpath(workspacePath)])
+  if (isPathInside(REPO_ROOT, workspacePath) || isPathInside(realRepoRoot, realWorkspacePath)) {
     throw httpError('Generated artifacts must be created in a selected workspace outside this app source tree.', {
       statusCode: 400,
       code: 'protected_app_workspace',
@@ -506,7 +507,7 @@ function artifactPlanForWorkspace(cwd, goal) {
   }
 }
 
-function goalForWorkspace(cwd, goal, artifactPlan = artifactPlanForWorkspace(cwd, goal)) {
+function goalForWorkspace(cwd, goal, artifactPlan = null) {
   const workspacePath = path.resolve(cwd)
   if (artifactPlan && workspacePath !== REPO_ROOT) {
     return [
@@ -1814,7 +1815,7 @@ app.post('/api/codex/task', async (req, res) => {
   try {
     const goal = requireText(req.body?.goal, 'goal')
     const cwd = await requireWorkspaceDirectory(req.body?.cwd, 'cwd')
-    const artifactPlan = artifactPlanForWorkspace(cwd, goal)
+    const artifactPlan = await artifactPlanForWorkspace(cwd, goal)
     if (artifactPlan) await mkdir(artifactPlan.absoluteDir, { recursive: true })
     await codex.ensure()
     const threadResult = await codex.request('thread/start', {
