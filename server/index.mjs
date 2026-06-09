@@ -41,6 +41,12 @@ const MAX_VISUAL_CONTEXT_SOURCE_LENGTH = 160
 const MAX_VISUAL_CONTEXT_PROMPT_LENGTH = 1_500
 const DEFAULT_VISUAL_CONTEXT_PROMPT =
   'Focus on UI state, visible errors, design issues, code clues, and what Codex should know before acting.'
+const MAX_CONVERSATION_ID_LENGTH = 240
+const MAX_CONVERSATION_TITLE_LENGTH = 180
+const MAX_CONVERSATION_TEXT_LENGTH = 8_000
+const MAX_CONVERSATION_TRACE_LENGTH = 500
+const MAX_CONVERSATION_TRACES = 40
+const MAX_CONVERSATION_TRANSCRIPT_LINES = 200
 const CONFIGURED_CODEX_RPC_TIMEOUT_MS = Number(process.env.CODEX_RPC_TIMEOUT_MS)
 const CODEX_RPC_TIMEOUT_MS =
   Number.isFinite(CONFIGURED_CODEX_RPC_TIMEOUT_MS) && CONFIGURED_CODEX_RPC_TIMEOUT_MS > 0
@@ -740,30 +746,53 @@ function normalizeWorkspace(input) {
   if (!pathValue) return null
   return {
     id: pathValue,
-    name: normalizeString(input?.name, path.basename(pathValue) || pathValue),
+    name: normalizeBoundedString(input?.name, path.basename(pathValue) || pathValue, MAX_CONVERSATION_TITLE_LENGTH),
     path: pathValue,
-    status: normalizeString(input?.status, 'local'),
+    status: normalizeBoundedString(input?.status, 'local', 40),
   }
 }
 
+function normalizeStringList(values, maxItems, maxLength) {
+  if (!Array.isArray(values)) return []
+  return values
+    .filter((item) => typeof item === 'string')
+    .map((item) => normalizeBoundedString(item, '', maxLength))
+    .filter(Boolean)
+    .slice(0, maxItems)
+}
+
+function normalizeTranscript(input) {
+  if (!Array.isArray(input)) return []
+  return input
+    .filter((line) => line?.speaker === 'user' || line?.speaker === 'codex')
+    .map((line) => ({
+      speaker: line.speaker,
+      text: normalizeBoundedString(line.text, '', MAX_CONVERSATION_TEXT_LENGTH),
+    }))
+    .filter((line) => line.text)
+    .slice(0, MAX_CONVERSATION_TRANSCRIPT_LINES)
+}
+
 function normalizeConversation(input, workspacePath) {
-  const title = normalizeString(input?.title, 'Untitled conversation')
-  const id = normalizeString(input?.id, `${workspacePath}::${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`)
+  const title = normalizeBoundedString(input?.title, 'Untitled conversation', MAX_CONVERSATION_TITLE_LENGTH)
+  const id = normalizeBoundedString(
+    input?.id,
+    `${workspacePath}::${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+    MAX_CONVERSATION_ID_LENGTH,
+  )
   const status = ['draft', 'ready', 'running'].includes(input?.status) ? input.status : 'draft'
 
   return {
     id,
     title,
-    age: normalizeString(input?.age, 'saved'),
+    age: normalizeBoundedString(input?.age, 'saved', 40),
     status,
-    prompt: normalizeString(input?.prompt),
-    response: normalizeString(input?.response),
-    traces: Array.isArray(input?.traces) ? input.traces.filter((item) => typeof item === 'string') : [],
-    transcript: Array.isArray(input?.transcript)
-      ? input.transcript.filter((line) => line?.speaker === 'user' || line?.speaker === 'codex')
-      : [],
-    source: normalizeString(input?.source, 'local'),
-    codexThreadId: typeof input?.codexThreadId === 'string' ? input.codexThreadId : null,
+    prompt: normalizeBoundedString(input?.prompt, '', MAX_CONVERSATION_TEXT_LENGTH),
+    response: normalizeBoundedString(input?.response, '', MAX_CONVERSATION_TEXT_LENGTH),
+    traces: normalizeStringList(input?.traces, MAX_CONVERSATION_TRACES, MAX_CONVERSATION_TRACE_LENGTH),
+    transcript: normalizeTranscript(input?.transcript),
+    source: ['local', 'codex'].includes(input?.source) ? input.source : 'local',
+    codexThreadId: normalizeBoundedString(input?.codexThreadId, '', MAX_CONVERSATION_ID_LENGTH) || null,
     createdAt: typeof input?.createdAt === 'string' ? input.createdAt : new Date().toISOString(),
     updatedAt: typeof input?.updatedAt === 'string' ? input.updatedAt : new Date().toISOString(),
   }

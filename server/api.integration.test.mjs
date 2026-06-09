@@ -199,6 +199,46 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   assert.equal(validBody.conversation.id, 'ok')
   assert.equal(validBody.state.conversationsByWorkspace[workspacePath].length, 1)
 
+  const oversizedText = 'x'.repeat(10_000)
+  const boundedSave = await fetch(`${baseUrl}/api/app-state/conversations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      workspacePath,
+      conversation: {
+        id: oversizedText,
+        title: oversizedText,
+        age: oversizedText,
+        status: 'unexpected',
+        prompt: oversizedText,
+        response: oversizedText,
+        traces: Array.from({ length: 60 }, (_, index) => `${index}-${oversizedText}`),
+        transcript: [
+          { speaker: 'user', text: oversizedText, extra: oversizedText },
+          { speaker: 'system', text: 'should be dropped' },
+          { speaker: 'codex', text: oversizedText, metadata: { unsafe: oversizedText } },
+        ],
+        source: 'demo',
+        codexThreadId: oversizedText,
+      },
+    }),
+  })
+  assert.equal(boundedSave.status, 200)
+  const boundedBody = await boundedSave.json()
+  assert.equal(boundedBody.conversation.id.length, 240)
+  assert.equal(boundedBody.conversation.title.length, 180)
+  assert.equal(boundedBody.conversation.age.length, 40)
+  assert.equal(boundedBody.conversation.status, 'draft')
+  assert.equal(boundedBody.conversation.prompt.length, 8000)
+  assert.equal(boundedBody.conversation.response.length, 8000)
+  assert.equal(boundedBody.conversation.traces.length, 40)
+  assert.equal(boundedBody.conversation.traces[0].length, 500)
+  assert.equal(boundedBody.conversation.transcript.length, 2)
+  assert.deepEqual(Object.keys(boundedBody.conversation.transcript[0]).sort(), ['speaker', 'text'])
+  assert.equal(boundedBody.conversation.transcript[0].text.length, 8000)
+  assert.equal(boundedBody.conversation.source, 'local')
+  assert.equal(boundedBody.conversation.codexThreadId.length, 240)
+
   const missingPatchId = await fetch(`${baseUrl}/api/app-state/conversations`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
