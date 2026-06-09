@@ -182,6 +182,19 @@ test('server returns json errors for oversized API request bodies', async (t) =>
   assert.equal((await readJson(oversizedJson)).code, 'payload_too_large')
 })
 
+test('realtime token route returns stable json errors when voice cannot start', async (t) => {
+  const { baseUrl } = await startTestServer(t, {
+    OPENAI_API_KEY: '',
+    CODEX_USE_OPENAI_API_KEY: 'false',
+  })
+
+  const missingKey = await fetch(`${baseUrl}/api/realtime/token`, {
+    method: 'POST',
+  })
+  assert.equal(missingKey.status, 503)
+  assert.equal((await readJson(missingKey)).code, 'openai_api_key_required')
+})
+
 test('settings OpenAI key route returns stable json validation errors', async (t) => {
   const { baseUrl } = await startTestServer(t)
 

@@ -241,6 +241,8 @@ test('realtime voice sessions reset transcript state and clean up media resource
   assert.match(appSource, /Request timed out after/)
   assert.match(appSource, /await api<Record<string, unknown>>\(/)
   assert.match(appSource, /fetchWithTimeout\(\s+'https:\/\/api\.openai\.com\/v1\/realtime\/calls'/)
+  assert.match(serverSource, /openai_api_key_required/)
+  assert.match(serverSource, /fallbackCode: 'realtime_token_failed'/)
   assert.match(appSource, /const cleanupVoiceSession = \(\) =>/)
   assert.match(appSource, /const microphoneStreamRef = useRef<MediaStream \| null>\(null\)/)
   assert.match(appSource, /microphoneStream\?\.getTracks\(\)\.forEach\(\(track\) => track\.stop\(\)\)/)

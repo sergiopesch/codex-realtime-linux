@@ -1013,14 +1013,25 @@ app.get('/api/status', async (_req, res) => {
 app.post('/api/realtime/token', async (_req, res) => {
   const openAiApiKey = getOpenAiApiKey()
   if (!openAiApiKey) {
-    res.status(503).json({ error: 'OPENAI_API_KEY is required for live Realtime voice sessions.' })
+    sendJsonError(
+      res,
+      httpError('OPENAI_API_KEY is required for live Realtime voice sessions.', {
+        statusCode: 503,
+        code: 'openai_api_key_required',
+      }),
+      { fallbackStatus: 503, fallbackCode: 'openai_api_key_required' },
+    )
     return
   }
 
   try {
     res.json(await createRealtimeClientSecret(openAiApiKey))
   } catch (error) {
-    res.status(502).json({ error: error.message })
+    sendJsonError(res, error, {
+      fallbackStatus: 502,
+      fallbackMessage: 'Realtime client secret request failed.',
+      fallbackCode: 'realtime_token_failed',
+    })
   }
 })
 
