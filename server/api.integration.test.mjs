@@ -197,6 +197,17 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   assert.equal(protectedAppArtifactTask.status, 400)
   assert.equal((await readJson(protectedAppArtifactTask)).code, 'protected_app_workspace')
 
+  const protectedAppSubdirArtifactTask = await fetch(`${baseUrl}/api/codex/task`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      cwd: path.join(repoRoot, 'src'),
+      goal: 'Create an HTML presentation about this folder.',
+    }),
+  })
+  assert.equal(protectedAppSubdirArtifactTask.status, 400)
+  assert.equal((await readJson(protectedAppSubdirArtifactTask)).code, 'protected_app_workspace')
+
   const missingArtifactWorkspace = await fetch(`${baseUrl}/api/artifacts?workspacePath=${encodeURIComponent(path.join(os.tmpdir(), 'missing-codex-realtime-artifacts'))}`)
   assert.equal(missingArtifactWorkspace.status, 404)
   assert.equal((await readJson(missingArtifactWorkspace)).code, 'workspace_not_found')
