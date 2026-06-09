@@ -19,7 +19,8 @@ const launcherPath = path.join(repoRoot, 'scripts', 'launch-desktop.sh')
 const desktopPath = path.join(applicationsDir, desktopFileName)
 const iconSizes = [16, 24, 32, 48, 64, 128, 256, 512]
 
-const quoteDesktopValue = (value) => value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+const desktopFieldValue = (value) => value.replace(/[\r\n]+/g, ' ').replace(/[\u0000-\u001f\u007f]/g, '').trim()
+const quoteDesktopValue = (value) => desktopFieldValue(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"')
 const quoteDesktopExecValue = (value) => quoteDesktopValue(value).replace(/%/g, '%%')
 
 const build = spawnSync('npm', ['run', 'build'], {
