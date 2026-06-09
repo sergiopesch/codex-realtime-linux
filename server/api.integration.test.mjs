@@ -896,6 +896,63 @@ globalThis.fetch = async (url, init) => {
   assert.deepEqual(body.data.tokenBuckets, [])
 })
 
+test('weather route supports documented GET queries with normalized results', async (t) => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-weather-fetch-mock-'))
+  t.after(() => rm(tempDir, { recursive: true, force: true }))
+  const fetchMockPath = path.join(tempDir, 'mock-weather-fetch.mjs')
+  await writeFile(
+    fetchMockPath,
+    `const realFetch = globalThis.fetch
+
+globalThis.fetch = async (url, init) => {
+  const href = String(url)
+  if (href.startsWith('https://geocoding-api.open-meteo.com/v1/search')) {
+    return Response.json({
+      results: [{
+        name: 'London',
+        admin1: 'England',
+        country: 'United Kingdom',
+        latitude: 51.5,
+        longitude: -0.12,
+        timezone: 'Europe/London',
+      }],
+    })
+  }
+  if (href.startsWith('https://api.open-meteo.com/v1/forecast')) {
+    return Response.json({
+      timezone: 'Europe/London',
+      current: {
+        time: '2026-06-09T12:00',
+        temperature_2m: 22.2,
+        apparent_temperature: 21.8,
+        relative_humidity_2m: 55,
+        weather_code: 1,
+        wind_speed_10m: 10,
+        is_day: 1,
+      },
+    })
+  }
+  return realFetch(url, init)
+}
+`,
+  )
+
+  const { baseUrl } = await startTestServer(t, {
+    NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import ${fetchMockPath}`.trim(),
+  })
+
+  const weather = await fetch(`${baseUrl}/api/weather/current?location=${encodeURIComponent('  London  ')}&units=metric`)
+  assert.equal(weather.status, 200)
+  const body = await weather.json()
+  assert.equal(body.source, 'open-meteo')
+  assert.equal(body.query, 'London')
+  assert.equal(body.location.name, 'London')
+  assert.equal(body.location.timezone, 'Europe/London')
+  assert.equal(body.units.mode, 'metric')
+  assert.equal(body.current.temperature, 22.2)
+  assert.match(body.summary, /London, England, United Kingdom: 22\.2°C/)
+})
+
 test('server only trusts configured loopback API origins', async (t) => {
   const { baseUrl } = await startTestServer(t, {
     CODEX_REALTIME_ALLOWED_ORIGINS: [

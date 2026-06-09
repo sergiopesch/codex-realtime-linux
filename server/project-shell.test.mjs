@@ -1494,6 +1494,7 @@ test('environment example matches runtime configuration validation', async () =>
 test('weather upstream responses are timeout and size bounded', async () => {
   const weatherSource = await readFile(path.join(repoRoot, 'server', 'weather.mjs'), 'utf8')
   const appSource = await readFile(path.join(repoRoot, 'src', 'App.tsx'), 'utf8')
+  const serverSource = await readFile(path.join(repoRoot, 'server', 'index.mjs'), 'utf8')
 
   assert.match(weatherSource, /const DEFAULT_TIMEOUT_MS = 8000/)
   assert.match(weatherSource, /const MAX_TIMEOUT_MS = 120_000/)
@@ -1530,6 +1531,10 @@ test('weather upstream responses are timeout and size bounded', async () => {
   assert.match(weatherSource, /condition: weatherCodeLabel\(weatherCode\)/)
   assert.doesNotMatch(weatherSource, /typeof resolvedLocation\.latitude !== 'number'/)
   assert.doesNotMatch(weatherSource, /typeof current\.temperature_2m !== 'number'/)
+  assert.match(serverSource, /async function handleCurrentWeather\(req, res\)/)
+  assert.match(serverSource, /const location = req\.method === 'GET' \? req\.query\.location : req\.body\?\.location/)
+  assert.match(serverSource, /app\.get\('\/api\/weather\/current', handleCurrentWeather\)/)
+  assert.match(serverSource, /app\.post\('\/api\/weather\/current', handleCurrentWeather\)/)
   assert.match(appSource, /const weatherRequestIdRef = useRef\(0\)/)
   assert.match(appSource, /const requestId = weatherRequestIdRef\.current \+ 1/)
   assert.match(appSource, /weatherRequestIdRef\.current = requestId/)
