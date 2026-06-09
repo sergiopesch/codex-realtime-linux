@@ -271,6 +271,7 @@ const MAX_HANDLED_REALTIME_FUNCTION_CALL_IDS = 240
 const MAX_REALTIME_TRANSCRIPT_LINES = 80
 const MAX_REALTIME_TRANSCRIPT_ID_LENGTH = 240
 const MAX_REALTIME_TRANSCRIPT_TEXT_LENGTH = 8_000
+const REALTIME_TRANSCRIPT_SAVE_DEBOUNCE_MS = 900
 const MAX_REALTIME_RESPONSE_OUTPUT_ITEMS = 20
 const MAX_REALTIME_RESPONSE_CONTENT_PARTS = 20
 const MAX_UI_WORKSPACES = 40
@@ -651,6 +652,9 @@ const boundedRealtimeTranscriptId = (value: unknown) =>
 
 const boundedRealtimeTranscriptText = (value: unknown) =>
   boundedPlainString(value, '', MAX_REALTIME_TRANSCRIPT_TEXT_LENGTH)
+
+const savedRealtimeTranscriptLines = (lines: TranscriptLine[]) =>
+  safeConversationTranscript(lines.map((line) => ({ speaker: line.speaker, text: line.text })))
 
 const resolvedRealtimeTranscriptText = (currentText: string, replacementText: string) => {
   const current = boundedRealtimeTranscriptText(currentText)
@@ -1108,6 +1112,7 @@ function App() {
   const conversationsByWorkspaceRef = useRef<Record<string, AgentConversation[]>>({})
   const handledRealtimeFunctionCallIdsRef = useRef<Set<string>>(new Set())
   const selectedWorkspaceRef = useRef(initialWorkspacePath)
+  const savedTranscriptSignatureRef = useRef('')
   const artifactRefreshRequestIdsRef = useRef<Record<string, number>>({})
   const routableWorkspacePathsRef = useRef<Set<string>>(new Set())
   const seenUsbEventIdsRef = useRef<Set<string>>(new Set())
@@ -1141,7 +1146,15 @@ function App() {
     return { workspace, workspacePath, conversations }
   })
   const selectedWorkspaceRoot = workspaceRoots.find(({ workspacePath }) => workspacePath === selectedWorkspace)
-  const transcriptLines = realtimeTranscript
+  const selectedConversation = selectedWorkspaceRoot?.conversations.find((conversation) => conversation.id === selectedConversationId) ?? null
+  const savedTranscriptLines = (selectedConversation?.transcript ?? []).map((line, index) => ({
+    id: `saved-${selectedWorkspace}-${selectedConversation?.id ?? 'conversation'}-${index}`,
+    speaker: line.speaker,
+    text: line.text,
+    status: 'done' as const,
+    createdAt: index,
+  }))
+  const transcriptLines = realtimeTranscript.length > 0 ? realtimeTranscript : savedTranscriptLines
   const voiceReady = status?.realtime ?? false
   const selectedWorkspaceLabel = selectedWorkspaceRoot?.workspace.name ?? basenameFromWorkspacePath(selectedWorkspace)
   const selectedWorkspaceName = selectedWorkspaceLabel || 'No workspace'
@@ -2046,6 +2059,47 @@ function App() {
   useEffect(() => {
     routableWorkspacePathsRef.current = new Set(routableWorkspacePaths)
   }, [routableWorkspacePaths])
+
+  useEffect(() => {
+    if (!selectedWorkspace || !selectedConversationId || realtimeTranscript.length === 0) return
+    const transcript = savedRealtimeTranscriptLines(realtimeTranscript)
+    if (transcript.length === 0) return
+
+    const signature = JSON.stringify({ workspacePath: selectedWorkspace, conversationId: selectedConversationId, transcript })
+    if (savedTranscriptSignatureRef.current === signature) return
+
+    const timeout = window.setTimeout(() => {
+      savedTranscriptSignatureRef.current = signature
+      setConversationsByWorkspace((current) => {
+        const conversations = current[selectedWorkspace] ?? []
+        const index = conversations.findIndex((conversation) => conversation.id === selectedConversationId)
+        if (index === -1) return current
+        const next = [...conversations]
+        next[index] = { ...next[index], transcript, updatedAt: new Date().toISOString() }
+        return { ...current, [selectedWorkspace]: next }
+      })
+
+      void api<{ conversation: AgentConversation }>('/api/app-state/conversations', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspacePath: selectedWorkspace, conversationId: selectedConversationId, patch: { transcript } }),
+      })
+        .then((savedConversation) => {
+          const conversation = requireSafeConversation(savedConversation.conversation, selectedWorkspace)
+          setConversationsByWorkspace((current) => ({
+            ...current,
+            [selectedWorkspace]: mergeConversations(current[selectedWorkspace] ?? [], [conversation]),
+          }))
+        })
+        .catch((error: unknown) => {
+          appendEvent('app-state/realtime-transcript-save-failed', {
+            message: displayErrorMessage(error, 'Failed to save voice transcript'),
+          })
+        })
+    }, REALTIME_TRANSCRIPT_SAVE_DEBOUNCE_MS)
+
+    return () => window.clearTimeout(timeout)
+  }, [realtimeTranscript, selectedConversationId, selectedWorkspace])
 
   useEffect(() => {
     activeThreadIdRef.current = activeThreadId
