@@ -262,6 +262,8 @@ const MAX_HANDLED_REALTIME_FUNCTION_CALL_IDS = 240
 const MAX_REALTIME_TRANSCRIPT_LINES = 80
 const MAX_REALTIME_TRANSCRIPT_ID_LENGTH = 240
 const MAX_REALTIME_TRANSCRIPT_TEXT_LENGTH = 8_000
+const MAX_REALTIME_RESPONSE_OUTPUT_ITEMS = 20
+const MAX_REALTIME_RESPONSE_CONTENT_PARTS = 20
 const MAX_UI_CONVERSATIONS_PER_WORKSPACE = 80
 const MAX_UI_CONVERSATION_TITLE_LENGTH = 180
 const MAX_UI_ERROR_MESSAGE_LENGTH = 500
@@ -624,6 +626,58 @@ const realtimeErrorMessage = (value: unknown, fallback: string) => {
   if (!value || typeof value !== 'object') return fallback
   const message = (value as UnknownRecord).message
   return boundedRealtimeTranscriptText(typeof message === 'string' && message.trim() ? `${fallback}: ${message.trim()}` : fallback)
+}
+
+const realtimeContentPartText = (part: unknown) => {
+  if (!part || typeof part !== 'object' || Array.isArray(part)) return ''
+  const content = part as UnknownRecord
+  return boundedRealtimeTranscriptText(
+    typeof content.transcript === 'string'
+      ? content.transcript
+      : typeof content.text === 'string'
+        ? content.text
+        : '',
+  )
+}
+
+const realtimeOutputItemTranscriptParts = (
+  item: unknown,
+  fallbackItemId: string,
+  fallbackOutputIndex: string,
+) => {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) return []
+  const outputItem = item as UnknownRecord
+  const itemId = realtimeTranscriptKeyPart(outputItem.id) || fallbackItemId
+  const content = Array.isArray(outputItem.content) ? outputItem.content.slice(0, MAX_REALTIME_RESPONSE_CONTENT_PARTS) : []
+  if (content.length === 0) {
+    const text = realtimeContentPartText(outputItem)
+    return text ? [{ transcriptId: [itemId, fallbackOutputIndex, 'content-0'].filter(Boolean).join(':'), text }] : []
+  }
+
+  return content.flatMap((part, index) => {
+    const text = realtimeContentPartText(part)
+    return text
+      ? [{
+          transcriptId: [itemId, fallbackOutputIndex, `content-${index}`].filter(Boolean).join(':'),
+          text,
+        }]
+      : []
+  })
+}
+
+const realtimeResponseDoneTranscriptParts = (message: UnknownRecord) => {
+  const response = message.response && typeof message.response === 'object' && !Array.isArray(message.response)
+    ? message.response as UnknownRecord
+    : null
+  const responseId =
+    realtimeTranscriptKeyPart(response?.id) ||
+    realtimeTranscriptKeyPart(message.response_id) ||
+    realtimeTranscriptKeyPart(message.event_id)
+  const output = Array.isArray(response?.output) ? response.output.slice(0, MAX_REALTIME_RESPONSE_OUTPUT_ITEMS) : []
+
+  return output.flatMap((item, index) =>
+    realtimeOutputItemTranscriptParts(item, responseId, `output-${index}`),
+  )
 }
 
 const realtimeFunctionOutput = (value: unknown) => {
@@ -1034,6 +1088,18 @@ function App() {
 
     if (type === 'response.output_text.done') {
       updateTranscriptLine(`codex-${transcriptId}`, 'codex', typeof message.text === 'string' ? message.text : '', 'replace', 'done')
+      return
+    }
+
+    if (type === 'response.output_item.done') {
+      const parts = realtimeOutputItemTranscriptParts(item, itemId, outputIndex)
+      parts.forEach((part) => updateTranscriptLine(`codex-${part.transcriptId}`, 'codex', part.text, 'replace', 'done'))
+      return
+    }
+
+    if (type === 'response.done') {
+      const parts = realtimeResponseDoneTranscriptParts(message)
+      parts.forEach((part) => updateTranscriptLine(`codex-${part.transcriptId}`, 'codex', part.text, 'replace', 'done'))
     }
   }
 
