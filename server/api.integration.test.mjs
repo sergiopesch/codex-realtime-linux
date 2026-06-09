@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
@@ -133,6 +133,12 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
 
   const traversal = await fetch(`${baseUrl}/workspace-artifacts/${token}/sample-report/..%2F..%2F..%2Fpackage.json`)
   assert.equal(traversal.status, 403)
+
+  const outsidePreviewFile = path.join(workspacePath, 'outside-preview-secret.txt')
+  await writeFile(outsidePreviewFile, 'outside artifact root')
+  await symlink(outsidePreviewFile, path.join(artifactDir, 'outside-secret.txt'))
+  const symlinkEscape = await fetch(`${baseUrl}/workspace-artifacts/${token}/sample-report/outside-secret.txt`)
+  assert.equal(symlinkEscape.status, 403)
 
   const invalidToken = await fetch(`${baseUrl}/workspace-artifacts/not-a-workspace-token/sample-report/index.html`)
   assert.equal(invalidToken.status, 400)

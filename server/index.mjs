@@ -1,7 +1,7 @@
 import 'dotenv/config'
 import express from 'express'
 import { spawn } from 'node:child_process'
-import { chmod, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, readFile, readdir, realpath, rename, rm, stat, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { createInterface } from 'node:readline'
@@ -1641,8 +1641,24 @@ app.get(/^\/workspace-artifacts\/([^/]+)\/([^/]+)\/(.+)$/, async (req, res) => {
       return
     }
 
+    let realArtifactRoot
+    let realRequestedPath
+    try {
+      const resolvedPaths = await Promise.all([realpath(artifactRoot), realpath(requestedPath)])
+      realArtifactRoot = resolvedPaths[0]
+      realRequestedPath = resolvedPaths[1]
+    } catch {
+      res.status(404).send('Not found')
+      return
+    }
+
+    if (!isPathInside(realArtifactRoot, realRequestedPath)) {
+      res.status(403).send('Forbidden')
+      return
+    }
+
     setArtifactPreviewHeaders(res)
-    res.sendFile(requestedPath, (error) => {
+    res.sendFile(realRequestedPath, (error) => {
       if (!error || res.headersSent) return
       res.status(error.statusCode || 404).send('Not found')
     })
