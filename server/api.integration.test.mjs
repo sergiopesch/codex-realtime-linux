@@ -95,6 +95,11 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   const unsafeArtifactDir = path.join(workspacePath, 'public', 'agent-files', 'unsafe report')
   await mkdir(unsafeArtifactDir, { recursive: true })
   await writeFile(path.join(unsafeArtifactDir, 'index.html'), '<!doctype html><title>Unsafe report</title>')
+  const escapedIndexDir = path.join(workspacePath, 'public', 'agent-files', 'escaped-index')
+  await mkdir(escapedIndexDir, { recursive: true })
+  const outsideIndexFile = path.join(workspacePath, 'outside-index.html')
+  await writeFile(outsideIndexFile, '<!doctype html><title>Outside index</title>')
+  await symlink(outsideIndexFile, path.join(escapedIndexDir, 'index.html'))
 
   const artifactList = await fetch(`${baseUrl}/api/artifacts?workspacePath=${encodeURIComponent(workspacePath)}`)
   assert.equal(artifactList.status, 200)
@@ -102,6 +107,7 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   assert.equal(artifactBody.data.length, 1)
   assert.equal(artifactBody.data[0].relativePath, 'public/agent-files/sample-report/index.html')
   assert.equal(artifactBody.data.some((artifact) => artifact.relativePath.includes('unsafe report')), false)
+  assert.equal(artifactBody.data.some((artifact) => artifact.id === 'escaped-index'), false)
 
   for (let index = 0; index < 45; index += 1) {
     const extraArtifactDir = path.join(workspacePath, 'public', 'agent-files', `extra-report-${String(index).padStart(2, '0')}`)
