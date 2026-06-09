@@ -158,7 +158,7 @@ CODEX_REALTIME_STATE_PATH=/tmp/codex-realtime-linux/app-state.json
 
 Relative state paths are ignored and fall back to the default XDG state location.
 
-Settings-saved secrets are also stored outside the repo by default with user-only file permissions and an oversized-file guard. To override that path:
+Settings-saved secrets are also stored outside the repo by default with user-only file permissions, an oversized-file guard, and bounded key normalization on load. To override that path:
 
 ```bash
 CODEX_REALTIME_SECRETS_PATH=/tmp/codex-realtime-linux/secrets.json
@@ -192,7 +192,7 @@ OPENAI_USAGE_GBP_RATE_API=https://api.frankfurter.app/latest?from=USD&to=GBP
 - `/api/codex/events` returns bounded, normalized Codex app-server notifications for lightweight UI activity tracking.
 - Mutating `/api/*` routes reject untrusted browser origins, and routes with JSON payloads reject form-style, malformed, or oversized requests before they can touch state, Codex, or Arduino hardware.
 - The server persists this client's local workspace/thread state to `CODEX_REALTIME_STATE_PATH`, defaulting to `~/.local/state/codex-realtime-linux/app-state.json`; overrides must be absolute paths.
-- The server persists Settings-saved API secrets to `CODEX_REALTIME_SECRETS_PATH`, defaulting to `~/.config/codex-realtime-linux/secrets.json`; overrides must be absolute paths.
+- The server persists Settings-saved API secrets to `CODEX_REALTIME_SECRETS_PATH`, defaulting to `~/.config/codex-realtime-linux/secrets.json`; overrides must be absolute paths, and malformed or oversized saved keys are ignored on load.
 - Removing a workspace in the app hides that workspace from this client's sidebar state only; it does not delete the local folder.
 - `src/App.tsx` is the Electron renderer UI.
 - `src/App.css` defines the compact dark desktop layout.

@@ -507,6 +507,30 @@ test('server ignores oversized persisted app state and secrets files', async (t)
   assert.equal(status.openAiKeySource, 'missing')
 })
 
+test('server ignores malformed persisted settings secrets', async (t) => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-malformed-secrets-'))
+  t.after(() => rm(tempDir, { recursive: true, force: true }))
+  const statePath = path.join(tempDir, 'state.json')
+  const secretsPath = path.join(tempDir, 'secrets.json')
+  await writeFile(
+    secretsPath,
+    JSON.stringify({
+      openaiApiKey: `sk-${'x'.repeat(1_100)}`,
+      unexpectedSecret: 'should not be loaded',
+    }),
+  )
+
+  const { baseUrl } = await startTestServer(t, {
+    CODEX_REALTIME_STATE_PATH: statePath,
+    CODEX_REALTIME_SECRETS_PATH: secretsPath,
+    OPENAI_API_KEY: '',
+  })
+  const status = await (await fetch(`${baseUrl}/api/status`)).json()
+
+  assert.equal(status.realtime, false)
+  assert.equal(status.openAiKeySource, 'missing')
+})
+
 test('realtime token route returns stable json errors when voice cannot start', async (t) => {
   const { baseUrl } = await startTestServer(t, {
     OPENAI_API_KEY: '',
@@ -569,6 +593,14 @@ test('settings OpenAI key route returns stable json validation errors', async (t
   })
   assert.equal(invalidKey.status, 400)
   assert.equal((await readJson(invalidKey)).code, 'invalid_openai_api_key')
+
+  const oversizedKey = await fetch(`${baseUrl}/api/settings/openai-key`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ apiKey: `sk-${'x'.repeat(1_100)}` }),
+  })
+  assert.equal(oversizedKey.status, 400)
+  assert.equal((await readJson(oversizedKey)).code, 'invalid_openai_api_key')
 })
 
 test('server returns json errors for unmatched API routes and unhandled route failures', async (t) => {

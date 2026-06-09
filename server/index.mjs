@@ -92,6 +92,7 @@ const MAX_EVENT_STRING_LENGTH = 2_000
 const MAX_EVENT_ARRAY_ITEMS = 20
 const MAX_EVENT_OBJECT_KEYS = 30
 const MAX_EVENT_DEPTH = 4
+const MAX_OPENAI_API_KEY_LENGTH = 1_000
 const MAX_CODEX_RPC_LINE_LENGTH = 120_000
 const MAX_ERROR_MESSAGE_LENGTH = 500
 const DEFAULT_CODEX_RPC_TIMEOUT_MS = 120_000
@@ -226,10 +227,21 @@ async function loadLocalSecrets() {
   try {
     const details = await stat(SECRETS_PATH)
     if (details.size > MAX_SECRETS_FILE_BYTES) throw new Error('Saved secrets file is too large.')
-    localSecrets = JSON.parse(await readFile(SECRETS_PATH, 'utf8'))
+    localSecrets = normalizeLocalSecrets(JSON.parse(await readFile(SECRETS_PATH, 'utf8')))
   } catch {
     localSecrets = {}
   }
+}
+
+function isPlausibleOpenAiApiKey(value) {
+  const apiKey = typeof value === 'string' ? value.trim() : ''
+  return apiKey.startsWith('sk-') && apiKey.length <= MAX_OPENAI_API_KEY_LENGTH
+}
+
+function normalizeLocalSecrets(value) {
+  const nextSecrets = {}
+  if (isPlausibleOpenAiApiKey(value?.openaiApiKey)) nextSecrets.openaiApiKey = value.openaiApiKey.trim()
+  return nextSecrets
 }
 
 async function writeJsonFileAtomic(filePath, value, { dirMode, fileMode } = {}) {
@@ -1543,7 +1555,7 @@ app.post('/api/settings/openai-key', async (req, res) => {
     if (!apiKey) {
       throw httpError('apiKey is required', { statusCode: 400, code: 'api_key_required' })
     }
-    if (!apiKey.startsWith('sk-')) {
+    if (!isPlausibleOpenAiApiKey(apiKey)) {
       throw httpError('This does not look like an OpenAI API key.', { statusCode: 400, code: 'invalid_openai_api_key' })
     }
 
