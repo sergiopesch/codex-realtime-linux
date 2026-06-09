@@ -496,6 +496,7 @@ test('realtime voice sessions reset transcript state and clean up media resource
   const serverSource = await readFile(path.join(repoRoot, 'server', 'index.mjs'), 'utf8')
 
   assert.match(appSource, /const DEFAULT_API_TIMEOUT_MS = 130_000/)
+  assert.match(appSource, /const MAX_API_ERROR_RESPONSE_TEXT_LENGTH = 4_000/)
   assert.match(appSource, /const REALTIME_CONNECTION_TIMEOUT_MS = 30_000/)
   assert.match(appSource, /const MAX_REALTIME_EVENT_MESSAGE_LENGTH = 120_000/)
   assert.match(appSource, /const MAX_REALTIME_FUNCTION_ARGUMENTS_LENGTH = 80_000/)
@@ -511,6 +512,9 @@ test('realtime voice sessions reset transcript state and clean up media resource
   assert.match(appSource, /const MAX_UI_EVENT_DEPTH = 6/)
   assert.match(appSource, /const fetchWithTimeout = async/)
   assert.match(appSource, /Request timed out after/)
+  assert.match(appSource, /const boundedApiErrorText = \(value: unknown, fallback = ''\) =>/)
+  assert.match(appSource, /rawText\.length <= MAX_API_ERROR_RESPONSE_TEXT_LENGTH \? JSON\.parse\(rawText\) : null/)
+  assert.doesNotMatch(appSource, /const text = await response\.text\(\)/)
   assert.match(appSource, /await api<Record<string, unknown>>\(/)
   assert.match(appSource, /fetchWithTimeout\(\s+'https:\/\/api\.openai\.com\/v1\/realtime\/calls'/)
   assert.match(serverSource, /openai_api_key_required/)

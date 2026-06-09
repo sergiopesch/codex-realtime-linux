@@ -237,6 +237,7 @@ type DesktopWindow = Window & {
 
 const initialWorkspacePath = ''
 const DEFAULT_API_TIMEOUT_MS = 130_000
+const MAX_API_ERROR_RESPONSE_TEXT_LENGTH = 4_000
 const REALTIME_CONNECTION_TIMEOUT_MS = 30_000
 const MAX_REALTIME_EVENT_MESSAGE_LENGTH = 120_000
 const MAX_REALTIME_FUNCTION_ARGUMENTS_LENGTH = 80_000
@@ -250,6 +251,13 @@ const MAX_UI_EVENT_STRING_LENGTH = 2_000
 const MAX_UI_EVENT_ARRAY_ITEMS = 20
 const MAX_UI_EVENT_OBJECT_KEYS = 30
 const MAX_UI_EVENT_DEPTH = 6
+
+const boundedApiErrorText = (value: unknown, fallback = '') => {
+  const text = typeof value === 'string' && value ? value : fallback
+  return text.length > MAX_API_ERROR_RESPONSE_TEXT_LENGTH
+    ? `${text.slice(0, MAX_API_ERROR_RESPONSE_TEXT_LENGTH - 3)}...`
+    : text
+}
 
 const fetchWithTimeout = async (input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = DEFAULT_API_TIMEOUT_MS) => {
   const controller = new AbortController()
@@ -270,15 +278,16 @@ const fetchWithTimeout = async (input: RequestInfo | URL, init: RequestInit = {}
 const api = async <T,>(path: string, init?: RequestInit, options?: { timeoutMs?: number }): Promise<T> => {
   const response = await fetchWithTimeout(path, init, options?.timeoutMs)
   if (!response.ok) {
-    const text = await response.text()
+    const rawText = await response.text()
+    const text = boundedApiErrorText(rawText)
     let message: string
     try {
-      const body = JSON.parse(text)
-      message = typeof body?.error === 'string' ? body.error : text
+      const body = rawText.length <= MAX_API_ERROR_RESPONSE_TEXT_LENGTH ? JSON.parse(rawText) : null
+      message = boundedApiErrorText(body?.error, text)
     } catch {
       message = text
     }
-    throw new Error(message || `${response.status} ${response.statusText}`)
+    throw new Error(message || boundedApiErrorText(`${response.status} ${response.statusText}`))
   }
   return response.json()
 }
