@@ -298,6 +298,31 @@ const fetchWithTimeout = async (input: RequestInfo | URL, init: RequestInit = {}
   }
 }
 
+const getUserMediaWithTimeout = async (constraints: MediaStreamConstraints, timeoutMs = REALTIME_CONNECTION_TIMEOUT_MS) => {
+  let timedOut = false
+  let timeoutId: number | null = null
+  const mediaPromise = navigator.mediaDevices.getUserMedia(constraints)
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => {
+      timedOut = true
+      reject(new Error(`Microphone permission timed out after ${Math.round(timeoutMs / 1000)} seconds.`))
+    }, timeoutMs)
+  })
+
+  try {
+    return await Promise.race([mediaPromise, timeoutPromise])
+  } catch (error) {
+    if (timedOut) {
+      mediaPromise
+        .then((stream) => stream.getTracks().forEach((track) => track.stop()))
+        .catch(() => {})
+    }
+    throw error
+  } finally {
+    if (timeoutId != null) window.clearTimeout(timeoutId)
+  }
+}
+
 const validateVisualContextImageFile = (file: File) => {
   if (file.size > MAX_VISUAL_CONTEXT_IMAGE_FILE_BYTES) {
     throw new Error('Image is too large for visual context.')
@@ -1742,7 +1767,7 @@ function App() {
         if (audioRef.current) audioRef.current.srcObject = event.streams[0]
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const stream = await getUserMediaWithTimeout({ audio: true })
       microphoneStreamRef.current = stream
       const audioTrack = stream.getAudioTracks()[0]
       if (!audioTrack) {
