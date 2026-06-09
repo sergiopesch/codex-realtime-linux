@@ -238,6 +238,7 @@ type DesktopWindow = Window & {
 const initialWorkspacePath = ''
 const DEFAULT_API_TIMEOUT_MS = 130_000
 const REALTIME_CONNECTION_TIMEOUT_MS = 30_000
+const MAX_REALTIME_FUNCTION_ARGUMENTS_LENGTH = 80_000
 const MAX_REALTIME_TRANSCRIPT_LINES = 80
 const MAX_REALTIME_TRANSCRIPT_ID_LENGTH = 240
 const MAX_REALTIME_TRANSCRIPT_TEXT_LENGTH = 8_000
@@ -1470,7 +1471,11 @@ function App() {
 
     let payload: Record<string, unknown>
     try {
-      payload = item.arguments ? JSON.parse(item.arguments) : {}
+      if (item.arguments && item.arguments.length > MAX_REALTIME_FUNCTION_ARGUMENTS_LENGTH) {
+        payload = { error: 'Function call arguments were too large.' }
+      } else {
+        payload = item.arguments ? JSON.parse(item.arguments) : {}
+      }
     } catch {
       payload = { error: 'Function call arguments were not valid JSON.' }
     }

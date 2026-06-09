@@ -397,14 +397,17 @@ function realtimeSessionConfig() {
           properties: {
             goal: {
               type: 'string',
+              maxLength: MAX_CONVERSATION_TEXT_LENGTH,
               description: 'The concrete engineering objective Codex should execute. Include relevant constraints from the conversation.',
             },
             cwd: {
               type: 'string',
+              maxLength: MAX_CONVERSATION_TEXT_LENGTH,
               description: 'Absolute local workspace path. Omit this to use the currently selected workspace.',
             },
             title: {
               type: 'string',
+              maxLength: MAX_CONVERSATION_TITLE_LENGTH,
               description: 'A short human-readable title for the routed work.',
             },
           },
@@ -420,6 +423,7 @@ function realtimeSessionConfig() {
           properties: {
             instruction: {
               type: 'string',
+              maxLength: MAX_CONVERSATION_TEXT_LENGTH,
               description: 'The steering instruction Codex should apply to the active task.',
             },
           },
@@ -441,6 +445,7 @@ function realtimeSessionConfig() {
           properties: {
             location: {
               type: 'string',
+              maxLength: 160,
               description: 'City or place name, such as "Berlin" or "Austin, Texas".',
             },
             units: {
@@ -466,14 +471,17 @@ function realtimeSessionConfig() {
             },
             port: {
               type: 'string',
+              maxLength: 240,
               description: 'Serial port such as /dev/ttyACM0 or /dev/ttyUSB0. Omit to use the first detected Arduino serial port.',
             },
             fqbn: {
               type: 'string',
+              maxLength: 240,
               description: 'Arduino fully-qualified board name, such as arduino:avr:uno. Omit for the default Uno-compatible board.',
             },
             sketch: {
               type: 'string',
+              maxLength: 65536,
               description: 'Complete Arduino .ino code. Required only for custom_sketch. Must include setup() and loop().',
             },
           },
