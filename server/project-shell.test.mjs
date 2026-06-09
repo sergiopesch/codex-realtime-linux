@@ -252,6 +252,7 @@ test('artifact previews are served through workspace-scoped routes only', async 
   assert.match(appSource, /artifact\.url === pendingArtifactForTurn\.url/)
   assert.match(appSource, /openArtifactPreview\(completedArtifact\)/)
   assert.match(appSource, /openArtifactPreview\(completed\)/)
+  assert.match(appSource, /openArtifactPreview\(completed\)[\s\S]*setActivity\('Artifact ready', completed\.title\)[\s\S]*if \(activeTurnIdRef\.current\) return[\s\S]*setPendingArtifact\(null\)/)
   assert.match(appSource, /Codex finished without creating/)
   assert.match(appSource, /setPendingArtifact\(null\)/)
   assert.match(appSource, /setActiveCodexTurn\(completedThreadId, null\)/)

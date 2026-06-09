@@ -1974,12 +1974,14 @@ function App() {
         if (!completed) return
 
         openArtifactPreview(completed)
-        const completedThreadId = activeThreadIdRef.current
         setDismissedArtifact(null)
+        setActivity('Artifact ready', completed.title)
+        if (activeTurnIdRef.current) return
+
+        const completedThreadId = activeThreadIdRef.current
         setPendingArtifact(null)
         setActiveCodexTurn(completedThreadId, null)
         markCodexConversationReady(completedThreadId)
-        setActivity('Artifact ready', completed.title)
         showNotice(`Preview ready: ${completed.relativePath}`)
       } catch {
         if (!effectActive || controller.signal.aborted) return
