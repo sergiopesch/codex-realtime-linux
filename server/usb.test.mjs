@@ -66,6 +66,7 @@ test('UsbDeviceMonitor records complete add events from streamed udev chunks', (
   assert.equal(monitor.events.length, 1)
   assert.equal(monitor.events[0].device.isArduinoLike, true)
   assert.equal(monitor.events[0].summary, 'Arduino Uno on /dev/ttyACM0')
+  assert.match(monitor.events[0].id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
 })
 
 test('UsbDeviceMonitor bounds device event payloads before exposing them', () => {

@@ -533,10 +533,13 @@ test('USB serial-by-id scans are bounded', async () => {
 
   assert.match(usbSource, /const MAX_SERIAL_BY_ID_SCAN_ENTRIES = 400/)
   assert.match(usbSource, /const MAX_SERIAL_BY_ID_DEVICES = 80/)
+  assert.match(usbSource, /import \{ randomUUID \} from 'node:crypto'/)
+  assert.match(usbSource, /id: randomUUID\(\)/)
   assert.match(usbSource, /directory = await opendir\(serialByIdDir\)/)
   assert.match(usbSource, /scannedEntries > MAX_SERIAL_BY_ID_SCAN_ENTRIES \|\| devices\.length >= MAX_SERIAL_BY_ID_DEVICES/)
   assert.match(usbSource, /await directory\.close\(\)\.catch\(\(\) => \{\}\)/)
   assert.doesNotMatch(usbSource, /entries = await readdir\(serialByIdDir\)/)
+  assert.doesNotMatch(usbSource, /Math\.random\(\)/)
 })
 
 test('realtime voice sessions reset transcript state and clean up media resources', async () => {

@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import { opendir, readlink, stat } from 'node:fs/promises'
 import path from 'node:path'
 
@@ -185,7 +186,7 @@ export class UsbDeviceMonitor {
     if (!device.devname && !device.vendor && !device.model && !device.vendorId) return null
 
     const event = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      id: randomUUID(),
       receivedAt: new Date().toISOString(),
       summary: eventSummary(device),
       device,
