@@ -511,6 +511,27 @@ test('uploadArduinoSketch uses detected board FQBN when no FQBN is supplied', as
   assert.deepEqual(commands[1].slice(0, 5), ['upload', '-p', '/dev/ttyACM0', '--fqbn', 'arduino:avr:nano'])
 })
 
+test('uploadArduinoSketch requires an explicit port when multiple boards are detected', async () => {
+  await assert.rejects(
+    () => uploadArduinoSketch(
+      { action: 'onboard_led_blink' },
+      {
+        listPorts: async () => ['/dev/ttyACM0', '/dev/ttyUSB0'],
+        listBoards: async () => [
+          { address: '/dev/ttyACM0', fqbn: 'arduino:avr:uno', boardName: 'Arduino Uno' },
+          { address: '/dev/ttyUSB0', fqbn: 'arduino:avr:nano', boardName: 'Arduino Nano' },
+        ],
+      },
+    ),
+    (error) =>
+      error instanceof ArduinoUploadError &&
+      error.status === 409 &&
+      error.code === 'arduino_ambiguous_port' &&
+      error.details.detectedBoards.length === 2 &&
+      /explicit serial port/.test(error.message),
+  )
+})
+
 test('uploadArduinoSketch does not borrow another board FQBN for an explicit port', async () => {
   const commands = []
   const run = async (args) => {

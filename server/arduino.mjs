@@ -421,6 +421,18 @@ export async function uploadArduinoSketch(
   const [rawPorts, rawBoards] = await Promise.all([listPorts(), listBoards({ run })])
   const ports = (Array.isArray(rawPorts) ? rawPorts : []).filter((port) => typeof port === 'string' && isSupportedSerialPort(port))
   const boards = (Array.isArray(rawBoards) ? rawBoards : []).map(normalizeDetectedBoard).filter(Boolean)
+  const uploadableBoards = boards.filter((board) => board.address && isSupportedSerialPort(board.address))
+  if (!request.port && uploadableBoards.length > 1) {
+    throw new ArduinoUploadError('Multiple Arduino boards were detected. Choose an explicit serial port before uploading.', {
+      code: 'arduino_ambiguous_port',
+      status: 409,
+      details: {
+        serialPorts: ports,
+        detectedBoards: uploadableBoards,
+        hint: 'Pass a specific /dev/ttyACM*, /dev/ttyUSB*, or /dev/serial/by-id/* port to avoid uploading to the wrong board.',
+      },
+    })
+  }
   const boardAddressForRequest = boardAddressForRequestedPort(request.port, ports)
   const matchingBoard = boardAddressForRequest ? boards.find((board) => board.address === boardAddressForRequest) : null
   const autoDetectedBoard = request.port ? null : boards[0]

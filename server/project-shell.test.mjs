@@ -754,6 +754,10 @@ test('Arduino explicit-port uploads do not borrow unrelated detected board metad
   assert.match(arduinoSource, /fqbn: candidateFqbn && isValidFqbn\(candidateFqbn\) \? candidateFqbn : null/)
   assert.match(arduinoSource, /const ports = \(Array\.isArray\(rawPorts\) \? rawPorts : \[\]\)\.filter\(\(port\) => typeof port === 'string' && isSupportedSerialPort\(port\)\)/)
   assert.match(arduinoSource, /const boards = \(Array\.isArray\(rawBoards\) \? rawBoards : \[\]\)\.map\(normalizeDetectedBoard\)\.filter\(Boolean\)/)
+  assert.match(arduinoSource, /const uploadableBoards = boards\.filter\(\(board\) => board\.address && isSupportedSerialPort\(board\.address\)\)/)
+  assert.match(arduinoSource, /!request\.port && uploadableBoards\.length > 1/)
+  assert.match(arduinoSource, /code: 'arduino_ambiguous_port'/)
+  assert.match(arduinoSource, /Pass a specific \/dev\/ttyACM\*, \/dev\/ttyUSB\*, or \/dev\/serial\/by-id\/\* port/)
   assert.match(arduinoSource, /const boardAddressForRequest = boardAddressForRequestedPort\(request\.port, ports\)/)
   assert.match(arduinoSource, /const matchingBoard = boardAddressForRequest \? boards\.find\(\(board\) => board\.address === boardAddressForRequest\) : null/)
   assert.match(arduinoSource, /const autoDetectedBoard = request\.port \? null : boards\[0\]/)
@@ -976,6 +980,8 @@ test('README documents live release verification for non-automated capabilities'
   assert.match(readme, /\/api\/usb\/events\?scan=true/)
   assert.match(readme, /\/api\/arduino\/status/)
   assert.match(readme, /explicit port if auto-detection is ambiguous/)
+  assert.match(readme, /If multiple boards are detected, upload fails until a supported/)
+  assert.match(readme, /does not guess and flash the wrong board/)
 })
 
 test('weather upstream responses are timeout and size bounded', async () => {
