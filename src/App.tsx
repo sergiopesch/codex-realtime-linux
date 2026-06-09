@@ -510,6 +510,14 @@ const formatGbp = (value: number | null | undefined) =>
 const formatTokens = (value: number | null | undefined) =>
   new Intl.NumberFormat('en-GB', { notation: 'compact', maximumFractionDigits: 1 }).format(finiteUiNumber(value))
 
+const randomLocalConversationToken = () =>
+  globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`
+
+const localConversationId = (title: string) => {
+  const titleSlug = slug(title).slice(0, 60)
+  return ['local', randomLocalConversationToken(), titleSlug].filter(Boolean).join('::')
+}
+
 const makeDraftConversation = (
   workspacePath: string,
   title: string,
@@ -526,7 +534,7 @@ const makeDraftConversation = (
 
   return {
     ...conversation,
-    id: `${workspacePath}::${slug(title)}`,
+    id: localConversationId(title),
     age,
     status,
     source: 'local',
