@@ -290,14 +290,14 @@ curl -X POST http://127.0.0.1:3311/api/arduino/upload \
   -d '{"action":"onboard_led_on","fqbn":"arduino:avr:uno"}'
 ```
 
-## Public Codex App Signals Mirrored
+## Public Codex App Signals
 
-Based on public Codex app docs and product pages:
+The public Codex app docs and product pages are useful design references, but they are not a claim that every listed capability is implemented in this Linux prototype today. The implemented scope is the voice-first desktop client described in **Current Shape**, with generated HTML artifacts shown in the temporary in-app preview described above.
 
 - Codex app is positioned as a command center for multiple agents running in parallel across projects.
 - Agent conversations are grouped by workspace and can run in local, worktree, or cloud modes.
 - Worktrees isolate parallel work and background automations from the foreground checkout.
-- In-app browser supports local/public preview, page comments, and browser-use automation for scoped web QA.
+- The public Codex app browser includes local/public preview, page comments, and browser-use automation for scoped web QA; this Linux app currently implements local generated artifact previews only.
 - Computer Use and Appshots provide visual desktop/app context with explicit permissions.
 - App-server is the public integration surface for custom clients: agent conversations, turns, approvals, history, auth, apps, models, and streamed events.
 
@@ -306,6 +306,7 @@ The app’s differentiator is replacing the composer-first interaction model wit
 ## Next Milestones
 
 - Stream Codex app-server turn output into the center conversation instead of summary cards.
+- Add approval handling and richer browser QA controls only after the voice-led artifact flow is stable.
 - Upgrade visual context from single-frame snapshots to continuous multimodal Realtime when the product needs live video understanding.
 - Add packaging for Linux AppImage or deb.
 
