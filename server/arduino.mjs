@@ -5,8 +5,13 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const FQBN_PATTERN = /^[a-zA-Z0-9_.-]+:[a-zA-Z0-9_.-]+:[a-zA-Z0-9_.-]+(?::[a-zA-Z0-9_.=,-]+)?$/
+const MAX_FQBN_LENGTH = 240
+const MAX_SERIAL_PORT_LENGTH = 240
 const CONFIGURED_DEFAULT_FQBN = process.env.ARDUINO_DEFAULT_FQBN ?? 'arduino:avr:uno'
-const DEFAULT_FQBN = FQBN_PATTERN.test(CONFIGURED_DEFAULT_FQBN) ? CONFIGURED_DEFAULT_FQBN : 'arduino:avr:uno'
+const DEFAULT_FQBN =
+  CONFIGURED_DEFAULT_FQBN.length <= MAX_FQBN_LENGTH && FQBN_PATTERN.test(CONFIGURED_DEFAULT_FQBN)
+    ? CONFIGURED_DEFAULT_FQBN
+    : 'arduino:avr:uno'
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const ARDUINO_CLI_PATH = process.env.ARDUINO_CLI_PATH || path.join(REPO_ROOT, 'bin', 'arduino-cli')
 const DEFAULT_SKETCH_NAME = 'CodexRealtimeSketch'
@@ -136,7 +141,7 @@ export function normalizeUploadRequest(input = {}) {
     })
   }
 
-  if (fqbn && !FQBN_PATTERN.test(fqbn)) {
+  if (fqbn && !isValidFqbn(fqbn)) {
     throw new ArduinoUploadError('Arduino FQBN values must use package:architecture:board format.', {
       code: 'arduino_invalid_fqbn',
       status: 400,
@@ -220,7 +225,11 @@ export async function listSerialPorts({ devDir = '/dev', serialByIdDir = DEFAULT
 }
 
 function isSupportedSerialPort(port) {
-  return SERIAL_PORT_PATH_PATTERN.test(port) || SERIAL_BY_ID_PATTERN.test(port)
+  return port.length <= MAX_SERIAL_PORT_LENGTH && (SERIAL_PORT_PATH_PATTERN.test(port) || SERIAL_BY_ID_PATTERN.test(port))
+}
+
+function isValidFqbn(fqbn) {
+  return fqbn.length <= MAX_FQBN_LENGTH && FQBN_PATTERN.test(fqbn)
 }
 
 function preferredPortForDetectedBoard(detectedPort, ports) {
@@ -249,7 +258,7 @@ function normalizeDetectedBoard(entry) {
     label: limitStatusString(entry.label) || null,
     protocol: limitStatusString(entry.protocol) || null,
     boardName: limitStatusString(entry.boardName) || null,
-    fqbn: candidateFqbn && FQBN_PATTERN.test(candidateFqbn) ? candidateFqbn : null,
+    fqbn: candidateFqbn && isValidFqbn(candidateFqbn) ? candidateFqbn : null,
   }
 }
 

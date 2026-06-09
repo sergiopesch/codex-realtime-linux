@@ -83,6 +83,22 @@ test('normalizeUploadRequest rejects unsupported serial ports and malformed FQBN
       error.status === 400 &&
       error.code === 'arduino_invalid_fqbn',
   )
+
+  assert.throws(
+    () => normalizeUploadRequest({ port: `/dev/serial/by-id/${'a'.repeat(260)}` }),
+    (error) =>
+      error instanceof ArduinoUploadError &&
+      error.status === 400 &&
+      error.code === 'arduino_invalid_port',
+  )
+
+  assert.throws(
+    () => normalizeUploadRequest({ fqbn: `arduino:avr:${'uno'.repeat(90)}` }),
+    (error) =>
+      error instanceof ArduinoUploadError &&
+      error.status === 400 &&
+      error.code === 'arduino_invalid_fqbn',
+  )
 })
 
 test('ArduinoUploadError bounds large diagnostic detail strings', () => {
@@ -232,6 +248,28 @@ test('uploadArduinoSketch ignores malformed detected board FQBNs', async () => {
   )
 
   assert.equal(result.fqbn, 'arduino:avr:uno')
+  assert.deepEqual(commands[0].slice(0, 3), ['compile', '--fqbn', 'arduino:avr:uno'])
+  assert.deepEqual(commands[1].slice(0, 5), ['upload', '-p', '/dev/ttyUSB0', '--fqbn', 'arduino:avr:uno'])
+})
+
+test('uploadArduinoSketch ignores oversized detected board FQBNs', async () => {
+  const commands = []
+  const run = async (args) => {
+    commands.push(args)
+    return { stdout: `${args[0]} ok`, stderr: '' }
+  }
+
+  const result = await uploadArduinoSketch(
+    { action: 'onboard_led_on' },
+    {
+      run,
+      listPorts: async () => ['/dev/ttyUSB0'],
+      listBoards: async () => [{ address: '/dev/ttyUSB0', fqbn: `arduino:avr:${'nano'.repeat(90)}`, boardName: 'Arduino Nano' }],
+    },
+  )
+
+  assert.equal(result.fqbn, 'arduino:avr:uno')
+  assert.equal(result.boardName, 'Arduino Nano')
   assert.deepEqual(commands[0].slice(0, 3), ['compile', '--fqbn', 'arduino:avr:uno'])
   assert.deepEqual(commands[1].slice(0, 5), ['upload', '-p', '/dev/ttyUSB0', '--fqbn', 'arduino:avr:uno'])
 })
