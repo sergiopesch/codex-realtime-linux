@@ -802,7 +802,8 @@ test('realtime voice sessions reset transcript state and clean up media resource
   assert.match(appSource, /responseChannel\.send\(/)
   assert.doesNotMatch(appSource, /dataChannelRef\.current\?\.send\(\s+JSON\.stringify\(\{\s+type: 'conversation\.item\.create'/)
   assert.match(appSource, /const functionCallItem = realtimeFunctionCallItem\(message\)/)
-  assert.match(appSource, /const cleanupVoiceSession = \(\) =>/)
+  assert.match(appSource, /const stopWaveform = useCallback\(\(\) =>/)
+  assert.match(appSource, /const cleanupVoiceSession = useCallback\(\(\) =>/)
   assert.match(appSource, /const voiceStateRef = useRef<'idle' \| 'connecting' \| 'live'>\('idle'\)/)
   assert.match(appSource, /const setVoiceLifecycleState = \(next: 'idle' \| 'connecting' \| 'live'\) => \{\s+voiceStateRef\.current = next\s+setVoiceState\(next\)\s+\}/)
   assert.match(appSource, /if \(voiceStateRef\.current !== 'idle'\) return/)
@@ -824,6 +825,8 @@ test('realtime voice sessions reset transcript state and clean up media resource
   assert.match(appSource, /microphoneStream\?\.getTracks\(\)\.forEach\(\(track\) => track\.stop\(\)\)/)
   assert.match(appSource, /peer\?\.getSenders\(\)\.forEach\(\(sender\) => sender\.track\?\.stop\(\)\)/)
   assert.match(appSource, /audioRef\.current\.srcObject = null/)
+  assert.match(appSource, /return \(\) => \{\s+cleanupVoiceSession\(\)\s+cleanupScreenShare\(\)\s+\}/)
+  assert.match(appSource, /\}, \[cleanupScreenShare, cleanupVoiceSession\]\)/)
   assert.match(appSource, /setRealtimeTranscript\(\[\]\)/)
   assert.match(appSource, /connectionstatechange/)
   assert.match(appSource, /\['failed', 'disconnected', 'closed'\]\.includes\(pc\.connectionState\)/)
@@ -840,7 +843,7 @@ test('realtime voice sessions reset transcript state and clean up media resource
 test('screen context capture stops display streams after a frame is analyzed', async () => {
   const appSource = await readFile(path.join(repoRoot, 'src', 'App.tsx'), 'utf8')
 
-  assert.match(appSource, /const cleanupScreenShare = \(stream = screenStreamRef\.current\) =>/)
+  assert.match(appSource, /const cleanupScreenShare = useCallback\(\(stream = screenStreamRef\.current\) =>/)
   assert.match(appSource, /const screenEndedTrackRef = useRef<MediaStreamTrack \| null>\(null\)/)
   assert.match(appSource, /const screenEndedHandlerRef = useRef<\(\(\) => void\) \| null>\(null\)/)
   assert.match(appSource, /screenEndedTrackRef\.current\.removeEventListener\('ended', screenEndedHandlerRef\.current\)/)

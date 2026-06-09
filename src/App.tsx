@@ -821,16 +821,16 @@ function App() {
     }
   }
 
-  const stopWaveform = () => {
+  const stopWaveform = useCallback(() => {
     if (waveformFrameRef.current) window.cancelAnimationFrame(waveformFrameRef.current)
     waveformFrameRef.current = null
     analyserRef.current = null
     audioContextRef.current?.close().catch(() => {})
     audioContextRef.current = null
     setWaveLevels(Array.from({ length: 18 }, () => 0.18))
-  }
+  }, [])
 
-  const cleanupVoiceSession = () => {
+  const cleanupVoiceSession = useCallback(() => {
     const peer = peerRef.current
     const microphoneStream = microphoneStreamRef.current
     peerRef.current = null
@@ -849,9 +849,9 @@ function App() {
 
     stopWaveform()
     setVoiceMuted(false)
-  }
+  }, [stopWaveform])
 
-  const cleanupScreenShare = (stream = screenStreamRef.current) => {
+  const cleanupScreenShare = useCallback((stream = screenStreamRef.current) => {
     if (screenEndedTrackRef.current && screenEndedHandlerRef.current) {
       screenEndedTrackRef.current.removeEventListener('ended', screenEndedHandlerRef.current)
       screenEndedTrackRef.current = null
@@ -862,7 +862,7 @@ function App() {
       screenStreamRef.current = null
       setScreenShared(false)
     }
-  }
+  }, [])
 
   const startWaveform = (stream: MediaStream) => {
     stopWaveform()
@@ -1320,6 +1320,13 @@ function App() {
     if (action === 'maximize') desktopWindow?.maximize()
     if (action === 'close') desktopWindow?.close()
   }
+
+  useEffect(() => {
+    return () => {
+      cleanupVoiceSession()
+      cleanupScreenShare()
+    }
+  }, [cleanupScreenShare, cleanupVoiceSession])
 
   useEffect(() => {
     workspaceInputRef.current?.setAttribute('webkitdirectory', '')
