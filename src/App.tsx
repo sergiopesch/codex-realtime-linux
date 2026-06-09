@@ -2495,6 +2495,24 @@ function App() {
             <button className="voice-action danger" type="button" onClick={stopVoice} aria-label="Stop voice" title="Stop voice">
               <X size={compact ? 18 : 21} />
             </button>
+            <button
+              className={screenShared ? 'voice-action active' : 'voice-action'}
+              type="button"
+              onClick={() => void shareScreen()}
+              aria-label="Share screen"
+              title="Share screen"
+            >
+              <MonitorUp size={18} />
+            </button>
+            <button
+              className={attachedImageName ? 'voice-action active' : 'voice-action'}
+              type="button"
+              onClick={() => imageInputRef.current?.click()}
+              aria-label="Attach image"
+              title="Attach image"
+            >
+              <ImagePlus size={18} />
+            </button>
           </>
         ) : (
           <>

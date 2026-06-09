@@ -1557,6 +1557,8 @@ test('realtime voice sessions reset transcript state and clean up media resource
   assert.doesNotMatch(cssSource, /\.primary-voice/)
   assert.doesNotMatch(cssSource, /\.danger-voice/)
   assert.doesNotMatch(cssSource, /@keyframes voicePulse/)
+  assert.match(appSource, /voiceState === 'live' \? \([\s\S]*aria-label=\{voiceMuted \? 'Unmute microphone' : 'Mute microphone'\}[\s\S]*aria-label="Stop voice"[\s\S]*aria-label="Share screen"[\s\S]*aria-label="Attach image"/)
+  assert.match(appSource, /onClick=\{\(\) => void shareScreen\(\)\}[\s\S]*aria-label="Share screen"[\s\S]*onClick=\{\(\) => imageInputRef\.current\?\.click\(\)\}[\s\S]*aria-label="Attach image"/)
   assert.match(appSource, /const stopWaveform = useCallback\(\(\) =>/)
   assert.match(appSource, /const voiceSessionIdRef = useRef\(0\)/)
   assert.match(appSource, /const voiceAbortControllerRef = useRef<AbortController \| null>\(null\)/)
