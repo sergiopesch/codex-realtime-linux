@@ -41,7 +41,7 @@ test('renderer labels identity and voice context from runtime workspace state', 
     appSource,
     /const selectedWorkspaceRoot = workspaceRoots\.find\(\(\{ workspacePath \}\) => workspacePath === selectedWorkspace\)/,
   )
-  assert.match(appSource, /const selectedWorkspaceConversations = selectedWorkspaceRoot\?\.conversations \?\? \[\]/)
+  assert.match(appSource, /const conversations = conversationsByWorkspace\[workspacePath\] \?\? \[\]/)
   assert.match(
     appSource,
     /const selectedWorkspaceLabel = selectedWorkspaceRoot\?\.workspace\.name \?\? basenameFromWorkspacePath\(selectedWorkspace\)/,
@@ -200,8 +200,10 @@ test('artifact previews are served through workspace-scoped routes only', async 
   assert.doesNotMatch(appSource, /selectedArtifact\.url !== dismissedArtifact\?\.url/)
   assert.match(appSource, /const codexTurnInProgress = Boolean\(activeTurnId\)/)
   assert.match(appSource, /const agentIsWorkingOnArtifact = Boolean\(pendingArtifact && codexTurnInProgress\)/)
-  assert.match(appSource, /const showSubagentPreview = !activeSystemScreen && codexTurnInProgress && !agentIsWorkingOnArtifact/)
   assert.match(appSource, /\{\(agentIsWorkingOnArtifact \|\| shouldShowArtifactBrowser\) && \(/)
+  assert.doesNotMatch(appSource, /showSubagentPreview/)
+  assert.doesNotMatch(appSource, /aria-label="Sub-agent preview"/)
+  assert.doesNotMatch(cssSource, /\.preview-shell/)
   assert.match(appSource, /const pendingArtifactRef = useRef<ArtifactPlan \| null>\(null\)/)
   assert.match(appSource, /const eventCompletesActiveCodexTurn = \(event: EventRecord, turnId: string \| null\) =>/)
   assert.match(appSource, /const markCodexConversationReady = useCallback\(\(threadId: string \| null\) => \{/)
@@ -234,7 +236,6 @@ test('artifact previews are served through workspace-scoped routes only', async 
   assert.doesNotMatch(appSource, /const agentIsWorkingOnArtifact = Boolean\(pendingArtifact && activeThreadId\)/)
   assert.match(appSource, /sandbox="allow-scripts"/)
   assert.doesNotMatch(appSource, /sandbox="allow-scripts allow-same-origin"/)
-  assert.doesNotMatch(cssSource, /\.preview-shell\s*\{[^}]*height:\s*220px/)
 })
 
 test('persisted workspaces and conversations require absolute workspace paths', async () => {

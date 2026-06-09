@@ -781,10 +781,6 @@ function App() {
     return { workspace, workspacePath, conversations }
   })
   const selectedWorkspaceRoot = workspaceRoots.find(({ workspacePath }) => workspacePath === selectedWorkspace)
-  const selectedWorkspaceConversations = selectedWorkspaceRoot?.conversations ?? []
-  const activeConversation =
-    selectedWorkspaceConversations.find((conversation) => conversation.id === selectedConversationId) ??
-    selectedWorkspaceConversations[0]
   const transcriptLines = realtimeTranscript
   const voiceReady = status?.realtime ?? false
   const selectedWorkspaceLabel = selectedWorkspaceRoot?.workspace.name ?? basenameFromWorkspacePath(selectedWorkspace)
@@ -811,10 +807,6 @@ function App() {
       : null
   const shouldShowArtifactBrowser = Boolean(artifactPreview)
   const agentIsWorkingOnArtifact = Boolean(pendingArtifact && codexTurnInProgress)
-  const showSubagentPreview = !activeSystemScreen && codexTurnInProgress && !agentIsWorkingOnArtifact
-  const subagentTitle = activeConversation?.title ? briefThreadTitle(activeConversation.title) : 'Codex'
-  const subagentHint =
-    activeConversation?.prompt || activeConversation?.response || 'Working through the active Codex turn.'
 
   const appendEvent = (method: string, params?: Record<string, unknown>) => {
     setEvents((current) => mergeEvents(current, [{ method, receivedAt: new Date().toISOString(), params }]))
@@ -2825,14 +2817,6 @@ function App() {
                       sandbox="allow-scripts"
                     />
                   ) : null}
-                </section>
-              )}
-
-              {showSubagentPreview && (
-                <section className="preview-shell" aria-label="Sub-agent preview">
-                  <span aria-hidden="true" />
-                  <strong>{subagentTitle}</strong>
-                  <small>{subagentHint}</small>
                 </section>
               )}
 

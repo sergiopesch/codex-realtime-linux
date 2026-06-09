@@ -777,45 +777,6 @@ button:disabled {
   max-width: 132px;
 }
 
-.preview-shell {
-  display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
-  width: min(460px, 100%);
-  min-height: 34px;
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.052);
-  border-radius: 999px;
-  padding: 0 10px;
-  background: rgba(255, 255, 255, 0.026);
-  color: rgba(242, 242, 243, 0.68);
-  backdrop-filter: blur(12px) saturate(108%);
-}
-
-.preview-shell > span {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--blue);
-  box-shadow: 0 0 10px rgba(134, 168, 200, 0.48);
-}
-
-.preview-shell strong {
-  font-size: 12px;
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.preview-shell small {
-  min-width: 0;
-  overflow: hidden;
-  color: rgba(242, 242, 243, 0.42);
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .artifact-stage {
   display: grid;
   grid-template-rows: 38px minmax(280px, 48vh);
@@ -1695,10 +1656,6 @@ button:disabled {
 
   .agent-lane.compact {
     justify-content: center;
-  }
-
-  .preview-shell {
-    width: 100%;
   }
 
   .voice-controls {
