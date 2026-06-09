@@ -299,6 +299,7 @@ const MAX_UI_USAGE_BUCKETS = 50
 const MAX_UI_USAGE_LABEL_LENGTH = 120
 const MAX_UI_WEATHER_TEXT_LENGTH = 500
 const ARTIFACT_PREVIEW_SESSION_MS = 3 * 60 * 1000
+const ARTIFACT_PREVIEW_ENGAGED_RENEW_MS = 45 * 1000
 const MAX_SEEN_USB_EVENT_IDS = 240
 const MAX_VISUAL_CONTEXT_IMAGE_FILE_BYTES = 12 * 1024 * 1024
 const MAX_VISUAL_CONTEXT_DATA_URL_BYTES = 12 * 1024 * 1024
@@ -1196,6 +1197,7 @@ function App() {
   const [, setArtifacts] = useState<GeneratedArtifact[]>([])
   const [selectedArtifact, setSelectedArtifact] = useState<GeneratedArtifact | null>(null)
   const [artifactPreviewLease, setArtifactPreviewLease] = useState<ArtifactPreviewLease | null>(null)
+  const [artifactPreviewEngaged, setArtifactPreviewEngaged] = useState(false)
   const [dismissedArtifact, setDismissedArtifact] = useState<{ url: string; updatedAt: string; workspacePath: string } | null>(null)
   const [pendingArtifact, setPendingArtifact] = useState<ArtifactPlan | null>(null)
   const [routingActivity, setRoutingActivity] = useState<string[]>(['Voice router idle'])
@@ -1814,6 +1816,7 @@ function App() {
   const closeArtifactPreview = useCallback(() => {
     setSelectedArtifact(null)
     setArtifactPreviewLease(null)
+    setArtifactPreviewEngaged(false)
   }, [])
 
   const openArtifactPreview = useCallback((artifact: GeneratedArtifact) => {
@@ -1839,6 +1842,11 @@ function App() {
         : current,
     )
   }, [])
+
+  const engageArtifactPreview = useCallback(() => {
+    setArtifactPreviewEngaged(true)
+    extendArtifactPreview()
+  }, [extendArtifactPreview])
 
   const requestWeather = async (event?: FormEvent<HTMLFormElement>) => {
     event?.preventDefault()
@@ -2316,6 +2324,12 @@ function App() {
     const timeout = window.setTimeout(() => closeArtifactPreview(), remainingMs)
     return () => window.clearTimeout(timeout)
   }, [artifactPreviewLease, closeArtifactPreview])
+
+  useEffect(() => {
+    if (!artifactPreviewLease || !artifactPreviewEngaged) return undefined
+    const interval = window.setInterval(() => extendArtifactPreview(), ARTIFACT_PREVIEW_ENGAGED_RENEW_MS)
+    return () => window.clearInterval(interval)
+  }, [artifactPreviewEngaged, artifactPreviewLease, extendArtifactPreview])
 
   useEffect(() => {
     if (!activeSystemScreen) return
@@ -3647,6 +3661,8 @@ function App() {
                   className={agentIsWorkingOnArtifact ? 'artifact-stage artifact-stage-building' : 'artifact-stage'}
                   aria-label="Generated artifact preview"
                   onFocus={extendArtifactPreview}
+                  onPointerEnter={engageArtifactPreview}
+                  onPointerLeave={() => setArtifactPreviewEngaged(false)}
                   onPointerDown={extendArtifactPreview}
                 >
                   <header>
@@ -3690,6 +3706,10 @@ function App() {
                       title={artifactPreview.title}
                       sandbox="allow-scripts"
                       referrerPolicy="no-referrer"
+                      onFocus={engageArtifactPreview}
+                      onBlur={() => setArtifactPreviewEngaged(false)}
+                      onPointerEnter={engageArtifactPreview}
+                      onPointerLeave={() => setArtifactPreviewEngaged(false)}
                     />
                   ) : null}
                 </section>
