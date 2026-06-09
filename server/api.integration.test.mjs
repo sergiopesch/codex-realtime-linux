@@ -780,6 +780,18 @@ test('codex task returns public artifact metadata for external workspace artifac
   assert.equal(threadsBody.data.length, 2)
   assert.equal(threadsBody.data[0].debugPayload.length, 1000)
   assert.equal(threadsBody.conversations.some((conversation) => /^codex-\d{4}-/.test(conversation.id)), false)
+
+  const unscopedThreads = await fetch(`${baseUrl}/api/codex/threads?limit=10`)
+  assert.equal(unscopedThreads.status, 400)
+  assert.equal((await readJson(unscopedThreads)).code, 'invalid_workspace_path')
+
+  const rpcMessagesAfterThreads = (await readFile(logPath, 'utf8'))
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line))
+  const threadListMessages = rpcMessagesAfterThreads.filter((message) => message.method === 'thread/list')
+  assert.equal(threadListMessages.length, 1)
+  assert.equal(threadListMessages[0].params.cwd, workspacePath)
 })
 
 test('codex app-source tasks require an explicit environment opt-in', async (t) => {

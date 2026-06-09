@@ -2063,16 +2063,17 @@ app.get('/api/codex/events', async (_req, res) => {
 
 app.get('/api/codex/threads', async (req, res) => {
   try {
-    await codex.ensure()
+    const cwd = await requireWorkspaceDirectory(req.query.cwd, 'cwd')
     const requestedLimit = Number(req.query.limit ?? 40)
     const params = {
       limit: Number.isFinite(requestedLimit) ? Math.min(Math.max(Math.floor(requestedLimit), 1), 100) : 40,
       sortKey: 'updated_at',
       sortDirection: 'desc',
       archived: false,
+      cwd,
     }
-    if (typeof req.query.cwd === 'string' && req.query.cwd) params.cwd = await requireWorkspaceDirectory(req.query.cwd, 'cwd')
 
+    await codex.ensure()
     const result = await codex.request('thread/list', params)
     res.json(normalizeCodexThreadListResponse(result))
   } catch (error) {
