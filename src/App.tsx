@@ -564,6 +564,16 @@ const removeFirstConversationById = (conversations: AgentConversation[], convers
   })
 }
 
+const sameWorkspacePath = (left: string, right: string) =>
+  normalizeAbsoluteLocalWorkspacePath(left) === normalizeAbsoluteLocalWorkspacePath(right)
+
+const conversationRowKey = (workspacePath: string, conversation: AgentConversation, index: number) =>
+  [
+    normalizeAbsoluteLocalWorkspacePath(workspacePath) || workspacePath,
+    conversation.id,
+    conversation.createdAt || conversation.updatedAt || index,
+  ].join('::')
+
 const conversationsAfterDelete = (
   existing: AgentConversation[],
   confirmedConversations: AgentConversation[],
@@ -1227,6 +1237,17 @@ function App() {
         })
     }
     setConversationsByWorkspace((current) => {
+      if (workspacePath) {
+        return {
+          ...current,
+          [workspacePath]: (current[workspacePath] ?? []).map((conversation) =>
+            conversation.id === threadId
+              ? { ...conversation, status: 'ready', updatedAt }
+              : conversation,
+          ),
+        }
+      }
+
       const next = { ...current }
       for (const [workspacePath, conversations] of Object.entries(next)) {
         next[workspacePath] = conversations.map((conversation) =>
@@ -1904,8 +1925,8 @@ function App() {
         ...state,
         [workspacePath]: conversationsAfterDelete(state[workspacePath] ?? current, confirmedConversations, conversationId),
       }))
-      const deletedActiveConversation = selectedConversationId === conversationId
-      const deletedWorkspaceWasSelected = normalizeAbsoluteLocalWorkspacePath(selectedWorkspace) === normalizeAbsoluteLocalWorkspacePath(workspacePath)
+      const deletedWorkspaceWasSelected = sameWorkspacePath(selectedWorkspace, workspacePath)
+      const deletedActiveConversation = deletedWorkspaceWasSelected && selectedConversationId === conversationId
       const workspaceIsEmptyAfterDelete = visibleConversationsAfterDelete.length === 0
       if (deletedActiveConversation) {
         const fallback = visibleConversationsAfterDelete[0]
@@ -1951,7 +1972,7 @@ function App() {
         return next
       })
 
-      if (normalizeAbsoluteLocalWorkspacePath(selectedWorkspace) === targetWorkspacePath) {
+      if (sameWorkspacePath(selectedWorkspace, targetWorkspacePath)) {
         if (nextWorkspace) {
           setSelectedWorkspace(nextWorkspace.workspacePath)
           setSelectedConversationId(nextWorkspace.conversations[0]?.id ?? '')
@@ -3239,14 +3260,16 @@ function App() {
                           </button>
                         </div>
                       ) : (
-                        conversations.map((conversation) => (
+                        conversations.map((conversation, index) => (
                           <div
                             className={
-                              selectedConversationId === conversation.id && !activeSystemScreen
+                              sameWorkspacePath(selectedWorkspace, workspacePath) &&
+                                selectedConversationId === conversation.id &&
+                                !activeSystemScreen
                                 ? 'agent-thread-row active'
                                 : 'agent-thread-row'
                             }
-                            key={conversation.id}
+                            key={conversationRowKey(workspacePath, conversation, index)}
                           >
                             <button
                               type="button"

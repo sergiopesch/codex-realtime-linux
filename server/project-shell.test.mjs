@@ -85,7 +85,7 @@ test('renderer keeps empty workspace navigation on the voice surface', async () 
 
   assert.match(
     appSource,
-    /if \(normalizeAbsoluteLocalWorkspacePath\(selectedWorkspace\) === targetWorkspacePath\) \{[\s\S]*setSelectedWorkspace\(''\)[\s\S]*setSelectedConversationId\(''\)[\s\S]*setActiveSystemScreen\(null\)[\s\S]*closeArtifactPreview\(\)/,
+    /if \(sameWorkspacePath\(selectedWorkspace, targetWorkspacePath\)\) \{[\s\S]*setSelectedWorkspace\(''\)[\s\S]*setSelectedConversationId\(''\)[\s\S]*setActiveSystemScreen\(null\)[\s\S]*closeArtifactPreview\(\)/,
   )
   assert.doesNotMatch(appSource, /setActiveSystemScreen\('settings'\)/)
 })
@@ -316,6 +316,7 @@ test('artifact previews are served through workspace-scoped routes only', async 
   assert.match(appSource, /const mergeConversations = \(current: AgentConversation\[\], incoming: AgentConversation\[\]\) =>/)
   assert.match(appSource, /\.slice\(0, MAX_UI_CONVERSATIONS_PER_WORKSPACE\)/)
   assert.match(appSource, /const conversation = requireSafeConversation\(savedConversation\.conversation, workspacePath\)[\s\S]*\[workspacePath\]: mergeConversations\(current\[workspacePath\] \?\? \[\], \[conversation\]\)/)
+  assert.match(appSource, /if \(workspacePath\) \{[\s\S]*\[workspacePath\]: \(current\[workspacePath\] \?\? \[\]\)\.map\(\(conversation\) =>[\s\S]*conversation\.id === threadId[\s\S]*status: 'ready'/)
   assert.match(appSource, /eventCompletesActiveCodexTurn\(event, activeTurnIdRef\.current\)/)
   assert.match(appSource, /const pendingArtifactForTurn = pendingArtifactRef\.current/)
   assert.match(appSource, /refreshArtifacts\(pendingArtifactForTurn\.workspacePath/)
@@ -656,8 +657,13 @@ test('Codex task routes require explicit user goals and IDs before app-server ca
   assert.match(appSource, /\[workspacePath\]: conversationsAfterDelete\(state\[workspacePath\] \?\? current, confirmedConversations, conversationId\)/)
   assert.doesNotMatch(appSource, /setConversationsByWorkspace\(\(state\) => \(\{ \.\.\.state, \[workspacePath\]: confirmedConversations \}\)\)/)
   assert.doesNotMatch(appSource, /const next = current\.filter\(\(conversation\) => conversation\.id !== conversationId\)/)
-  assert.match(appSource, /const deletedActiveConversation = selectedConversationId === conversationId/)
-  assert.match(appSource, /const deletedWorkspaceWasSelected = normalizeAbsoluteLocalWorkspacePath\(selectedWorkspace\) === normalizeAbsoluteLocalWorkspacePath\(workspacePath\)/)
+  assert.match(appSource, /const sameWorkspacePath = \(left: string, right: string\) =>/)
+  assert.match(appSource, /const conversationRowKey = \(workspacePath: string, conversation: AgentConversation, index: number\) =>/)
+  assert.match(appSource, /conversation\.createdAt \|\| conversation\.updatedAt \|\| index/)
+  assert.match(appSource, /key=\{conversationRowKey\(workspacePath, conversation, index\)\}/)
+  assert.match(appSource, /sameWorkspacePath\(selectedWorkspace, workspacePath\) &&[\s\S]*selectedConversationId === conversation\.id[\s\S]*!activeSystemScreen[\s\S]*\? 'agent-thread-row active'/)
+  assert.match(appSource, /const deletedWorkspaceWasSelected = sameWorkspacePath\(selectedWorkspace, workspacePath\)/)
+  assert.match(appSource, /const deletedActiveConversation = deletedWorkspaceWasSelected && selectedConversationId === conversationId/)
   assert.match(appSource, /const workspaceIsEmptyAfterDelete = visibleConversationsAfterDelete\.length === 0/)
   assert.match(appSource, /const fallback = visibleConversationsAfterDelete\[0\]/)
   assert.match(appSource, /setSelectedWorkspace\(workspacePath\)[\s\S]*setSelectedConversationId\(''\)[\s\S]*setActiveSystemScreen\(null\)/)
