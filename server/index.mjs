@@ -47,6 +47,8 @@ const MAX_CONVERSATION_TEXT_LENGTH = 8_000
 const MAX_CONVERSATION_TRACE_LENGTH = 500
 const MAX_CONVERSATION_TRACES = 40
 const MAX_CONVERSATION_TRANSCRIPT_LINES = 200
+const MAX_USAGE_BUCKETS = 20
+const MAX_USAGE_BUCKET_LABEL_LENGTH = 120
 const CONFIGURED_CODEX_RPC_TIMEOUT_MS = Number(process.env.CODEX_RPC_TIMEOUT_MS)
 const CODEX_RPC_TIMEOUT_MS =
   Number.isFinite(CONFIGURED_CODEX_RPC_TIMEOUT_MS) && CONFIGURED_CODEX_RPC_TIMEOUT_MS > 0
@@ -875,6 +877,19 @@ function threadToConversation(thread) {
   }
 }
 
+function finiteNumber(value, fallback = 0) {
+  const number = Number(value)
+  return Number.isFinite(number) ? number : fallback
+}
+
+function topUsageBuckets(totalsByLabel) {
+  return [...totalsByLabel.entries()]
+    .map(([label, value]) => ({ label, value }))
+    .filter((bucket) => Number.isFinite(bucket.value) && bucket.value > 0)
+    .sort((a, b) => b.value - a.value)
+    .slice(0, MAX_USAGE_BUCKETS)
+}
+
 function normalizeCosts(costs) {
   const buckets = Array.isArray(costs?.data) ? costs.data : []
   const totalsByLabel = new Map()
@@ -883,7 +898,11 @@ function normalizeCosts(costs) {
   for (const bucket of buckets) {
     const results = Array.isArray(bucket?.results) ? bucket.results : []
     for (const result of results) {
-      const label = result.line_item ?? result.object ?? result.model ?? 'OpenAI usage'
+      const label = normalizeBoundedString(
+        result.line_item ?? result.object ?? result.model,
+        'OpenAI usage',
+        MAX_USAGE_BUCKET_LABEL_LENGTH,
+      )
       if (typeof result.amount?.currency === 'string') currency = result.amount.currency
       const amount =
         result.amount?.value ??
@@ -891,18 +910,19 @@ function normalizeCosts(costs) {
         result.cost?.value ??
         result.cost ??
         0
-      totalsByLabel.set(label, (totalsByLabel.get(label) ?? 0) + Number(amount))
+      totalsByLabel.set(label, (totalsByLabel.get(label) ?? 0) + finiteNumber(amount))
     }
   }
 
-  const normalizedBuckets = [...totalsByLabel.entries()].map(([label, value]) => ({ label, value }))
-  const total = normalizedBuckets.reduce((sum, bucket) => sum + bucket.value, 0)
+  const total = [...totalsByLabel.values()].reduce(
+    (sum, value) => (Number.isFinite(value) && value > 0 ? sum + value : sum),
+    0,
+  )
 
   return {
     total,
     currency,
-    buckets: normalizedBuckets,
-    raw: costs,
+    buckets: topUsageBuckets(totalsByLabel),
   }
 }
 
@@ -922,13 +942,13 @@ function normalizeCompletionUsage(usage) {
   for (const bucket of buckets) {
     const results = Array.isArray(bucket?.results) ? bucket.results : []
     for (const result of results) {
-      const input = Number(result.input_tokens ?? 0)
-      const output = Number(result.output_tokens ?? 0)
-      const cached = Number(result.input_cached_tokens ?? 0)
-      const audioInput = Number(result.input_audio_tokens ?? 0)
-      const audioOutput = Number(result.output_audio_tokens ?? 0)
+      const input = finiteNumber(result.input_tokens)
+      const output = finiteNumber(result.output_tokens)
+      const cached = finiteNumber(result.input_cached_tokens)
+      const audioInput = finiteNumber(result.input_audio_tokens)
+      const audioOutput = finiteNumber(result.output_audio_tokens)
       const total = input + output
-      const label = result.model ?? result.object ?? 'Completions'
+      const label = normalizeBoundedString(result.model ?? result.object, 'Completions', MAX_USAGE_BUCKET_LABEL_LENGTH)
 
       totals.input += input
       totals.output += output
@@ -936,15 +956,14 @@ function normalizeCompletionUsage(usage) {
       totals.audioInput += audioInput
       totals.audioOutput += audioOutput
       totals.total += total
-      totals.requests += Number(result.num_model_requests ?? 0)
+      totals.requests += finiteNumber(result.num_model_requests)
       totalsByLabel.set(label, (totalsByLabel.get(label) ?? 0) + total)
     }
   }
 
   return {
     totals,
-    buckets: [...totalsByLabel.entries()].map(([label, value]) => ({ label, value })),
-    raw: usage,
+    buckets: topUsageBuckets(totalsByLabel),
   }
 }
 
@@ -1003,10 +1022,6 @@ async function normalizeUsage(costs, completionUsage) {
     tokenTotals: tokenUsage.totals,
     costBuckets: costBucketsGbp,
     tokenBuckets: tokenUsage.buckets,
-    raw: {
-      costs: cost.raw,
-      completions: tokenUsage.raw,
-    },
   }
 }
 

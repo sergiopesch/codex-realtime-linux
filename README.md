@@ -160,7 +160,7 @@ Organization spending, project, and admin analytics require:
 OPENAI_ADMIN_KEY=sk-admin-...
 ```
 
-Without admin scope, Usage shows a clean empty state instead of fabricated numbers. Cost data is displayed in GBP; if OpenAI returns USD, the server converts it with `OPENAI_USAGE_GBP_RATE` or the configured live rate endpoint.
+Without admin scope, Usage shows a clean empty state instead of fabricated numbers. Cost data is displayed in GBP; if OpenAI returns USD, the server converts it with `OPENAI_USAGE_GBP_RATE` or the configured live rate endpoint. Usage responses return bounded aggregate buckets only; raw admin API payloads are not sent to the renderer.
 
 ```bash
 # Optional: pin USD -> GBP conversion instead of using the live rate endpoint.

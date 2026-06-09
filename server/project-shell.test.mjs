@@ -236,6 +236,22 @@ test('upstream OpenAI and usage fetches are timeout bounded', async () => {
   )
   assert.match(serverSource, /function upstreamSignal\(\)/)
   assert.match(serverSource, /AbortSignal\.timeout\(UPSTREAM_FETCH_TIMEOUT_MS\)/)
+  assert.match(serverSource, /const MAX_USAGE_BUCKETS = 20/)
+  assert.match(serverSource, /const MAX_USAGE_BUCKET_LABEL_LENGTH = 120/)
+  assert.match(serverSource, /function finiteNumber\(value, fallback = 0\)/)
+  assert.match(serverSource, /function topUsageBuckets\(totalsByLabel\)/)
+  assert.match(serverSource, /\.slice\(0, MAX_USAGE_BUCKETS\)/)
+  assert.match(serverSource, /\[\.\.\.totalsByLabel\.values\(\)\]\.reduce\(/)
+  assert.match(serverSource, /buckets: topUsageBuckets\(totalsByLabel\)/)
+  assert.match(
+    serverSource,
+    /normalizeBoundedString\(\s*result\.line_item \?\? result\.object \?\? result\.model,\s*'OpenAI usage',\s*MAX_USAGE_BUCKET_LABEL_LENGTH,\s*\)/,
+  )
+  assert.match(
+    serverSource,
+    /normalizeBoundedString\(result\.model \?\? result\.object, 'Completions', MAX_USAGE_BUCKET_LABEL_LENGTH\)/,
+  )
+  assert.match(serverSource, /totals\.requests \+= finiteNumber\(result\.num_model_requests\)/)
   assert.match(serverSource, /Buffer\.byteLength\(imageDataUrl, 'utf8'\) > MAX_VISUAL_CONTEXT_DATA_URL_BYTES/)
   assert.match(serverSource, /visual_context_too_large/)
   assert.match(serverSource, /client_secrets'[\s\S]*signal: upstreamSignal\(\)/)
@@ -244,6 +260,9 @@ test('upstream OpenAI and usage fetches are timeout bounded', async () => {
   assert.match(serverSource, /fetch\(`https:\/\/api\.openai\.com\/v1\$\{path\}`,[\s\S]*signal: upstreamSignal\(\)/)
   assert.match(serverSource, /source: context\.source/)
   assert.doesNotMatch(serverSource, /source: req\.body\?\.source \?\? 'visual context'/)
+  assert.doesNotMatch(serverSource, /raw:\s*\{\s*costs:/)
+  assert.doesNotMatch(serverSource, /raw: usage/)
+  assert.doesNotMatch(serverSource, /raw: costs/)
 })
 
 test('Arduino explicit-port uploads do not borrow unrelated detected board metadata', async () => {
