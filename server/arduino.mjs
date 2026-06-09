@@ -394,7 +394,9 @@ function parseBoardListJson(value) {
   return detectedPorts
     .map((entry) => {
       const matchingBoards = Array.isArray(entry?.matching_boards) ? entry.matching_boards : []
-      const matchingBoard = matchingBoards.find((board) => typeof board?.fqbn === 'string') ?? matchingBoards[0]
+      const matchingBoard =
+        matchingBoards.find((board) => typeof board?.fqbn === 'string' && isValidFqbn(board.fqbn)) ??
+        matchingBoards[0]
       const port = entry?.port ?? {}
       return normalizeDetectedBoard({
         address: typeof port?.address === 'string' ? port.address : null,

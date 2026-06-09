@@ -249,6 +249,39 @@ test('listArduinoBoards bounds detected board metadata and rejects malformed FQB
   assert.equal(boards[0].fqbn, null)
 })
 
+test('listArduinoBoards prefers a valid matching board FQBN', async () => {
+  const boards = await listArduinoBoards({
+    run: async () => ({
+      stdout: JSON.stringify({
+        detected_ports: [
+          {
+            port: {
+              address: '/dev/ttyUSB0',
+              label: 'USB serial board',
+              protocol: 'serial',
+            },
+            matching_boards: [
+              {
+                name: 'Malformed board match',
+                fqbn: 'not a fqbn',
+              },
+              {
+                name: 'Arduino Nano',
+                fqbn: 'arduino:avr:nano',
+              },
+            ],
+          },
+        ],
+      }),
+      stderr: '',
+    }),
+  })
+
+  assert.equal(boards.length, 1)
+  assert.equal(boards[0].boardName, 'Arduino Nano')
+  assert.equal(boards[0].fqbn, 'arduino:avr:nano')
+})
+
 test('uploadArduinoSketch ignores malformed detected board FQBNs', async () => {
   const commands = []
   const run = async (args) => {

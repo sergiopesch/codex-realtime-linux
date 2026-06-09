@@ -877,6 +877,15 @@ test('Arduino explicit-port uploads do not borrow unrelated detected board metad
   assert.match(arduinoSource, /serialByIdPorts\.length === 1 && ttyPorts\.length === 1/)
   assert.match(arduinoSource, /function isSupportedSerialPort\(port\) \{\s+return port\.length <= MAX_SERIAL_PORT_LENGTH/)
   assert.match(arduinoSource, /function isValidFqbn\(fqbn\) \{\s+return fqbn\.length <= MAX_FQBN_LENGTH && FQBN_PATTERN\.test\(fqbn\)/)
+  assert.match(arduinoSource, /function parseBoardListJson\(value\)/)
+  assert.match(
+    arduinoSource,
+    /const matchingBoard =\s+matchingBoards\.find\(\(board\) => typeof board\?\.fqbn === 'string' && isValidFqbn\(board\.fqbn\)\) \?\?\s+matchingBoards\[0\]/,
+  )
+  assert.doesNotMatch(
+    arduinoSource,
+    /matchingBoards\.find\(\(board\) => typeof board\?\.fqbn === 'string'\) \?\? matchingBoards\[0\]/,
+  )
   assert.match(arduinoSource, /request\.port \?\? preferredPortForDetectedBoard\(detectedPort, ports\) \?\? ports\[0\]/)
   assert.match(arduinoSource, /export async function listSerialPorts\(\{ devDir = '\/dev', serialByIdDir = DEFAULT_SERIAL_BY_ID_DIR \} = \{\}\)/)
   assert.match(arduinoSource, /listSerialByIdPorts\(serialByIdDir, devDir\)/)
