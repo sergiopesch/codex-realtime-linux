@@ -14,7 +14,15 @@ if [ "${CODEX_REALTIME_DIALOUT_REEXEC:-}" != "1" ] &&
   exec env CODEX_REALTIME_DIALOUT_REEXEC=1 sg dialout -c "$reexec_cmd"
 fi
 
-state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/codex-realtime-linux"
+home_dir="${HOME:-}"
+if [ -z "$home_dir" ]; then
+  home_dir="$(getent passwd "$(id -u)" 2>/dev/null | cut -d: -f6 || true)"
+fi
+if [ -z "$home_dir" ]; then
+  home_dir="$repo_root"
+fi
+
+state_dir="${XDG_STATE_HOME:-$home_dir/.local/state}/codex-realtime-linux"
 mkdir -p "$state_dir"
 exec >> "$state_dir/desktop-launch.log" 2>&1
 
