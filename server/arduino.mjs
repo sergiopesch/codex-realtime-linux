@@ -9,6 +9,7 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const ARDUINO_CLI_PATH = process.env.ARDUINO_CLI_PATH || path.join(REPO_ROOT, 'bin', 'arduino-cli')
 const DEFAULT_SKETCH_NAME = 'CodexRealtimeSketch'
 const MAX_SKETCH_BYTES = 64 * 1024
+const MAX_COMMAND_OUTPUT_CHARS = 4_000
 const SERIAL_PORT_PATTERN = /^tty(?:ACM|USB)\d+$/
 const SERIAL_PORT_PATH_PATTERN = /^\/dev\/tty(?:ACM|USB)\d+$/
 const SERIAL_BY_ID_PATTERN = /^\/dev\/serial\/by-id\/[a-zA-Z0-9._:-]+$/
@@ -20,8 +21,25 @@ export class ArduinoUploadError extends Error {
     this.name = 'ArduinoUploadError'
     this.code = code
     this.status = status
-    this.details = details
+    this.details = sanitizeDiagnosticDetails(details)
   }
+}
+
+function limitDiagnosticString(value) {
+  if (value.length <= MAX_COMMAND_OUTPUT_CHARS) return value
+  return `${value.slice(0, MAX_COMMAND_OUTPUT_CHARS)}... [truncated]`
+}
+
+function sanitizeDiagnosticDetails(value, depth = 0) {
+  if (typeof value === 'string') return limitDiagnosticString(value)
+  if (value == null || typeof value !== 'object') return value
+  if (depth >= 4) return '[truncated]'
+  if (Array.isArray(value)) return value.slice(0, 50).map((item) => sanitizeDiagnosticDetails(item, depth + 1))
+  return Object.fromEntries(
+    Object.entries(value)
+      .slice(0, 50)
+      .map(([key, item]) => [key, sanitizeDiagnosticDetails(item, depth + 1)]),
+  )
 }
 
 export function sketchForAction(action) {
@@ -289,12 +307,12 @@ export async function uploadArduinoSketch(
       boardName: detectedBoard?.boardName ?? null,
       sketchName: request.sketchName,
       compile: {
-        stdout: compile.stdout,
-        stderr: compile.stderr,
+        stdout: limitDiagnosticString(compile.stdout),
+        stderr: limitDiagnosticString(compile.stderr),
       },
       upload: {
-        stdout: upload.stdout,
-        stderr: upload.stderr,
+        stdout: limitDiagnosticString(upload.stdout),
+        stderr: limitDiagnosticString(upload.stderr),
       },
       summary:
         request.action === 'onboard_led_on'

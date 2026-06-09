@@ -57,6 +57,22 @@ test('normalizeUploadRequest rejects unsupported serial ports and malformed FQBN
   )
 })
 
+test('ArduinoUploadError bounds large diagnostic detail strings', () => {
+  const error = new ArduinoUploadError('Failed', {
+    details: {
+      stdout: 'x'.repeat(8_000),
+      nested: {
+        stderr: 'y'.repeat(8_000),
+      },
+    },
+  })
+
+  assert.equal(error.details.stdout.length < 4_100, true)
+  assert.equal(error.details.stdout.endsWith('... [truncated]'), true)
+  assert.equal(error.details.nested.stderr.length < 4_100, true)
+  assert.equal(error.details.nested.stderr.endsWith('... [truncated]'), true)
+})
+
 test('listSerialPorts returns ttyACM and ttyUSB devices', async () => {
   const devDir = await mkdtemp(path.join(os.tmpdir(), 'codex-arduino-dev-'))
   await writeFile(path.join(devDir, 'ttyACM0'), '')
@@ -87,6 +103,23 @@ test('uploadArduinoSketch ignores unsupported detected board addresses and falls
 
   assert.equal(result.port, '/dev/ttyUSB0')
   assert.deepEqual(commands[1].slice(0, 5), ['upload', '-p', '/dev/ttyUSB0', '--fqbn', 'arduino:avr:uno'])
+})
+
+test('uploadArduinoSketch bounds compile and upload command output', async () => {
+  const run = async (args) => ({
+    stdout: `${args[0]} ${'x'.repeat(8_000)}`,
+    stderr: `${args[0]} ${'y'.repeat(8_000)}`,
+  })
+
+  const result = await uploadArduinoSketch(
+    { action: 'onboard_led_on', port: '/dev/ttyACM0', fqbn: 'arduino:avr:uno' },
+    { run, listPorts: async () => ['/dev/ttyACM0'] },
+  )
+
+  assert.equal(result.compile.stdout.length < 4_100, true)
+  assert.equal(result.compile.stderr.endsWith('... [truncated]'), true)
+  assert.equal(result.upload.stdout.length < 4_100, true)
+  assert.equal(result.upload.stderr.endsWith('... [truncated]'), true)
 })
 
 test('uploadArduinoSketch compiles and uploads through arduino-cli', async () => {
