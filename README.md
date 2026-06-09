@@ -71,6 +71,8 @@ After installation, open the app menu and launch **Codex**. The launcher starts 
 
 Realtime-generated HTML presentations are written into the selected workspace under `public/agent-files/` and shown in the in-app browser preview when the Codex task finishes. Preview routes are workspace-scoped and require a real local workspace path; the app does not expose a fixed bundled presentation route.
 
+Codex task routing is also workspace-scoped. The renderer sends the currently selected workspace as `cwd`, and `/api/codex/task` rejects requests that omit a real workspace path instead of falling back to this app's source tree.
+
 ## API Keys
 
 Live voice requires:
@@ -155,6 +157,7 @@ OPENAI_USAGE_GBP_RATE_API=https://api.frankfurter.app/latest?from=USD&to=GBP
 - `/api/usb/events` reports Linux USB serial add/remove events and flags Arduino-like devices.
 - `/api/arduino/upload` compiles and uploads sketches with `arduino-cli`; defaults to `ARDUINO_DEFAULT_FQBN=arduino:avr:uno`.
 - `/api/vision/context` analyzes image and screen context with Responses vision, then the renderer sends the summary into the active Realtime data channel.
+- `/api/codex/task` requires an explicit existing workspace `cwd`; Realtime voice routing only accepts the workspace currently selected in the app.
 - The server persists this client's local workspace/thread state to `CODEX_REALTIME_STATE_PATH`, defaulting to `~/.local/state/codex-realtime-linux/app-state.json`.
 - The server persists Settings-saved API secrets to `CODEX_REALTIME_SECRETS_PATH`, defaulting to `~/.config/codex-realtime-linux/secrets.json`.
 - Removing a workspace in the app hides that workspace from this client's sidebar state only; it does not delete the local folder.
