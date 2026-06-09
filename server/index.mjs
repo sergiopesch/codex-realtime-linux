@@ -1464,11 +1464,8 @@ function isEmptyGeneratedVoiceDraft(conversation) {
 function normalizeConversation(input, workspacePath) {
   const now = new Date().toISOString()
   const title = normalizeBoundedString(input?.title, 'Untitled conversation', MAX_CONVERSATION_TITLE_LENGTH)
-  const id = normalizeBoundedString(
-    input?.id,
-    `${workspacePath}::${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
-    MAX_CONVERSATION_ID_LENGTH,
-  )
+  const id = normalizeBoundedString(input?.id, '', MAX_CONVERSATION_ID_LENGTH)
+  if (!id) return null
   const status = ['draft', 'ready', 'running'].includes(input?.status) ? input.status : 'draft'
 
   return stripLegacyDraftScaffolding({
@@ -1505,6 +1502,7 @@ function normalizeAppState(input) {
         const normalizedConversations = firstUniqueBy(
           conversations
             .map((conversation) => normalizeConversation(conversation, normalizedWorkspacePath))
+            .filter(Boolean)
             .filter((conversation) => !isEmptyGeneratedVoiceDraft(conversation)),
           (conversation) => conversation.id,
         ).slice(0, MAX_LOCAL_CONVERSATIONS_PER_WORKSPACE)

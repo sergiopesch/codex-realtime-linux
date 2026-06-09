@@ -1056,6 +1056,7 @@ test('server bounds persisted app state loaded from disk', async (t) => {
   ]
   const persistedConversations = [
     conversations[0],
+    { title: 'Missing id should be ignored' },
     conversations[1],
     { ...conversations[1], title: 'Duplicate conversation 1' },
     ...conversations.slice(2),
@@ -1107,6 +1108,7 @@ test('server bounds persisted app state loaded from disk', async (t) => {
   assert.equal(Object.keys(state.conversationsByWorkspace).length, 40)
   assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id].length, 80)
   assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id].some((conversation) => conversation.title === 'Voice conversation 7'), false)
+  assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id].some((conversation) => conversation.title === 'Missing id should be ignored'), false)
   assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id][0].title, 'Conversation 1')
   assert.equal(
     state.conversationsByWorkspace[manyWorkspaces[0].id].filter((conversation) => conversation.id === 'conversation-1').length,
