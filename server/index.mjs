@@ -385,6 +385,30 @@ function setArtifactPreviewHeaders(res) {
   })
 }
 
+function setAppShellHeaders(res) {
+  res.set({
+    'Content-Security-Policy': [
+      "default-src 'self'",
+      "script-src 'self'",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: blob:",
+      "font-src 'self' data:",
+      "connect-src 'self' https://api.openai.com",
+      "media-src 'self' blob:",
+      "frame-src 'self'",
+      "object-src 'none'",
+      "base-uri 'none'",
+      "form-action 'self'",
+      "frame-ancestors 'none'",
+    ].join('; '),
+    'Permissions-Policy': 'camera=(), microphone=(self), display-capture=(self), geolocation=(), usb=(), serial=()',
+    'Referrer-Policy': 'no-referrer',
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'Cache-Control': 'no-store',
+  })
+}
+
 function httpError(message, { statusCode = 400, code = 'bad_request' } = {}) {
   const error = new Error(message)
   error.statusCode = statusCode
@@ -2144,8 +2168,9 @@ function handleApiError(error, req, res, next) {
 
 app.use(handleApiError)
 
-app.use(express.static(DIST_DIR))
+app.use(express.static(DIST_DIR, { setHeaders: setAppShellHeaders }))
 app.get(/^(?!\/api(?:\/|$)).*/, (_req, res) => {
+  setAppShellHeaders(res)
   res.sendFile(path.join(DIST_DIR, 'index.html'))
 })
 
