@@ -1277,6 +1277,19 @@ function requireObjectBody(value, label = 'JSON body') {
   throw httpError(`${label} must be a JSON object.`, { statusCode: 400, code: 'invalid_request' })
 }
 
+function requireObjectField(value, label) {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value
+  throw httpError(`${label} must be a JSON object.`, { statusCode: 400, code: 'invalid_request' })
+}
+
+function requireConversationInput(value) {
+  const conversation = requireObjectField(value, 'conversation')
+  if (!normalizeString(conversation.id)) {
+    throw httpError('conversation.id is required.', { statusCode: 400, code: 'invalid_request' })
+  }
+  return conversation
+}
+
 function normalizeWorkspacePath(value) {
   const workspacePath = normalizeString(value)
   return workspacePath && path.isAbsolute(workspacePath) ? path.resolve(workspacePath) : ''
@@ -2165,7 +2178,13 @@ app.post('/api/app-state/workspaces/delete', async (req, res) => {
 
 app.post('/api/app-state/conversations', async (req, res) => {
   const body = normalizeObject(req.body)
-  const conversationInput = normalizeObject(body.conversation)
+  let conversationInput
+  try {
+    conversationInput = requireConversationInput(body.conversation)
+  } catch (error) {
+    sendJsonError(res, error, { fallbackStatus: 400, fallbackCode: 'invalid_request' })
+    return
+  }
   let workspacePath
   try {
     workspacePath = await requireWorkspaceDirectory(body.workspacePath || conversationInput.workspacePath, 'workspacePath')

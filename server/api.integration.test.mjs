@@ -325,7 +325,7 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
     body: '[]',
   })
   assert.equal(nonObjectConversationSave.status, 400)
-  assert.equal((await readJson(nonObjectConversationSave)).code, 'invalid_workspace_path')
+  assert.equal((await readJson(nonObjectConversationSave)).code, 'invalid_request')
 
   const nonObjectConversationPatch = await fetch(`${baseUrl}/api/app-state/conversations`, {
     method: 'PATCH',
@@ -440,6 +440,30 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   })
   assert.equal(missingWorkspaceSave.status, 404)
   assert.equal((await readJson(missingWorkspaceSave)).code, 'workspace_not_found')
+
+  const missingConversationObjectSave = await fetch(`${baseUrl}/api/app-state/conversations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspacePath }),
+  })
+  assert.equal(missingConversationObjectSave.status, 400)
+  assert.equal((await readJson(missingConversationObjectSave)).code, 'invalid_request')
+
+  const nonObjectConversationObjectSave = await fetch(`${baseUrl}/api/app-state/conversations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspacePath, conversation: [] }),
+  })
+  assert.equal(nonObjectConversationObjectSave.status, 400)
+  assert.equal((await readJson(nonObjectConversationObjectSave)).code, 'invalid_request')
+
+  const missingConversationIdSave = await fetch(`${baseUrl}/api/app-state/conversations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspacePath, conversation: { title: 'No id' } }),
+  })
+  assert.equal(missingConversationIdSave.status, 400)
+  assert.equal((await readJson(missingConversationIdSave)).code, 'invalid_request')
 
   const validSave = await fetch(`${baseUrl}/api/app-state/conversations`, {
     method: 'POST',
