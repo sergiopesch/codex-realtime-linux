@@ -1442,8 +1442,7 @@ function App() {
 
   const openArtifactPreview = useCallback((artifact: GeneratedArtifact) => {
     if (activeSystemScreenRef.current || artifact.workspacePath !== selectedWorkspaceRef.current) {
-      closeArtifactPreview()
-      return
+      return false
     }
     setSelectedArtifact(artifact)
     setArtifactPreviewLease({
@@ -1451,7 +1450,8 @@ function App() {
       workspacePath: artifact.workspacePath,
       expiresAt: Date.now() + ARTIFACT_PREVIEW_SESSION_MS,
     })
-  }, [closeArtifactPreview])
+    return true
+  }, [])
 
   const extendArtifactPreview = useCallback(() => {
     setArtifactPreviewLease((current) =>
@@ -1969,10 +1969,13 @@ function App() {
             if (!effectActive) return
             const completedArtifact = artifactData.find((artifact) => artifact.url === pendingArtifactForTurn.url)
             if (completedArtifact) {
-              openArtifactPreview(completedArtifact)
-              setDismissedArtifact(null)
-              setActivity('Artifact ready', completedArtifact.title)
-              showNotice(`Preview ready: ${completedArtifact.relativePath}`)
+              if (openArtifactPreview(completedArtifact)) {
+                setDismissedArtifact(null)
+                setActivity('Artifact ready', completedArtifact.title)
+                showNotice(`Preview ready: ${completedArtifact.relativePath}`)
+              } else {
+                setActivity('Codex work complete')
+              }
             } else {
               setActivity('Codex work complete')
               showNotice(`Codex finished without creating ${pendingArtifactForTurn.relativePath}.`)
@@ -2021,16 +2024,18 @@ function App() {
         const completed = artifactData.find((artifact) => artifact.url === pendingArtifact.url)
         if (!completed) return
 
-        openArtifactPreview(completed)
-        setDismissedArtifact(null)
-        setActivity('Artifact ready', completed.title)
+        const previewOpened = openArtifactPreview(completed)
+        if (previewOpened) {
+          setDismissedArtifact(null)
+          setActivity('Artifact ready', completed.title)
+        }
         if (activeTurnIdRef.current) return
 
         const completedThreadId = activeThreadIdRef.current
         setPendingArtifact(null)
         setActiveCodexTurn(completedThreadId, null)
         markCodexConversationReady(completedThreadId)
-        showNotice(`Preview ready: ${completed.relativePath}`)
+        if (previewOpened) showNotice(`Preview ready: ${completed.relativePath}`)
       } catch {
         if (!effectActive || controller.signal.aborted) return
         // Artifact polling should not interrupt voice or Codex work.
