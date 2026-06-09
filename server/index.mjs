@@ -55,6 +55,7 @@ const MAX_EVENT_STRING_LENGTH = 2_000
 const MAX_EVENT_ARRAY_ITEMS = 20
 const MAX_EVENT_OBJECT_KEYS = 30
 const MAX_EVENT_DEPTH = 4
+const MAX_ERROR_MESSAGE_LENGTH = 500
 const CONFIGURED_CODEX_RPC_TIMEOUT_MS = Number(process.env.CODEX_RPC_TIMEOUT_MS)
 const CODEX_RPC_TIMEOUT_MS =
   Number.isFinite(CONFIGURED_CODEX_RPC_TIMEOUT_MS) && CONFIGURED_CODEX_RPC_TIMEOUT_MS > 0
@@ -237,9 +238,17 @@ function httpError(message, { statusCode = 400, code = 'bad_request' } = {}) {
 function sendJsonError(res, error, { fallbackStatus = 500, fallbackMessage = 'Request failed.', fallbackCode } = {}) {
   const code = error?.statusCode && error?.code ? error.code : fallbackCode
   res.status(error?.statusCode || fallbackStatus).json({
-    error: error instanceof Error ? error.message : fallbackMessage,
+    error: responseErrorMessage(error, fallbackMessage),
     ...(code ? { code } : {}),
   })
+}
+
+function responseErrorMessage(error, fallbackMessage = 'Request failed.') {
+  return normalizeBoundedString(
+    error instanceof Error ? error.message : '',
+    fallbackMessage,
+    MAX_ERROR_MESSAGE_LENGTH,
+  )
 }
 
 function requireText(value, label, { maxLength = 12_000 } = {}) {
@@ -1077,7 +1086,7 @@ async function normalizeUsage(costs, completionUsage) {
       totalCostGbp = cost.total * conversion.rate
       costBucketsGbp = cost.buckets.map((bucket) => ({ ...bucket, value: bucket.value * conversion.rate }))
     } catch (error) {
-      conversionError = error.message
+      conversionError = responseErrorMessage(error, 'GBP conversion failed.')
     }
   } else {
     conversionError = `No GBP conversion is configured for ${nativeCurrency.toUpperCase()}`
@@ -1120,12 +1129,12 @@ async function handleCurrentWeather(req, res) {
     res.json(weather)
   } catch (error) {
     if (error instanceof WeatherServiceError) {
-      res.status(error.status).json({ error: error.message, code: error.code })
+      res.status(error.status).json({ error: responseErrorMessage(error, 'Weather request failed.'), code: error.code })
       return
     }
 
     res.status(500).json({
-      error: error instanceof Error ? error.message : 'Failed to fetch current weather.',
+      error: responseErrorMessage(error, 'Failed to fetch current weather.'),
       code: 'weather_request_failed',
     })
   }
@@ -1238,12 +1247,12 @@ app.post('/api/arduino/upload', async (req, res) => {
     res.json(await uploadArduinoSketch(req.body ?? {}))
   } catch (error) {
     if (error instanceof ArduinoUploadError) {
-      res.status(error.status).json({ error: error.message, code: error.code, details: error.details })
+      res.status(error.status).json({ error: responseErrorMessage(error, 'Arduino upload failed.'), code: error.code, details: error.details })
       return
     }
 
     res.status(500).json({
-      error: error instanceof Error ? error.message : 'Arduino upload failed.',
+      error: responseErrorMessage(error, 'Arduino upload failed.'),
       code: 'arduino_upload_failed',
     })
   }
@@ -1545,7 +1554,11 @@ app.get('/api/workspaces', async (_req, res) => {
     const projects = await openaiGet('/organization/projects?limit=20')
     res.json({ source: 'admin-api', data: projects.data ?? projects })
   } catch (error) {
-    res.json({ source: OPENAI_ADMIN_KEY ? 'admin-api-error' : 'missing-admin-key', error: error.message, data: [] })
+    res.json({
+      source: OPENAI_ADMIN_KEY ? 'admin-api-error' : 'missing-admin-key',
+      error: responseErrorMessage(error, 'OpenAI admin project data is unavailable.'),
+      data: [],
+    })
   }
 })
 
@@ -1562,7 +1575,7 @@ app.get('/api/spend', async (_req, res) => {
   } catch (error) {
     res.json({
       source: OPENAI_ADMIN_KEY ? 'admin-api-error' : 'missing-admin-key',
-      error: error.message,
+      error: responseErrorMessage(error, 'OpenAI usage data is unavailable.'),
       data: {
         periodDays: USAGE_PERIOD_DAYS,
         totalCostGbp: null,
@@ -1613,7 +1626,7 @@ app.get(/^\/workspace-artifacts\/([^/]+)\/([^/]+)\/(.+)$/, async (req, res) => {
       res.status(error.statusCode || 404).send('Not found')
     })
   } catch (error) {
-    res.status(error.statusCode || 400).send(error instanceof Error ? error.message : 'Invalid artifact path')
+    res.status(error.statusCode || 400).send(responseErrorMessage(error, 'Invalid artifact path'))
   }
 })
 
@@ -1638,7 +1651,7 @@ function handleApiError(error, req, res, next) {
 
   const statusCode = error?.statusCode || error?.status || 500
   res.status(statusCode).json({
-    error: error instanceof Error ? error.message : 'API request failed.',
+    error: responseErrorMessage(error, 'API request failed.'),
     code: statusCode >= 500 ? 'api_request_failed' : error?.code || 'api_request_failed',
   })
 }
