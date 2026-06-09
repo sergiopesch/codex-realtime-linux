@@ -708,8 +708,14 @@ const realtimeTranscriptKeyPart = (value: unknown) => {
 }
 
 const realtimeTranscriptIndexPart = (value: unknown, label: string) => {
-  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) return ''
-  return `${label}-${value}`
+  const number =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string' && /^\d+$/.test(value.trim())
+        ? Number(value.trim())
+        : Number.NaN
+  if (!Number.isSafeInteger(number) || number < 0) return ''
+  return `${label}-${number}`
 }
 
 const realtimeErrorMessage = (value: unknown, fallback: string) => {
