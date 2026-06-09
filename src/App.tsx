@@ -243,6 +243,11 @@ type PendingVisualContext = {
   sessionId: number | null
 }
 
+type VoiceTranscriptTarget = {
+  workspacePath: string
+  conversationId: string
+}
+
 type DirectoryPickerWindow = Window & {
   showDirectoryPicker?: () => Promise<{ name?: string }>
 }
@@ -1097,6 +1102,7 @@ function App() {
   const waveformFrameRef = useRef<number | null>(null)
   const voiceStateRef = useRef<'idle' | 'connecting' | 'live'>('idle')
   const voiceSessionIdRef = useRef(0)
+  const voiceStartInFlightRef = useRef(false)
   const voiceAbortControllerRef = useRef<AbortController | null>(null)
   const weatherRequestIdRef = useRef(0)
   const microphoneStreamRef = useRef<MediaStream | null>(null)
@@ -1113,6 +1119,7 @@ function App() {
   const handledRealtimeFunctionCallIdsRef = useRef<Set<string>>(new Set())
   const selectedWorkspaceRef = useRef(initialWorkspacePath)
   const savedTranscriptSignatureRef = useRef('')
+  const voiceTranscriptTargetRef = useRef<VoiceTranscriptTarget | null>(null)
   const artifactRefreshRequestIdsRef = useRef<Record<string, number>>({})
   const routableWorkspacePathsRef = useRef<Set<string>>(new Set())
   const seenUsbEventIdsRef = useRef<Set<string>>(new Set())
@@ -1787,14 +1794,7 @@ function App() {
     if (mobileSidebarShouldCollapse()) setSidebarCollapsed(true)
   }
 
-  const createConversation = async (targetWorkspacePath?: string) => {
-    const requestedWorkspacePath = normalizeAbsoluteLocalWorkspacePath(targetWorkspacePath ?? selectedWorkspace)
-    const workspacePath = workspaceRoots.some((root) => root.workspacePath === requestedWorkspacePath) ? requestedWorkspacePath : ''
-    if (!workspacePath) {
-      showNotice('Add or select a workspace before starting a voice build.')
-      return
-    }
-    const existing = conversationsByWorkspace[workspacePath] ?? []
+  const saveLocalDraftConversation = async (workspacePath: string, existing: AgentConversation[]) => {
     const title = nextVoiceConversationTitle(existing)
     const conversation = {
       ...makeDraftConversation(workspacePath, title, 'draft', 'draft'),
@@ -1803,22 +1803,54 @@ function App() {
       updatedAt: new Date().toISOString(),
     }
 
+    const savedConversation = await api<{ conversation: AgentConversation }>('/api/app-state/conversations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workspacePath, conversation: savedConversationPayload(conversation) }),
+    })
+    const conversationResponse = requireSafeConversation(savedConversation.conversation, workspacePath)
+    setConversationsByWorkspace((current) => ({
+      ...current,
+      [workspacePath]: mergeConversations(current[workspacePath] ?? existing, [conversationResponse]),
+    }))
+    return { conversation: conversationResponse, title }
+  }
+
+  const createConversation = async (targetWorkspacePath?: string) => {
+    const requestedWorkspacePath = normalizeAbsoluteLocalWorkspacePath(targetWorkspacePath ?? selectedWorkspace)
+    const workspacePath = workspaceRoots.some((root) => root.workspacePath === requestedWorkspacePath) ? requestedWorkspacePath : ''
+    if (!workspacePath) {
+      showNotice('Add or select a workspace before starting a voice build.')
+      return
+    }
+    const existing = conversationsByWorkspace[workspacePath] ?? []
+
     try {
-      const savedConversation = await api<{ conversation: AgentConversation }>('/api/app-state/conversations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workspacePath, conversation: savedConversationPayload(conversation) }),
-      })
-      const conversationResponse = requireSafeConversation(savedConversation.conversation, workspacePath)
-      setConversationsByWorkspace((current) => ({
-        ...current,
-        [workspacePath]: mergeConversations(current[workspacePath] ?? existing, [conversationResponse]),
-      }))
-      openConversationWindow(workspacePath, conversationResponse.id)
-      showNotice(`${title} opened as a new agent conversation window. Start voice to describe the build goal.`)
+      const created = await saveLocalDraftConversation(workspacePath, existing)
+      openConversationWindow(workspacePath, created.conversation.id)
+      showNotice(`${created.title} opened as a new agent conversation window. Start voice to describe the build goal.`)
     } catch (error) {
       setLastError(displayErrorMessage(error, 'Failed to save agent conversation'))
     }
+  }
+
+  const ensureVoiceTranscriptTarget = async (): Promise<VoiceTranscriptTarget> => {
+    const workspacePath = normalizeAbsoluteLocalWorkspacePath(selectedWorkspace)
+    if (!workspaceRoots.some((root) => root.workspacePath === workspacePath)) {
+      throw new Error('Add or select a workspace before starting a voice build.')
+    }
+
+    const existing = conversationsByWorkspace[workspacePath] ?? []
+    const selectedConversation = existing.find((conversation) => conversation.id === selectedConversationId)
+    if (selectedConversation) return { workspacePath, conversationId: selectedConversation.id }
+
+    const created = await saveLocalDraftConversation(workspacePath, existing)
+    setSelectedWorkspace(workspacePath)
+    setSelectedConversationId(created.conversation.id)
+    setActiveSystemScreen(null)
+    closeArtifactPreview()
+    showNotice(`${created.title} opened as the voice transcript thread.`)
+    return { workspacePath, conversationId: created.conversation.id }
   }
 
   const addWorkspaceFromFolder = async ({ name: rawName, path: rawPath }: { name: string; path?: string }) => {
@@ -2061,34 +2093,36 @@ function App() {
   }, [routableWorkspacePaths])
 
   useEffect(() => {
-    if (!selectedWorkspace || !selectedConversationId || realtimeTranscript.length === 0) return
+    const transcriptTarget = voiceTranscriptTargetRef.current
+    if (!transcriptTarget || realtimeTranscript.length === 0) return
     const transcript = savedRealtimeTranscriptLines(realtimeTranscript)
     if (transcript.length === 0) return
 
-    const signature = JSON.stringify({ workspacePath: selectedWorkspace, conversationId: selectedConversationId, transcript })
+    const { workspacePath, conversationId } = transcriptTarget
+    const signature = JSON.stringify({ workspacePath, conversationId, transcript })
     if (savedTranscriptSignatureRef.current === signature) return
 
     const timeout = window.setTimeout(() => {
       savedTranscriptSignatureRef.current = signature
       setConversationsByWorkspace((current) => {
-        const conversations = current[selectedWorkspace] ?? []
-        const index = conversations.findIndex((conversation) => conversation.id === selectedConversationId)
+        const conversations = current[workspacePath] ?? []
+        const index = conversations.findIndex((conversation) => conversation.id === conversationId)
         if (index === -1) return current
         const next = [...conversations]
         next[index] = { ...next[index], transcript, updatedAt: new Date().toISOString() }
-        return { ...current, [selectedWorkspace]: next }
+        return { ...current, [workspacePath]: next }
       })
 
       void api<{ conversation: AgentConversation }>('/api/app-state/conversations', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workspacePath: selectedWorkspace, conversationId: selectedConversationId, patch: { transcript } }),
+        body: JSON.stringify({ workspacePath, conversationId, patch: { transcript } }),
       })
         .then((savedConversation) => {
-          const conversation = requireSafeConversation(savedConversation.conversation, selectedWorkspace)
+          const conversation = requireSafeConversation(savedConversation.conversation, workspacePath)
           setConversationsByWorkspace((current) => ({
             ...current,
-            [selectedWorkspace]: mergeConversations(current[selectedWorkspace] ?? [], [conversation]),
+            [workspacePath]: mergeConversations(current[workspacePath] ?? [], [conversation]),
           }))
         })
         .catch((error: unknown) => {
@@ -2099,7 +2133,7 @@ function App() {
     }, REALTIME_TRANSCRIPT_SAVE_DEBOUNCE_MS)
 
     return () => window.clearTimeout(timeout)
-  }, [realtimeTranscript, selectedConversationId, selectedWorkspace])
+  }, [realtimeTranscript])
 
   useEffect(() => {
     activeThreadIdRef.current = activeThreadId
@@ -2624,10 +2658,20 @@ function App() {
   }
 
   const startVoice = async () => {
-    if (voiceStateRef.current !== 'idle') return
+    if (voiceStateRef.current !== 'idle' || voiceStartInFlightRef.current) return
 
     if (!voiceReady) {
       showNotice('Add an OpenAI API key in Settings to start a live Realtime voice session.')
+      return
+    }
+
+    voiceStartInFlightRef.current = true
+    let transcriptTarget: VoiceTranscriptTarget
+    try {
+      transcriptTarget = await ensureVoiceTranscriptTarget()
+    } catch (error) {
+      voiceStartInFlightRef.current = false
+      setLastError(displayErrorMessage(error, 'Failed to prepare voice conversation'))
       return
     }
 
@@ -2636,7 +2680,10 @@ function App() {
     setVoiceMuted(false)
     setRealtimeTranscript([])
     handledRealtimeFunctionCallIdsRef.current.clear()
+    voiceTranscriptTargetRef.current = transcriptTarget
+    savedTranscriptSignatureRef.current = ''
     setActivity('Voice router', 'Connecting')
+    voiceStartInFlightRef.current = false
     const sessionId = voiceSessionIdRef.current + 1
     voiceSessionIdRef.current = sessionId
     const sessionAbortController = new AbortController()
