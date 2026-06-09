@@ -1113,7 +1113,7 @@ function App() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ imageDataUrl, source }),
     })
-    setVisualContextLabel(source)
+    setVisualContextLabel(context.source)
     const injected = injectVisualContextIntoRealtime(context.source, context.summary)
     if (!injected) {
       pendingVisualContextRef.current = [
@@ -1123,7 +1123,7 @@ function App() {
     }
     appendEvent('context/visual-attached', { source: context.source, model: context.model, injected })
     setActivity('Voice router', 'Vision context', injected ? 'Realtime updated' : 'Ready for voice')
-    showNotice(injected ? `${source} attached to Realtime.` : `${source} analyzed. Start voice to use it live.`)
+    showNotice(injected ? `${context.source} attached to Realtime.` : `${context.source} analyzed. Start voice to use it live.`)
     return context
   }
 
