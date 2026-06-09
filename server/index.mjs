@@ -2161,7 +2161,13 @@ app.patch('/api/app-state/conversations', async (req, res) => {
       }
 
       const next = [...conversations]
-      next[index] = normalizeConversation({ ...conversations[index], ...req.body.patch, updatedAt: new Date().toISOString() }, workspacePath)
+      next[index] = normalizeConversation({
+        ...conversations[index],
+        ...req.body.patch,
+        id: conversations[index].id,
+        workspacePath,
+        updatedAt: new Date().toISOString(),
+      }, workspacePath)
       state.conversationsByWorkspace[workspacePath] = next
       return next[index]
     })

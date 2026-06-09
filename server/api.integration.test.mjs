@@ -456,6 +456,29 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   let stateAfterMissingConversationMutation = await (await fetch(`${baseUrl}/api/app-state`)).json()
   assert.equal(stateAfterMissingConversationMutation.conversationsByWorkspace[emptyStateWorkspacePath], undefined)
 
+  const conflictingPatch = await fetch(`${baseUrl}/api/app-state/conversations`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      workspacePath,
+      conversationId: 'ok',
+      patch: {
+        id: 'rewritten-id',
+        workspacePath: emptyStateWorkspacePath,
+        title: 'Patched title',
+        status: 'ready',
+      },
+    }),
+  })
+  assert.equal(conflictingPatch.status, 200)
+  const conflictingPatchBody = await conflictingPatch.json()
+  assert.equal(conflictingPatchBody.conversation.id, 'ok')
+  assert.equal(conflictingPatchBody.conversation.workspacePath, workspacePath)
+  assert.equal(conflictingPatchBody.conversation.title, 'Patched title')
+  assert.equal(conflictingPatchBody.state.conversationsByWorkspace[workspacePath][0].id, boundedBody.conversation.id)
+  assert.equal(conflictingPatchBody.state.conversationsByWorkspace[workspacePath][1].id, 'ok')
+  assert.equal(conflictingPatchBody.state.conversationsByWorkspace[emptyStateWorkspacePath], undefined)
+
   const invalidConversationDelete = await fetch(`${baseUrl}/api/app-state/conversations/delete`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
