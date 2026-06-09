@@ -266,6 +266,14 @@ test('persisted workspaces and conversations require absolute workspace paths', 
   assert.doesNotMatch(serverSource, /data: projects\.data \?\? projects/)
   assert.match(serverSource, /workspacePath = await requireWorkspaceDirectory\(req\.body\.workspacePath \|\| req\.body\.conversation\?\.workspacePath, 'workspacePath'\)/)
   assert.match(serverSource, /workspacePath = await requireWorkspaceDirectory\(req\.body\.workspacePath, 'workspacePath'\)/)
+  assert.match(
+    serverSource,
+    /app\.post\('\/api\/app-state\/conversations\/delete'[\s\S]*workspacePath = await requireWorkspaceDirectory\(req\.body\.workspacePath, 'workspacePath'\)/,
+  )
+  assert.doesNotMatch(
+    serverSource,
+    /app\.post\('\/api\/app-state\/conversations\/delete'[\s\S]*const workspacePath = normalizeWorkspacePath\(req\.body\.workspacePath\)/,
+  )
   assert.match(serverSource, /workspacePath must be an absolute local path/)
   assert.match(serverSource, /conversationId was not found in this workspace/)
   assert.match(serverSource, /conversation_not_found/)

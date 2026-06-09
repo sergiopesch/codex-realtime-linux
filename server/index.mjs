@@ -1900,17 +1900,24 @@ app.patch('/api/app-state/conversations', async (req, res) => {
 })
 
 app.post('/api/app-state/conversations/delete', async (req, res) => {
-  const workspacePath = normalizeWorkspacePath(req.body.workspacePath)
   const conversationId = normalizeString(req.body.conversationId)
-  if (!workspacePath || !conversationId) {
+  if (!conversationId) {
     sendJsonError(
       res,
-      httpError('absolute workspacePath and conversationId are required', {
+      httpError('conversationId is required', {
         statusCode: 400,
         code: 'invalid_request',
       }),
       { fallbackStatus: 400, fallbackCode: 'invalid_request' },
     )
+    return
+  }
+
+  let workspacePath
+  try {
+    workspacePath = await requireWorkspaceDirectory(req.body.workspacePath, 'workspacePath')
+  } catch (error) {
+    sendJsonError(res, error, { fallbackStatus: 400, fallbackMessage: 'Invalid workspace path.' })
     return
   }
 

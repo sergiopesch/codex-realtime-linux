@@ -333,6 +333,17 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   })
   assert.equal(invalidConversationDelete.status, 400)
   assert.equal((await readJson(invalidConversationDelete)).code, 'invalid_request')
+
+  const missingWorkspaceDelete = await fetch(`${baseUrl}/api/app-state/conversations/delete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      workspacePath: path.join(os.tmpdir(), 'missing-codex-realtime-conversation-delete'),
+      conversationId: 'ok',
+    }),
+  })
+  assert.equal(missingWorkspaceDelete.status, 404)
+  assert.equal((await readJson(missingWorkspaceDelete)).code, 'workspace_not_found')
 })
 
 test('server returns json errors for oversized API request bodies', async (t) => {
