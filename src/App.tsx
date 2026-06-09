@@ -399,6 +399,12 @@ const boundedRealtimeTranscriptId = (value: unknown) =>
 const boundedRealtimeTranscriptText = (value: unknown) =>
   boundedPlainString(value, '', MAX_REALTIME_TRANSCRIPT_TEXT_LENGTH)
 
+const realtimeErrorMessage = (value: unknown, fallback: string) => {
+  if (!value || typeof value !== 'object') return fallback
+  const message = (value as UnknownRecord).message
+  return boundedRealtimeTranscriptText(typeof message === 'string' && message.trim() ? `${fallback}: ${message.trim()}` : fallback)
+}
+
 const displayErrorMessage = (error: unknown, fallback: string) => {
   const rawMessage = error instanceof Error ? error.message : ''
   return boundedPlainString(rawMessage, fallback, MAX_UI_ERROR_MESSAGE_LENGTH)
@@ -736,6 +742,11 @@ function App() {
 
     if (type === 'conversation.item.input_audio_transcription.completed') {
       updateTranscriptLine(`user-${itemId}`, 'user', typeof message.transcript === 'string' ? message.transcript : '', 'replace', 'done')
+      return
+    }
+
+    if (type === 'conversation.item.input_audio_transcription.failed') {
+      updateTranscriptLine(`user-${itemId}`, 'user', realtimeErrorMessage(message.error, 'Input transcription failed'), 'replace', 'done')
       return
     }
 
