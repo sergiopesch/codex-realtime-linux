@@ -108,13 +108,13 @@ The desktop app starts the local API server through the Electron runtime by defa
 CODEX_REALTIME_NODE_BIN=/absolute/path/to/node
 ```
 
-Codex app-server RPC calls are bounded so the desktop app does not hang indefinitely if the local Codex bridge stalls. Override the timeout only when you have a known long-running local app-server operation:
+Codex app-server RPC calls are bounded so the desktop app does not hang indefinitely if the local Codex bridge stalls. Override the timeout only when you have a known long-running local app-server operation. Values must be whole milliseconds from `1000` to `600000`; invalid or larger values fall back to `120000`:
 
 ```bash
 CODEX_RPC_TIMEOUT_MS=120000
 ```
 
-OpenAI, admin usage, vision, Realtime token, and exchange-rate HTTP calls are also bounded so startup and settings flows fail cleanly when upstream services stall:
+OpenAI, admin usage, vision, Realtime token, and exchange-rate HTTP calls are also bounded so startup and settings flows fail cleanly when upstream services stall. Values must be whole milliseconds from `1000` to `120000`; invalid or larger values fall back to `20000`:
 
 ```bash
 UPSTREAM_FETCH_TIMEOUT_MS=20000
