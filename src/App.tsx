@@ -257,6 +257,7 @@ const MAX_REALTIME_EVENT_MESSAGE_LENGTH = 120_000
 const MAX_REALTIME_FUNCTION_ARGUMENTS_LENGTH = 80_000
 const MAX_REALTIME_FUNCTION_OUTPUT_LENGTH = 32_000
 const MAX_REALTIME_TOOL_TEXT_LENGTH = 8_000
+const MAX_REALTIME_FUNCTION_CALL_ID_LENGTH = 240
 const MAX_HANDLED_REALTIME_FUNCTION_CALL_IDS = 240
 const MAX_REALTIME_TRANSCRIPT_LINES = 80
 const MAX_REALTIME_TRANSCRIPT_ID_LENGTH = 240
@@ -575,6 +576,12 @@ const requireRealtimeToolText = (value: unknown, label: string, maxLength = MAX_
   const text = value.trim()
   if (text.length > maxLength) throw new Error(`${label} is too long.`)
   return text
+}
+
+const realtimeFunctionCallId = (value: unknown) => {
+  if (typeof value !== 'string') return ''
+  const callId = value.trim()
+  return callId.length > 0 && callId.length <= MAX_REALTIME_FUNCTION_CALL_ID_LENGTH ? callId : ''
 }
 
 const rememberRealtimeFunctionCallId = (seenIds: Set<string>, callId: string) => {
@@ -1952,13 +1959,13 @@ function App() {
     const responseChannel = dataChannelRef.current
     const toolName = typeof item.name === 'string' ? item.name : ''
 
-    if (typeof item.call_id !== 'string' || !item.call_id.trim()) {
-      const error = 'Realtime function call did not include a call_id.'
+    const callId = realtimeFunctionCallId(item.call_id)
+    if (!callId) {
+      const error = 'Realtime function call did not include a valid call_id.'
       setLastError(error)
       appendEvent('realtime/function-call-invalid', { error, name: toolName })
       return
     }
-    const callId = item.call_id.trim()
     if (!rememberRealtimeFunctionCallId(handledRealtimeFunctionCallIdsRef.current, callId)) {
       appendEvent('realtime/function-call-duplicate-ignored', { name: toolName, callId })
       return
@@ -2098,7 +2105,7 @@ function App() {
     }
 
     if (!responseChannel || responseChannel !== dataChannelRef.current || responseChannel.readyState !== 'open') {
-      appendEvent('realtime/function-call-output-dropped', { name: toolName, callId: item.call_id })
+      appendEvent('realtime/function-call-output-dropped', { name: toolName, callId })
       return
     }
 
