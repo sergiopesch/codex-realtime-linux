@@ -263,6 +263,14 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   assert.equal(formUpload.status, 415)
   assert.equal((await readJson(formUpload)).code, 'json_required')
 
+  const nonObjectArduinoUpload = await fetch(`${baseUrl}/api/arduino/upload`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '[]',
+  })
+  assert.equal(nonObjectArduinoUpload.status, 400)
+  assert.equal((await readJson(nonObjectArduinoUpload)).code, 'invalid_request')
+
   const appShell = await fetch(`${baseUrl}/`)
   assert.equal(appShell.status, 200)
   assert.equal(appShell.headers.has('x-powered-by'), false)

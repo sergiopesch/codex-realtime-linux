@@ -1240,6 +1240,12 @@ function normalizeObject(value) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value : {}
 }
 
+function requireObjectBody(value, label = 'JSON body') {
+  if (value == null) return {}
+  if (typeof value === 'object' && !Array.isArray(value)) return value
+  throw httpError(`${label} must be a JSON object.`, { statusCode: 400, code: 'invalid_request' })
+}
+
 function normalizeWorkspacePath(value) {
   const workspacePath = normalizeString(value)
   return workspacePath && path.isAbsolute(workspacePath) ? path.resolve(workspacePath) : ''
@@ -1849,16 +1855,17 @@ app.get('/api/arduino/status', async (_req, res) => {
 
 app.post('/api/arduino/upload', async (req, res) => {
   try {
-    res.json(await uploadArduinoSketch(req.body ?? {}))
+    res.json(await uploadArduinoSketch(requireObjectBody(req.body, 'Arduino upload request')))
   } catch (error) {
     if (error instanceof ArduinoUploadError) {
       res.status(error.status).json({ error: responseErrorMessage(error, 'Arduino upload failed.'), code: error.code, details: error.details })
       return
     }
 
-    res.status(500).json({
-      error: responseErrorMessage(error, 'Arduino upload failed.'),
-      code: 'arduino_upload_failed',
+    sendJsonError(res, error, {
+      fallbackStatus: 500,
+      fallbackMessage: 'Arduino upload failed.',
+      fallbackCode: 'arduino_upload_failed',
     })
   }
 })
