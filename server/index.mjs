@@ -1087,6 +1087,16 @@ class CodexRpc {
       })
       return
     }
+    if (!message || typeof message !== 'object' || Array.isArray(message)) {
+      this.recordNotification({
+        method: 'app-server/unexpected-line',
+        params: {
+          type: Array.isArray(message) ? 'array' : typeof message,
+          at: new Date().toISOString(),
+        },
+      })
+      return
+    }
 
     if (message.id != null && this.pending.has(message.id)) {
       const { resolve, reject, timeout } = this.pending.get(message.id)
