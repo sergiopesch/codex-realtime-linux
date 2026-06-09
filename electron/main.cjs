@@ -57,6 +57,7 @@ const trustedRendererOrigins = new Set([
   ...(devServerUrl ? [new URL(devServerUrl).origin] : []),
 ])
 const desktopAllowedPermissions = new Set(['media', 'display-capture'])
+const externalNavigationProtocols = new Set(['https:', 'mailto:'])
 const apiNodeBin = configuredAbsolutePath(process.env.CODEX_REALTIME_NODE_BIN, process.execPath)
 const apiNodeUsesElectronRuntime = apiNodeBin === process.execPath
 const desktopServerToken = randomUUID()
@@ -68,19 +69,33 @@ const maxLogBytes = 1024 * 1024
 const maxElectronErrorDetailLength = 500
 const maxApiLogErrorTailLength = 2000
 const maxApiProbeBytes = 64 * 1024
+const maxExternalNavigationUrlLength = 2048
 const staleDesktopServerShutdownGraceMs = 2000
 let apiProcess = null
 let apiLogFd = null
 
-const openExternalIfAllowed = (url) => {
+const normalizedExternalNavigationUrl = (url) => {
+  if (typeof url !== 'string') return ''
+  const trimmedUrl = url.trim()
+  if (!trimmedUrl || trimmedUrl.length > maxExternalNavigationUrlLength) return ''
+
   try {
-    const parsed = new URL(url)
-    if (!['http:', 'https:', 'mailto:'].includes(parsed.protocol)) return
-    if (trustedRendererOrigins.has(parsed.origin)) return
-    void shell.openExternal(url).catch(() => {})
+    const parsed = new URL(trimmedUrl)
+    if (!externalNavigationProtocols.has(parsed.protocol)) return ''
+    if (parsed.username || parsed.password) return ''
+    if (parsed.protocol === 'https:') {
+      if (!parsed.hostname || localAppHostnames.has(parsed.hostname) || trustedRendererOrigins.has(parsed.origin)) return ''
+    }
+    return parsed.href
   } catch {
-    // Ignore invalid external URLs from renderer content.
+    return ''
   }
+}
+
+const openExternalIfAllowed = (url) => {
+  const normalizedUrl = normalizedExternalNavigationUrl(url)
+  if (!normalizedUrl) return
+  void shell.openExternal(normalizedUrl).catch(() => {})
 }
 
 const boundedErrorDetail = (error, fallback = 'Unexpected desktop startup error.') => {
