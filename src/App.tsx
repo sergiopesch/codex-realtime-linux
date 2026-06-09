@@ -1364,7 +1364,10 @@ function App() {
   }, [])
 
   useEffect(() => {
-    const interval = window.setInterval(async () => {
+    let pollInFlight = false
+    const pollCodexEvents = async () => {
+      if (pollInFlight) return
+      pollInFlight = true
       try {
         const data = await api<{ data: EventRecord[] }>('/api/codex/events')
         setEvents((current) => mergeEvents(current, data.data))
@@ -1391,14 +1394,21 @@ function App() {
         }
       } catch {
         // The app-server may not be started until the first Codex action.
+      } finally {
+        pollInFlight = false
       }
-    }, 1800)
+    }
 
+    void pollCodexEvents()
+    const interval = window.setInterval(() => void pollCodexEvents(), 1800)
     return () => window.clearInterval(interval)
   }, [])
 
   useEffect(() => {
+    let pollInFlight = false
     const pollArtifacts = async () => {
+      if (pollInFlight) return
+      pollInFlight = true
       try {
         const artifactData = await refreshArtifacts(pendingArtifact?.workspacePath ?? selectedWorkspaceRef.current)
         if (!pendingArtifact) {
@@ -1416,6 +1426,8 @@ function App() {
         showNotice(`Preview ready: ${completed.relativePath}`)
       } catch {
         // Artifact polling should not interrupt voice or Codex work.
+      } finally {
+        pollInFlight = false
       }
     }
 
@@ -1425,7 +1437,10 @@ function App() {
   }, [pendingArtifact, refreshArtifacts, selectLatestArtifact])
 
   useEffect(() => {
+    let pollInFlight = false
     const pollUsbEvents = async () => {
+      if (pollInFlight) return
+      pollInFlight = true
       try {
         const data = await api<UsbEventsResponse>(`/api/usb/events${usbInitializedRef.current ? '' : '?scan=true'}`)
         setStatus((current) => current ? { ...current, usb: data.status } : current)
@@ -1484,6 +1499,8 @@ function App() {
               }
             : current,
         )
+      } finally {
+        pollInFlight = false
       }
     }
 
