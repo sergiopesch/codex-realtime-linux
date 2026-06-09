@@ -238,6 +238,10 @@ type DesktopWindow = Window & {
 const initialWorkspacePath = ''
 const DEFAULT_API_TIMEOUT_MS = 130_000
 const REALTIME_CONNECTION_TIMEOUT_MS = 30_000
+const MAX_UI_EVENT_STRING_LENGTH = 2_000
+const MAX_UI_EVENT_ARRAY_ITEMS = 20
+const MAX_UI_EVENT_OBJECT_KEYS = 30
+const MAX_UI_EVENT_DEPTH = 6
 
 const fetchWithTimeout = async (input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = DEFAULT_API_TIMEOUT_MS) => {
   const controller = new AbortController()
@@ -334,6 +338,37 @@ const savedConversationPayload = (conversation: AgentConversation) => ({
   updatedAt: new Date().toISOString(),
 })
 
+const boundedEventString = (value: unknown, fallback = '') => {
+  const text = typeof value === 'string' && value.trim() ? value.trim() : fallback
+  return text.length > MAX_UI_EVENT_STRING_LENGTH ? `${text.slice(0, MAX_UI_EVENT_STRING_LENGTH - 3)}...` : text
+}
+
+const normalizeUiEventValue = (value: unknown, depth = 0, seen = new WeakSet<object>()): unknown => {
+  if (value == null || typeof value === 'number' || typeof value === 'boolean') return value
+  if (typeof value === 'string') return boundedEventString(value)
+  if (depth >= MAX_UI_EVENT_DEPTH) return '[truncated]'
+  if (Array.isArray(value)) {
+    return value.slice(0, MAX_UI_EVENT_ARRAY_ITEMS).map((item) => normalizeUiEventValue(item, depth + 1, seen))
+  }
+  if (typeof value !== 'object') return undefined
+  if (seen.has(value)) return '[circular]'
+  seen.add(value)
+
+  const normalized: UnknownRecord = {}
+  for (const [key, item] of Object.entries(value).slice(0, MAX_UI_EVENT_OBJECT_KEYS)) {
+    const normalizedKey = boundedEventString(key, 'field')
+    const normalizedValue = normalizeUiEventValue(item, depth + 1, seen)
+    if (normalizedKey && normalizedValue !== undefined) normalized[normalizedKey] = normalizedValue
+  }
+  return normalized
+}
+
+const normalizeUiEventRecord = (event: EventRecord): EventRecord => ({
+  method: boundedEventString(event.method, 'event'),
+  receivedAt: typeof event.receivedAt === 'string' ? event.receivedAt : new Date().toISOString(),
+  params: (normalizeUiEventValue(event.params) as Record<string, unknown> | undefined) ?? {},
+})
+
 const eventKey = (event: EventRecord) => `${event.method ?? 'event'}::${event.receivedAt ?? ''}`
 const completedCodexTurnWords = new Set(['complete', 'completed', 'done', 'finished', 'failed', 'failure', 'cancelled', 'canceled'])
 const normalizeAbsoluteLocalWorkspacePath = (workspacePath: string) => {
@@ -370,7 +405,7 @@ const realtimeFunctionCallItem = (message: Record<string, unknown>): RealtimeFun
 
 const mergeEvents = (current: EventRecord[], incoming: EventRecord[]) => {
   const seen = new Set<string>()
-  return [...incoming, ...current].filter((event) => {
+  return [...incoming.map(normalizeUiEventRecord), ...current.map(normalizeUiEventRecord)].filter((event) => {
     const key = eventKey(event)
     if (seen.has(key)) return false
     seen.add(key)
@@ -1609,13 +1644,7 @@ function App() {
         recordRealtimeTranscript(message)
         const functionCallItem = realtimeFunctionCallItem(message)
         if (functionCallItem) setActivity('Voice router', functionCallItem.name ?? 'Tool call')
-        setEvents((current) =>
-          mergeEvents(current, [{
-            method: typeof message.type === 'string' ? message.type : 'realtime/event',
-            receivedAt: new Date().toISOString(),
-            params: message,
-          }]),
-        )
+        appendEvent(typeof message.type === 'string' ? message.type : 'realtime/event', message)
         handleRealtimeToolCall(message).catch((error: unknown) => {
           setLastError(error instanceof Error ? error.message : 'Realtime tool call failed')
         })
