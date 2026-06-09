@@ -367,6 +367,8 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
         ],
         source: 'demo',
         codexThreadId: oversizedText,
+        createdAt: oversizedText,
+        updatedAt: 'not-a-timestamp',
       },
     }),
   })
@@ -385,6 +387,10 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   assert.equal(boundedBody.conversation.transcript[0].text.length, 8000)
   assert.equal(boundedBody.conversation.source, 'local')
   assert.equal(boundedBody.conversation.codexThreadId.length, 240)
+  assert.match(boundedBody.conversation.createdAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
+  assert.match(boundedBody.conversation.updatedAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
+  assert.notEqual(boundedBody.conversation.createdAt, oversizedText)
+  assert.notEqual(boundedBody.conversation.updatedAt, 'not-a-timestamp')
 
   const missingPatchId = await fetch(`${baseUrl}/api/app-state/conversations`, {
     method: 'PATCH',

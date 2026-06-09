@@ -64,6 +64,7 @@ const MAX_CONVERSATION_TEXT_LENGTH = 8_000
 const MAX_CONVERSATION_TRACE_LENGTH = 500
 const MAX_CONVERSATION_TRACES = 40
 const MAX_CONVERSATION_TRANSCRIPT_LINES = 200
+const MAX_CONVERSATION_TIMESTAMP_LENGTH = 80
 const MAX_LOCAL_WORKSPACES = 40
 const MAX_LOCAL_HIDDEN_WORKSPACES = 80
 const MAX_LOCAL_WORKSPACE_BUCKETS = 40
@@ -1174,6 +1175,13 @@ function normalizeWorkspacePath(value) {
   return workspacePath && path.isAbsolute(workspacePath) ? path.resolve(workspacePath) : ''
 }
 
+function normalizeIsoTimestamp(value, fallback) {
+  const text = normalizeBoundedString(value, '', MAX_CONVERSATION_TIMESTAMP_LENGTH)
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(text)) return fallback
+  const timestamp = Date.parse(text)
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : fallback
+}
+
 async function requireWorkspaceDirectory(value, label = 'workspacePath') {
   const workspacePath = normalizeString(value)
   if (!workspacePath) {
@@ -1292,6 +1300,7 @@ function isEmptyGeneratedVoiceDraft(conversation) {
 }
 
 function normalizeConversation(input, workspacePath) {
+  const now = new Date().toISOString()
   const title = normalizeBoundedString(input?.title, 'Untitled conversation', MAX_CONVERSATION_TITLE_LENGTH)
   const id = normalizeBoundedString(
     input?.id,
@@ -1312,8 +1321,8 @@ function normalizeConversation(input, workspacePath) {
     source: ['local', 'codex'].includes(input?.source) ? input.source : 'local',
     codexThreadId: normalizeBoundedString(input?.codexThreadId, '', MAX_CONVERSATION_ID_LENGTH) || null,
     workspacePath,
-    createdAt: typeof input?.createdAt === 'string' ? input.createdAt : new Date().toISOString(),
-    updatedAt: typeof input?.updatedAt === 'string' ? input.updatedAt : new Date().toISOString(),
+    createdAt: normalizeIsoTimestamp(input?.createdAt, now),
+    updatedAt: normalizeIsoTimestamp(input?.updatedAt, now),
   })
 }
 
