@@ -193,6 +193,8 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
 
   const invalidToken = await fetch(`${baseUrl}/workspace-artifacts/not-a-workspace-token/sample-report/index.html`)
   assert.equal(invalidToken.status, 400)
+  assert.equal(invalidToken.headers.get('x-content-type-options'), 'nosniff')
+  assert.match(invalidToken.headers.get('content-security-policy') ?? '', /connect-src 'none'/)
   assert.match(await invalidToken.text(), /Invalid workspace token/)
 
   const oversizedToken = await fetch(`${baseUrl}/workspace-artifacts/${'a'.repeat(8193)}/sample-report/index.html`)

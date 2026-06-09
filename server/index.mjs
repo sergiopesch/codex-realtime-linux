@@ -2102,6 +2102,11 @@ app.get('/api/artifacts', async (req, res) => {
   }
 })
 
+app.use('/workspace-artifacts', (_req, res, next) => {
+  setArtifactPreviewHeaders(res)
+  next()
+})
+
 app.get(/^\/workspace-artifacts\/([^/]+)\/([^/]+)\/(.+)$/, async (req, res) => {
   try {
     const token = req.params[0]

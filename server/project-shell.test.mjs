@@ -149,6 +149,7 @@ test('artifact previews are served through workspace-scoped routes only', async 
   assert.match(appShellHeadersSource, /X-Frame-Options': 'DENY'/)
   assert.match(serverSource, /express\.static\(DIST_DIR, \{ setHeaders: setAppShellHeaders \}\)/)
   assert.match(serverSource, /setAppShellHeaders\(res\)\s+res\.sendFile\(path\.join\(DIST_DIR, 'index\.html'\)\)/)
+  assert.match(serverSource, /app\.use\('\/workspace-artifacts', \(_req, res, next\) => \{\s+setArtifactPreviewHeaders\(res\)\s+next\(\)\s+\}\)/)
   assert.match(serverSource, /\/workspace-artifacts/)
   assert.match(serverSource, /await requireWorkspaceDirectory\(workspaceFromToken\(token\), 'workspace token'\)/)
   assert.match(serverSource, /realpath\(artifactRoot\)/)
