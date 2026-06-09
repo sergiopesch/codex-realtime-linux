@@ -24,6 +24,7 @@ test('renderer does not seed hardcoded demo conversations', async () => {
     'Browser-use checkpoint',
     'defaultConversationsForWorkspace',
     'picked-folder://',
+    'placeholder="Berlin"',
     "source?: 'demo'",
     "source: 'demo'",
   ]) {

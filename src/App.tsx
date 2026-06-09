@@ -1769,7 +1769,7 @@ function App() {
                 id="weather-location"
                 type="text"
                 value={weatherLocationInput}
-                placeholder="Berlin"
+                placeholder={status?.defaultWeatherLocation || 'City or place'}
                 autoComplete="off"
                 spellCheck={false}
                 disabled={weatherLoading}
