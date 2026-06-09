@@ -4,9 +4,11 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "$script_dir/.." && pwd)"
 cd "$repo_root"
 
+current_user="${USER:-$(id -un 2>/dev/null || true)}"
 if [ "${CODEX_REALTIME_DIALOUT_REEXEC:-}" != "1" ] &&
+  [ -n "$current_user" ] &&
   command -v sg >/dev/null 2>&1 &&
-  getent group dialout | grep -Eq "(^|[:,])$USER($|,)" &&
+  id -nG "$current_user" 2>/dev/null | tr ' ' '\n' | grep -qx dialout &&
   ! id -nG | tr ' ' '\n' | grep -qx dialout; then
   reexec_cmd="$(printf 'cd %q && %q' "$repo_root" "$repo_root/scripts/launch-desktop.sh")"
   exec env CODEX_REALTIME_DIALOUT_REEXEC=1 sg dialout -c "$reexec_cmd"

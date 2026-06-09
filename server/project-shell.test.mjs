@@ -219,6 +219,8 @@ test('Arduino explicit-port uploads do not borrow unrelated detected board metad
 
 test('electron shell keeps renderer isolation and external navigation guarded', async () => {
   const mainSource = await readFile(path.join(repoRoot, 'electron', 'main.cjs'), 'utf8')
+  const launcherSource = await readFile(path.join(repoRoot, 'scripts', 'launch-desktop.sh'), 'utf8')
+  const installerSource = await readFile(path.join(repoRoot, 'scripts', 'install-desktop-entry.mjs'), 'utf8')
 
   assert.match(mainSource, /require\('dotenv\/config'\)/)
   assert.match(mainSource, /contextIsolation:\s*true/)
@@ -245,6 +247,15 @@ test('electron shell keeps renderer isolation and external navigation guarded', 
   assert.match(mainSource, /API server failed to start/)
   assert.match(mainSource, /API server exited with/)
   assert.doesNotMatch(mainSource, /const waitForHttp =/)
+  assert.match(launcherSource, /set -euo pipefail/)
+  assert.match(launcherSource, /current_user="\$\{USER:-\$\(id -un 2>\/dev\/null \|\| true\)\}"/)
+  assert.match(launcherSource, /id -nG "\$current_user" 2>\/dev\/null \| tr ' ' '\\n' \| grep -qx dialout/)
+  assert.match(launcherSource, /\[ -n "\$current_user" \]/)
+  assert.doesNotMatch(launcherSource, /getent group dialout/)
+  assert.doesNotMatch(launcherSource, /\$USER\(\$\|,\)/)
+  assert.match(installerSource, /current_user="\\\$\{USER:-\$\(id -un 2>\/dev\/null \|\| true\)\}"/)
+  assert.match(installerSource, /id -nG "\$current_user" 2>\/dev\/null \| tr ' ' '\\\\n' \| grep -qx dialout/)
+  assert.doesNotMatch(installerSource, /getent group dialout/)
 })
 
 test('README documents live release verification for non-automated capabilities', async () => {
