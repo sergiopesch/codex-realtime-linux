@@ -326,14 +326,27 @@ test('server bounds persisted app state loaded from disk', async (t) => {
           ]
         : [{ speaker: 'user', text: 'hello' }],
   }))
+  const emptyVoiceDrafts = Array.from({ length: 3 }, (_, index) => ({
+    id: `empty-voice-draft-${index}`,
+    title: `Voice conversation ${index + 1}`,
+    status: 'draft',
+    source: 'local',
+    prompt: '',
+    response: '',
+    traces: [],
+    transcript: [],
+    codexThreadId: null,
+  }))
+  const emptyVoiceDraftWorkspace = path.join('/tmp', 'codex-realtime-empty-voice-drafts')
   await writeFile(
     statePath,
     JSON.stringify({
       workspaces: manyWorkspaces,
       hiddenWorkspacePaths: manyWorkspaces.map((workspace) => workspace.id),
-      conversationsByWorkspace: Object.fromEntries(
-        manyWorkspaces.map((workspace) => [workspace.id, conversations]),
-      ),
+      conversationsByWorkspace: {
+        ...Object.fromEntries(manyWorkspaces.map((workspace) => [workspace.id, conversations])),
+        [emptyVoiceDraftWorkspace]: emptyVoiceDrafts,
+      },
     }),
   )
 
@@ -347,12 +360,10 @@ test('server bounds persisted app state loaded from disk', async (t) => {
   assert.equal(state.hiddenWorkspacePaths.length, 80)
   assert.equal(Object.keys(state.conversationsByWorkspace).length, 40)
   assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id].length, 80)
-  assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id][0].title, 'Voice conversation 7')
-  assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id][0].prompt, '')
-  assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id][0].response, '')
-  assert.deepEqual(state.conversationsByWorkspace[manyWorkspaces[0].id][0].traces, [])
-  assert.deepEqual(state.conversationsByWorkspace[manyWorkspaces[0].id][0].transcript, [])
-  assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id][1].transcript[0].text, 'hello')
+  assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id].some((conversation) => conversation.title === 'Voice conversation 7'), false)
+  assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id][0].title, 'Conversation 1')
+  assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id][0].transcript[0].text, 'hello')
+  assert.equal(state.conversationsByWorkspace[emptyVoiceDraftWorkspace], undefined)
 })
 
 test('server returns normalized app state after mutations', async (t) => {

@@ -1047,6 +1047,19 @@ function stripLegacyDraftScaffolding(conversation) {
   }
 }
 
+function isEmptyGeneratedVoiceDraft(conversation) {
+  return (
+    conversation.source === 'local' &&
+    conversation.status === 'draft' &&
+    !conversation.codexThreadId &&
+    /^Voice conversation \d+$/i.test(conversation.title) &&
+    !conversation.prompt &&
+    !conversation.response &&
+    conversation.traces.length === 0 &&
+    conversation.transcript.length === 0
+  )
+}
+
 function normalizeConversation(input, workspacePath) {
   const title = normalizeBoundedString(input?.title, 'Untitled conversation', MAX_CONVERSATION_TITLE_LENGTH)
   const id = normalizeBoundedString(
@@ -1086,9 +1099,13 @@ function normalizeAppState(input) {
       const normalizedWorkspacePath = normalizeWorkspacePath(workspacePath)
       if (!normalizedWorkspacePath) continue
       if (Array.isArray(conversations)) {
-        state.conversationsByWorkspace[normalizedWorkspacePath] = conversations
+        const normalizedConversations = conversations
           .map((conversation) => normalizeConversation(conversation, normalizedWorkspacePath))
+          .filter((conversation) => !isEmptyGeneratedVoiceDraft(conversation))
           .slice(0, MAX_LOCAL_CONVERSATIONS_PER_WORKSPACE)
+        if (normalizedConversations.length > 0) {
+          state.conversationsByWorkspace[normalizedWorkspacePath] = normalizedConversations
+        }
       }
     }
   }
