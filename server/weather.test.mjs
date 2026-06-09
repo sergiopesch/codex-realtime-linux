@@ -206,6 +206,49 @@ test('getCurrentWeather rejects oversized upstream weather responses', async () 
   )
 })
 
+test('getCurrentWeather rejects malformed geocoding JSON', async () => {
+  const fetchImpl = async () =>
+    new Response('{not json', {
+      headers: { 'Content-Type': 'application/json' },
+    })
+
+  await assert.rejects(
+    () => getCurrentWeather('Madrid', { fetchImpl }),
+    (error) =>
+      error instanceof WeatherServiceError &&
+      error.status === 502 &&
+      error.code === 'weather_geocoding_invalid_json',
+  )
+})
+
+test('getCurrentWeather rejects malformed forecast JSON', async () => {
+  const fetchImpl = async (url) => {
+    if (String(url).startsWith('https://geocoding-api.open-meteo.com/')) {
+      return Response.json({
+        results: [
+          {
+            name: 'Madrid',
+            latitude: 40.4168,
+            longitude: -3.7038,
+          },
+        ],
+      })
+    }
+
+    return new Response('{not json', {
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
+  await assert.rejects(
+    () => getCurrentWeather('Madrid', { fetchImpl }),
+    (error) =>
+      error instanceof WeatherServiceError &&
+      error.status === 502 &&
+      error.code === 'weather_forecast_invalid_json',
+  )
+})
+
 test('getCurrentWeather surfaces not-found locations as a 404', async () => {
   const fetchImpl = async () => Response.json({ results: [] })
 

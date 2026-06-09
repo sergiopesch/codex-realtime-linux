@@ -1214,6 +1214,8 @@ test('weather upstream responses are timeout and size bounded', async () => {
   assert.match(weatherSource, /weather_\$\{stage\}_response_too_large/)
   assert.match(weatherSource, /const text = await readBoundedResponseText\(response, stage\)/)
   assert.match(weatherSource, /return text \? JSON\.parse\(text\) : \{\}/)
+  assert.match(weatherSource, /weather_\$\{stage\}_invalid_json/)
+  assert.match(weatherSource, /The weather service returned invalid \$\{stage\} data\./)
   assert.doesNotMatch(weatherSource, /response\.json\(\)/)
   assert.match(weatherSource, /function finiteNumber\(value\)/)
   assert.match(weatherSource, /function isValidLatitude\(value\)/)
