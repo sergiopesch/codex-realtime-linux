@@ -915,6 +915,26 @@ const safeGeneratedArtifacts = (values: unknown) =>
   Array.isArray(values)
     ? values.map(safeGeneratedArtifact).filter((artifact): artifact is GeneratedArtifact => Boolean(artifact)).slice(0, MAX_UI_GENERATED_ARTIFACTS)
     : []
+const safeCodexEntityId = (value: unknown) => {
+  const text = typeof value === 'string' ? value.trim() : ''
+  return text ? boundedPlainString(text, '', MAX_REALTIME_FUNCTION_CALL_ID_LENGTH) : ''
+}
+
+const safeArtifactPlan = (value: unknown, expectedWorkspacePath: string): ArtifactPlan | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const artifact = value as UnknownRecord
+  const workspacePath = normalizeAbsoluteLocalWorkspacePath(typeof artifact.workspacePath === 'string' ? artifact.workspacePath : '')
+  if (!workspacePath || workspacePath !== normalizeAbsoluteLocalWorkspacePath(expectedWorkspacePath)) return null
+  const directoryName = boundedPlainString(artifact.directoryName, '', MAX_UI_ARTIFACT_PATH_LENGTH)
+  const relativeDir = boundedPlainString(artifact.relativeDir, '', MAX_UI_ARTIFACT_PATH_LENGTH)
+  const relativePath = boundedPlainString(artifact.relativePath, '', MAX_UI_ARTIFACT_PATH_LENGTH)
+  const url = boundedPlainString(artifact.url, '', MAX_UI_ARTIFACT_PATH_LENGTH)
+  if (!/^[a-z0-9][a-z0-9-]*$/i.test(directoryName)) return null
+  if (relativeDir !== `public/agent-files/${directoryName}`) return null
+  if (relativePath !== `${relativeDir}/index.html`) return null
+  if (!url.startsWith('/workspace-artifacts/')) return null
+  return { directoryName, relativeDir, relativePath, url, workspacePath }
+}
 const basenameFromWorkspacePath = (workspacePath: string) =>
   normalizeAbsoluteLocalWorkspacePath(workspacePath).split('/').filter(Boolean).at(-1) ?? ''
 const workspacePathFor = (workspace: Workspace) => normalizeAbsoluteLocalWorkspacePath(workspace.path ?? workspace.id)
@@ -2348,7 +2368,7 @@ function App() {
         closeArtifactPreview()
         setPendingArtifact(null)
         setActiveCodexTurn(null, null)
-        result = await api('/api/codex/task', {
+        const taskResult = await api<Record<string, unknown>>('/api/codex/task', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -2356,11 +2376,23 @@ function App() {
             goal,
           }),
         })
-        const threadId = (result as { thread?: { id?: string } }).thread?.id
-        const turnId = (result as { turn?: { id?: string } }).turn?.id
-        const artifact = (result as { artifact?: ArtifactPlan | null }).artifact
-        setActiveCodexTurn(threadId ?? null, turnId ?? null, workspacePath)
-        setPendingArtifact(artifact ?? null)
+        const taskThread = taskResult.thread && typeof taskResult.thread === 'object' && !Array.isArray(taskResult.thread)
+          ? taskResult.thread as UnknownRecord
+          : {}
+        const taskTurn = taskResult.turn && typeof taskResult.turn === 'object' && !Array.isArray(taskResult.turn)
+          ? taskResult.turn as UnknownRecord
+          : {}
+        const threadId = safeCodexEntityId(taskThread.id)
+        const turnId = safeCodexEntityId(taskTurn.id)
+        const artifact = safeArtifactPlan(taskResult.artifact, workspacePath)
+        if (!threadId) throw new Error('Codex task response did not include a valid thread id.')
+        result = {
+          thread: { id: threadId },
+          ...(turnId ? { turn: { id: turnId } } : {}),
+          artifact,
+        }
+        setActiveCodexTurn(threadId, turnId || null, workspacePath)
+        setPendingArtifact(artifact)
 
         if (threadId) {
           const title =
