@@ -195,6 +195,29 @@ test('realtime token route returns stable json errors when voice cannot start', 
   assert.equal((await readJson(missingKey)).code, 'openai_api_key_required')
 })
 
+test('visual context route validates image payloads before requiring upstream credentials', async (t) => {
+  const { baseUrl } = await startTestServer(t, {
+    OPENAI_API_KEY: '',
+    CODEX_USE_OPENAI_API_KEY: 'false',
+  })
+
+  const invalidImage = await fetch(`${baseUrl}/api/vision/context`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ imageDataUrl: 'not-an-image' }),
+  })
+  assert.equal(invalidImage.status, 400)
+  assert.equal((await readJson(invalidImage)).code, 'invalid_visual_context')
+
+  const oversizedImage = await fetch(`${baseUrl}/api/vision/context`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ imageDataUrl: `data:image/png;base64,${'a'.repeat(13 * 1024 * 1024)}` }),
+  })
+  assert.equal(oversizedImage.status, 413)
+  assert.equal((await readJson(oversizedImage)).code, 'visual_context_too_large')
+})
+
 test('settings OpenAI key route returns stable json validation errors', async (t) => {
   const { baseUrl } = await startTestServer(t)
 

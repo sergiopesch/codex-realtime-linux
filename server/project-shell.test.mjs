@@ -184,8 +184,11 @@ test('upstream OpenAI and usage fetches are timeout bounded', async () => {
   const serverSource = await readFile(path.join(repoRoot, 'server', 'index.mjs'), 'utf8')
 
   assert.match(serverSource, /const UPSTREAM_FETCH_TIMEOUT_MS =/)
+  assert.match(serverSource, /const MAX_VISUAL_CONTEXT_DATA_URL_BYTES =/)
   assert.match(serverSource, /function upstreamSignal\(\)/)
   assert.match(serverSource, /AbortSignal\.timeout\(UPSTREAM_FETCH_TIMEOUT_MS\)/)
+  assert.match(serverSource, /Buffer\.byteLength\(imageDataUrl, 'utf8'\) > MAX_VISUAL_CONTEXT_DATA_URL_BYTES/)
+  assert.match(serverSource, /visual_context_too_large/)
   assert.match(serverSource, /client_secrets'[\s\S]*signal: upstreamSignal\(\)/)
   assert.match(serverSource, /\/v1\/responses'[\s\S]*signal: upstreamSignal\(\)/)
   assert.match(serverSource, /fetch\(GBP_RATE_API, \{ signal: upstreamSignal\(\) \}\)/)

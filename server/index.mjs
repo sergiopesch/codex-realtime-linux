@@ -36,6 +36,7 @@ const UPSTREAM_FETCH_TIMEOUT_MS =
     ? CONFIGURED_UPSTREAM_FETCH_TIMEOUT_MS
     : 20_000
 const JSON_BODY_LIMIT = process.env.CODEX_REALTIME_JSON_LIMIT ?? '25mb'
+const MAX_VISUAL_CONTEXT_DATA_URL_BYTES = 12 * 1024 * 1024
 const CONFIGURED_CODEX_RPC_TIMEOUT_MS = Number(process.env.CODEX_RPC_TIMEOUT_MS)
 const CODEX_RPC_TIMEOUT_MS =
   Number.isFinite(CONFIGURED_CODEX_RPC_TIMEOUT_MS) && CONFIGURED_CODEX_RPC_TIMEOUT_MS > 0
@@ -457,17 +458,24 @@ function extractResponseText(response) {
 }
 
 async function analyzeVisualContext({ imageDataUrl, source, prompt }) {
+  if (typeof imageDataUrl !== 'string' || !imageDataUrl.startsWith('data:image/')) {
+    throw httpError('imageDataUrl must be a data:image URL.', {
+      statusCode: 400,
+      code: 'invalid_visual_context',
+    })
+  }
+  if (Buffer.byteLength(imageDataUrl, 'utf8') > MAX_VISUAL_CONTEXT_DATA_URL_BYTES) {
+    throw httpError('Visual context image is too large.', {
+      statusCode: 413,
+      code: 'visual_context_too_large',
+    })
+  }
+
   const openAiApiKey = getOpenAiApiKey()
   if (!openAiApiKey) {
     throw httpError('OPENAI_API_KEY is required for visual context analysis.', {
       statusCode: 503,
       code: 'openai_key_missing',
-    })
-  }
-  if (typeof imageDataUrl !== 'string' || !imageDataUrl.startsWith('data:image/')) {
-    throw httpError('imageDataUrl must be a data:image URL.', {
-      statusCode: 400,
-      code: 'invalid_visual_context',
     })
   }
 
