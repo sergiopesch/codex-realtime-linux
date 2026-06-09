@@ -2136,7 +2136,16 @@ app.get(/^\/workspace-artifacts\/([^/]+)\/([^/]+)\/(.+)$/, async (req, res) => {
       res.status(403).send('Forbidden')
       return
     }
-    const requestedDetails = await stat(realRequestedPath)
+    let requestedDetails
+    try {
+      requestedDetails = await stat(realRequestedPath)
+    } catch (error) {
+      if (isIgnorableArtifactEntryError(error)) {
+        res.status(404).send('Not found')
+        return
+      }
+      throw error
+    }
     if (!requestedDetails.isFile()) {
       res.status(404).send('Not found')
       return
