@@ -1066,6 +1066,10 @@ class CodexRpc {
     try {
       message = JSON.parse(line)
     } catch {
+      this.recordNotification({
+        method: 'app-server/malformed-line',
+        params: { line, at: new Date().toISOString() },
+      })
       return
     }
 

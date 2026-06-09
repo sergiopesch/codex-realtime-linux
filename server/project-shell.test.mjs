@@ -555,6 +555,8 @@ test('Codex app-server RPC bridge has bounded requests and single-flight initial
   assert.doesNotMatch(serverSource, /chunk\.toString\(\)\.trim\(\)/)
   assert.match(serverSource, /if \(line\.length > MAX_CODEX_RPC_LINE_LENGTH\)/)
   assert.match(serverSource, /method: 'app-server\/oversized-line'/)
+  assert.match(serverSource, /method: 'app-server\/malformed-line'/)
+  assert.match(serverSource, /params: \{ line, at: new Date\(\)\.toISOString\(\) \}/)
   assert.match(serverSource, /this\.recordNotification\(\{ \.\.\.message, receivedAt: new Date\(\)\.toISOString\(\) \}\)/)
   assert.match(serverSource, /codex\.recordNotification\(\{\s*method: 'app-state\/read-error'/)
   assert.doesNotMatch(serverSource, /this\.notifications\.unshift\(\{ \.\.\.message/)
