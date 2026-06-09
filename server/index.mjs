@@ -2142,8 +2142,15 @@ app.get('/api/app-state', async (_req, res) => {
 })
 
 app.post('/api/app-state/workspaces', async (req, res) => {
-  const body = normalizeObject(req.body)
-  const workspaceInput = normalizeObject(body.workspace ?? body)
+  let body
+  let workspaceInput
+  try {
+    body = requireObjectBody(req.body, 'App-state workspace request')
+    workspaceInput = body.workspace == null ? body : requireObjectField(body.workspace, 'workspace')
+  } catch (error) {
+    sendJsonError(res, error, { fallbackStatus: 400, fallbackCode: 'invalid_request' })
+    return
+  }
   let workspacePath
   try {
     workspacePath = await requireWorkspaceDirectory(workspaceInput.path || workspaceInput.id, 'workspacePath')
@@ -2170,7 +2177,13 @@ app.post('/api/app-state/workspaces', async (req, res) => {
 })
 
 app.post('/api/app-state/workspaces/delete', async (req, res) => {
-  const body = normalizeObject(req.body)
+  let body
+  try {
+    body = requireObjectBody(req.body, 'App-state workspace delete request')
+  } catch (error) {
+    sendJsonError(res, error, { fallbackStatus: 400, fallbackCode: 'invalid_request' })
+    return
+  }
   const workspacePath = normalizeWorkspacePath(body.workspacePath)
   if (!workspacePath) {
     sendJsonError(
@@ -2201,9 +2214,10 @@ app.post('/api/app-state/workspaces/delete', async (req, res) => {
 })
 
 app.post('/api/app-state/conversations', async (req, res) => {
-  const body = normalizeObject(req.body)
+  let body
   let conversationInput
   try {
+    body = requireObjectBody(req.body, 'App-state conversation request')
     conversationInput = requireConversationInput(body.conversation)
   } catch (error) {
     sendJsonError(res, error, { fallbackStatus: 400, fallbackCode: 'invalid_request' })
@@ -2234,8 +2248,15 @@ app.post('/api/app-state/conversations', async (req, res) => {
 })
 
 app.patch('/api/app-state/conversations', async (req, res) => {
-  const body = normalizeObject(req.body)
-  const patch = normalizeObject(body.patch)
+  let body
+  let patch
+  try {
+    body = requireObjectBody(req.body, 'App-state conversation patch request')
+    patch = body.patch == null ? {} : requireObjectField(body.patch, 'patch')
+  } catch (error) {
+    sendJsonError(res, error, { fallbackStatus: 400, fallbackCode: 'invalid_request' })
+    return
+  }
   const conversationId = normalizeString(body.conversationId)
   if (!conversationId) {
     sendJsonError(
@@ -2292,7 +2313,13 @@ app.patch('/api/app-state/conversations', async (req, res) => {
 })
 
 app.post('/api/app-state/conversations/delete', async (req, res) => {
-  const body = normalizeObject(req.body)
+  let body
+  try {
+    body = requireObjectBody(req.body, 'App-state conversation delete request')
+  } catch (error) {
+    sendJsonError(res, error, { fallbackStatus: 400, fallbackCode: 'invalid_request' })
+    return
+  }
   const conversationId = normalizeString(body.conversationId)
   if (!conversationId) {
     sendJsonError(

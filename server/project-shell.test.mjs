@@ -474,7 +474,7 @@ test('persisted workspaces and conversations require absolute workspace paths', 
   assert.match(serverSource, /if \(!normalizedWorkspacePath \|\| state\.conversationsByWorkspace\[normalizedWorkspacePath\]\) continue/)
   assert.match(serverSource, /normalizedWorkspaceBuckets \+= 1/)
   assert.match(serverSource, /firstUniqueBy\([\s\S]*\(conversation\) => conversation\.id,[\s\S]*\)\.slice\(0, MAX_LOCAL_CONVERSATIONS_PER_WORKSPACE\)/)
-  assert.match(serverSource, /const patch = normalizeObject\(body\.patch\)/)
+  assert.match(serverSource, /patch = body\.patch == null \? \{\} : requireObjectField\(body\.patch, 'patch'\)/)
   assert.match(serverSource, /next\[index\] = normalizeConversation\(\{[\s\S]*\.\.\.conversations\[index\],[\s\S]*\.\.\.patch,[\s\S]*id: conversations\[index\]\.id,[\s\S]*workspacePath,[\s\S]*updatedAt: new Date\(\)\.toISOString\(\),[\s\S]*\}, workspacePath\)/)
   assert.doesNotMatch(serverSource, /Object\.entries\(input\.conversationsByWorkspace\)\.slice\(0, MAX_LOCAL_WORKSPACE_BUCKETS\)/)
   assert.match(serverSource, /\.slice\(0, MAX_LOCAL_CONVERSATIONS_PER_WORKSPACE\)/)
@@ -488,14 +488,23 @@ test('persisted workspaces and conversations require absolute workspace paths', 
   assert.match(serverSource, /name: normalizeBoundedString\(input\?\.name, id, MAX_CONVERSATION_TITLE_LENGTH\)/)
   assert.match(serverSource, /\.map\(normalizeAdminWorkspace\)\s+\.filter\(Boolean\)\s+\.slice\(0, MAX_ADMIN_WORKSPACES\)/)
   assert.doesNotMatch(serverSource, /data: projects\.data \?\? projects/)
-  assert.match(serverSource, /const body = normalizeObject\(req\.body\)/)
+  assert.match(serverSource, /body = requireObjectBody\(req\.body, 'App-state workspace request'\)/)
+  assert.match(serverSource, /workspaceInput = body\.workspace == null \? body : requireObjectField\(body\.workspace, 'workspace'\)/)
+  assert.match(serverSource, /body = requireObjectBody\(req\.body, 'App-state workspace delete request'\)/)
+  assert.match(serverSource, /body = requireObjectBody\(req\.body, 'App-state conversation request'\)/)
+  assert.match(serverSource, /body = requireObjectBody\(req\.body, 'App-state conversation patch request'\)/)
+  assert.match(serverSource, /patch = body\.patch == null \? \{\} : requireObjectField\(body\.patch, 'patch'\)/)
+  assert.match(serverSource, /body = requireObjectBody\(req\.body, 'App-state conversation delete request'\)/)
   assert.match(serverSource, /conversationInput = requireConversationInput\(body\.conversation\)/)
   assert.doesNotMatch(serverSource, /const conversationInput = normalizeObject\(body\.conversation\)/)
+  assert.doesNotMatch(serverSource, /app\.post\('\/api\/app-state\/workspaces'[\s\S]*const body = normalizeObject\(req\.body\)/)
+  assert.doesNotMatch(serverSource, /app\.post\('\/api\/app-state\/conversations'[\s\S]*const body = normalizeObject\(req\.body\)/)
+  assert.doesNotMatch(serverSource, /app\.patch\('\/api\/app-state\/conversations'[\s\S]*const body = normalizeObject\(req\.body\)/)
   assert.match(serverSource, /workspacePath = await requireWorkspaceDirectory\(body\.workspacePath \|\| conversationInput\.workspacePath, 'workspacePath'\)/)
   assert.match(serverSource, /workspacePath = await requireWorkspaceDirectory\(body\.workspacePath, 'workspacePath'\)/)
   assert.match(
     serverSource,
-    /app\.post\('\/api\/app-state\/conversations\/delete'[\s\S]*const body = normalizeObject\(req\.body\)[\s\S]*workspacePath = await requireWorkspaceDirectory\(body\.workspacePath, 'workspacePath'\)/,
+    /app\.post\('\/api\/app-state\/conversations\/delete'[\s\S]*body = requireObjectBody\(req\.body, 'App-state conversation delete request'\)[\s\S]*workspacePath = await requireWorkspaceDirectory\(body\.workspacePath, 'workspacePath'\)/,
   )
   assert.match(
     serverSource,
