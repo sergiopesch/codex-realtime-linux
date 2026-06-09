@@ -185,6 +185,21 @@ OPENAI_USAGE_GBP_RATE_API=https://api.frankfurter.app/latest?from=USD&to=GBP
 - `src/App.css` defines the compact dark desktop layout.
 - `electron/main.cjs` creates the desktop window. In development it loads the Vite renderer; from the app-menu launcher it starts the local API server and loads the built renderer served by `server/index.mjs`.
 
+## Live Verification Checklist
+
+Automated tests cover routing, persistence, preview policy, API guards, and build correctness. They do not prove microphone permissions, speaker output, app-menu launch behavior, screen capture permissions, or physical Arduino upload success. Use this checklist before treating a release as fully verified.
+
+1. Desktop launch: run `npm run install:desktop`, launch **Codex** from the app menu, then confirm the app opens without a terminal. If launch fails, check `~/.local/state/codex-realtime-linux/desktop-launch.log` and `~/.local/state/codex-realtime-linux/api-server.log`.
+2. API health: with the desktop app open, run `curl -s http://127.0.0.1:3311/api/status` and confirm it returns this app root and a healthy local server response.
+3. Workspace routing: add a real local workspace folder in the sidebar, select it, and start a voice instruction that creates an HTML presentation from files or images in that workspace. Generated files must land under that workspace's `public/agent-files/` folder, not under this app source tree.
+4. In-app browser preview: when the Codex task finishes, confirm the generated presentation opens inside the app preview, can be clicked through like a browser page, and can be closed without leaving a hardcoded viewer behind.
+5. Subagent activity: while Codex is working, confirm agent activity is subtle and local to the relevant area of the app. It must not take over the full window.
+6. Realtime voice and transcript: start voice, speak, open the transcript, and verify both user and Codex transcript lines appear. Mute, unmute, and stop must work, and final transcript events must not erase text that arrived as deltas.
+7. Visual context: attach an image or share a screen frame while voice is active. Confirm the app reports context collection, sends the visual summary into the conversation, and does not leave screen sharing stuck on.
+8. Weather: enter a real location in Settings or ask by voice, then confirm the result is live data for that location rather than a placeholder.
+9. USB detection: with voice running, connect the board and run `curl "http://127.0.0.1:3311/api/usb/events?scan=true"`. The app should briefly acknowledge the detected board without pretending to read sketch or serial data.
+10. Arduino upload: run `curl -s http://127.0.0.1:3311/api/arduino/status`, confirm `arduino-cli` is available, then upload a safe onboard LED sketch with an explicit port if auto-detection is ambiguous. Verify the physical board LED changes as instructed.
+
 ## Weather Check
 
 Open `Settings` in the app, enter a location, and use `Get weather` to verify the feature in the UI.
@@ -192,7 +207,7 @@ Open `Settings` in the app, enter a location, and use `Get weather` to verify th
 You can also hit the local API directly after `npm run dev`:
 
 ```bash
-curl "http://127.0.0.1:3311/api/weather/current?location=Berlin&units=metric"
+curl "http://127.0.0.1:3311/api/weather/current?location=London&units=metric"
 ```
 
 ## Arduino USB Voice Flow
@@ -221,9 +236,7 @@ curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.
 ./bin/arduino-cli core install arduino:avr
 ```
 
-The app automatically looks for `./bin/arduino-cli`. Override this if you install it somewhere else:
-
-The default board target is:
+The app automatically looks for `./bin/arduino-cli`; set `ARDUINO_CLI_PATH` if it is installed somewhere else. Set `ARDUINO_DEFAULT_FQBN` to change the default board target:
 
 ```bash
 ARDUINO_CLI_PATH=/absolute/path/to/arduino-cli

@@ -234,6 +234,27 @@ test('electron shell keeps renderer isolation and external navigation guarded', 
   assert.doesNotMatch(mainSource, /const waitForHttp =/)
 })
 
+test('README documents live release verification for non-automated capabilities', async () => {
+  const readme = await readFile(path.join(repoRoot, 'README.md'), 'utf8')
+
+  assert.match(readme, /## Live Verification Checklist/)
+  assert.match(readme, /Automated tests cover routing, persistence, preview policy, API guards, and build correctness/)
+  assert.match(readme, /They do not prove microphone permissions, speaker output, app-menu launch behavior, screen capture permissions, or physical Arduino upload success/)
+  assert.match(readme, /desktop-launch\.log/)
+  assert.match(readme, /api-server\.log/)
+  assert.match(readme, /curl -s http:\/\/127\.0\.0\.1:3311\/api\/status/)
+  assert.match(readme, /public\/agent-files\//)
+  assert.match(readme, /not under this app source tree/)
+  assert.match(readme, /can be closed without leaving a hardcoded viewer behind/)
+  assert.match(readme, /Subagent activity/)
+  assert.match(readme, /final transcript events must not erase text that arrived as deltas/)
+  assert.match(readme, /Visual context/)
+  assert.match(readme, /Weather/)
+  assert.match(readme, /\/api\/usb\/events\?scan=true/)
+  assert.match(readme, /\/api\/arduino\/status/)
+  assert.match(readme, /explicit port if auto-detection is ambiguous/)
+})
+
 test('realtime voice sessions reset transcript state and clean up media resources', async () => {
   const appSource = await readFile(path.join(repoRoot, 'src', 'App.tsx'), 'utf8')
   const serverSource = await readFile(path.join(repoRoot, 'server', 'index.mjs'), 'utf8')
