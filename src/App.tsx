@@ -1071,6 +1071,7 @@ function App() {
   const conversationsByWorkspaceRef = useRef<Record<string, AgentConversation[]>>({})
   const handledRealtimeFunctionCallIdsRef = useRef<Set<string>>(new Set())
   const selectedWorkspaceRef = useRef(initialWorkspacePath)
+  const artifactRefreshRequestIdsRef = useRef<Record<string, number>>({})
   const routableWorkspacePathsRef = useRef<Set<string>>(new Set())
   const seenUsbEventIdsRef = useRef<Set<string>>(new Set())
   const usbInitializedRef = useRef(false)
@@ -1592,13 +1593,22 @@ function App() {
     })
 
   const refreshArtifacts = useCallback(async (workspacePath = selectedWorkspaceRef.current, init?: RequestInit) => {
-    if (!workspacePath) {
-      setArtifacts([])
+    const normalizedWorkspacePath = normalizeAbsoluteLocalWorkspacePath(workspacePath)
+    if (!normalizedWorkspacePath) {
+      if (!selectedWorkspaceRef.current) setArtifacts([])
       return []
     }
-    const data = await fetchGeneratedArtifacts(workspacePath, init)
-    const artifacts = safeGeneratedArtifacts(data.data)
-    setArtifacts(artifacts)
+
+    const requestId = (artifactRefreshRequestIdsRef.current[normalizedWorkspacePath] ?? 0) + 1
+    artifactRefreshRequestIdsRef.current[normalizedWorkspacePath] = requestId
+    const data = await fetchGeneratedArtifacts(normalizedWorkspacePath, init)
+    const artifacts = safeGeneratedArtifacts(data.data).filter((artifact) => artifact.workspacePath === normalizedWorkspacePath)
+    if (
+      artifactRefreshRequestIdsRef.current[normalizedWorkspacePath] === requestId &&
+      selectedWorkspaceRef.current === normalizedWorkspacePath
+    ) {
+      setArtifacts(artifacts)
+    }
     return artifacts
   }, [])
 
@@ -2065,16 +2075,6 @@ function App() {
         setWeatherLocationInput((current) =>
           current.trim() || !statusData.defaultWeatherLocation ? current : statusData.defaultWeatherLocation ?? '',
         )
-        if (preferredPath) {
-          fetchGeneratedArtifacts(preferredPath, { signal: controller.signal })
-            .then((artifactData) => {
-              if (!effectActive) return
-              setArtifacts(safeGeneratedArtifacts(artifactData.data))
-              setSelectedArtifact(null)
-              setArtifactPreviewLease(null)
-            })
-            .catch(() => undefined)
-        }
         setConversationsByWorkspace(() => {
           const next = { ...savedConversationState }
           roots.forEach((workspace) => {
