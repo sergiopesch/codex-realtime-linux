@@ -378,6 +378,10 @@ test('Arduino explicit-port uploads do not borrow unrelated detected board metad
 
   assert.match(arduinoSource, /function normalizeDetectedBoard\(entry\)/)
   assert.match(arduinoSource, /const DEFAULT_FQBN = FQBN_PATTERN\.test\(CONFIGURED_DEFAULT_FQBN\) \? CONFIGURED_DEFAULT_FQBN : 'arduino:avr:uno'/)
+  assert.match(arduinoSource, /const MAX_COMMAND_CAPTURE_CHARS = 16_000/)
+  assert.match(arduinoSource, /function appendCommandOutput\(current, chunk\)/)
+  assert.match(arduinoSource, /stdout = appendCommandOutput\(stdout, chunk\)/)
+  assert.match(arduinoSource, /stderr = appendCommandOutput\(stderr, chunk\)/)
   assert.match(arduinoSource, /fqbn: candidateFqbn && FQBN_PATTERN\.test\(candidateFqbn\) \? candidateFqbn : null/)
   assert.match(arduinoSource, /const ports = \(Array\.isArray\(rawPorts\) \? rawPorts : \[\]\)\.filter\(\(port\) => typeof port === 'string' && isSupportedSerialPort\(port\)\)/)
   assert.match(arduinoSource, /const boards = \(Array\.isArray\(rawBoards\) \? rawBoards : \[\]\)\.map\(normalizeDetectedBoard\)\.filter\(Boolean\)/)

@@ -11,6 +11,7 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const ARDUINO_CLI_PATH = process.env.ARDUINO_CLI_PATH || path.join(REPO_ROOT, 'bin', 'arduino-cli')
 const DEFAULT_SKETCH_NAME = 'CodexRealtimeSketch'
 const MAX_SKETCH_BYTES = 64 * 1024
+const MAX_COMMAND_CAPTURE_CHARS = 16_000
 const MAX_COMMAND_OUTPUT_CHARS = 4_000
 const MAX_STATUS_FIELD_CHARS = 500
 const SERIAL_PORT_PATTERN = /^tty(?:ACM|USB)\d+$/
@@ -30,6 +31,13 @@ export class ArduinoUploadError extends Error {
 function limitDiagnosticString(value) {
   if (value.length <= MAX_COMMAND_OUTPUT_CHARS) return value
   return `${value.slice(0, MAX_COMMAND_OUTPUT_CHARS)}... [truncated]`
+}
+
+function appendCommandOutput(current, chunk) {
+  const marker = '[truncated output]\n'
+  const next = `${current}${chunk.toString()}`
+  if (next.length <= MAX_COMMAND_CAPTURE_CHARS) return next
+  return `${marker}${next.slice(-(MAX_COMMAND_CAPTURE_CHARS - marker.length))}`
 }
 
 function limitStatusString(value) {
@@ -188,10 +196,10 @@ function runCommand(command, args, { spawnImpl = spawn, timeoutMs = 120_000 } = 
     }, timeoutMs)
 
     proc.stdout?.on('data', (chunk) => {
-      stdout += chunk.toString()
+      stdout = appendCommandOutput(stdout, chunk)
     })
     proc.stderr?.on('data', (chunk) => {
-      stderr += chunk.toString()
+      stderr = appendCommandOutput(stderr, chunk)
     })
     proc.once('error', (error) => {
       clearTimeout(timeout)

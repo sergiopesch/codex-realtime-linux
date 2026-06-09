@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, writeFile } from 'node:fs/promises'
+import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import {
@@ -210,6 +210,38 @@ test('uploadArduinoSketch bounds compile and upload command output', async () =>
   assert.equal(result.compile.stderr.endsWith('... [truncated]'), true)
   assert.equal(result.upload.stdout.length < 4_100, true)
   assert.equal(result.upload.stderr.endsWith('... [truncated]'), true)
+})
+
+test('uploadArduinoSketch caps noisy arduino-cli process output while capturing it', async () => {
+  const previousCliPath = process.env.ARDUINO_CLI_PATH
+  const cliDir = await mkdtemp(path.join(os.tmpdir(), 'codex-arduino-cli-'))
+  const cliPath = path.join(cliDir, 'arduino-cli')
+  await writeFile(
+    cliPath,
+    `#!/usr/bin/env node
+process.stdout.write('stdout ' + 'x'.repeat(50000))
+process.stderr.write('stderr ' + 'y'.repeat(50000))
+`,
+  )
+  await chmod(cliPath, 0o700)
+  process.env.ARDUINO_CLI_PATH = cliPath
+
+  try {
+    const module = await import(`./arduino.mjs?noisy-cli-${Date.now()}`)
+    const result = await module.uploadArduinoSketch(
+      { action: 'onboard_led_on', port: '/dev/ttyACM0', fqbn: 'arduino:avr:uno' },
+      { listPorts: async () => ['/dev/ttyACM0'], listBoards: async () => [] },
+    )
+
+    assert.equal(result.compile.stdout.length < 4_100, true)
+    assert.equal(result.compile.stdout.startsWith('[truncated output]'), true)
+    assert.equal(result.compile.stderr.startsWith('[truncated output]'), true)
+    assert.equal(result.upload.stdout.startsWith('[truncated output]'), true)
+  } finally {
+    if (previousCliPath === undefined) delete process.env.ARDUINO_CLI_PATH
+    else process.env.ARDUINO_CLI_PATH = previousCliPath
+    await rm(cliDir, { recursive: true, force: true })
+  }
 })
 
 test('uploadArduinoSketch compiles and uploads through arduino-cli', async () => {
