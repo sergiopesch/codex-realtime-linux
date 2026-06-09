@@ -20,6 +20,7 @@ const desktopPath = path.join(applicationsDir, desktopFileName)
 const iconSizes = [16, 24, 32, 48, 64, 128, 256, 512]
 
 const quoteDesktopValue = (value) => value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+const quoteDesktopExecValue = (value) => quoteDesktopValue(value).replace(/%/g, '%%')
 
 const build = spawnSync('npm', ['run', 'build'], {
   cwd: repoRoot,
@@ -123,7 +124,7 @@ Version=1.0
 Type=Application
 Name=Codex
 Comment=Voice-first Codex desktop client
-Exec="${quoteDesktopValue(launcherPath)}"
+Exec="${quoteDesktopExecValue(launcherPath)}"
 Path=${quoteDesktopValue(repoRoot)}
 TryExec=${quoteDesktopValue(launcherPath)}
 Icon=${appId}
