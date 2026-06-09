@@ -710,8 +710,7 @@ function App() {
               text: [
                 `[Realtime interruption: USB device connected: ${event.summary}]`,
                 'The user just connected an Arduino or Arduino-like USB serial board while speaking.',
-                'Interrupt now with one short funny spoken joke using the current realtime persona.',
-                'Keep it under 18 words, dry and playful, then stop.',
+                'Acknowledge the device connection briefly, then return to the user.',
                 'Do not claim you can read the board sketch or serial data yet; only react to the USB connection.',
               ].join(' '),
             },

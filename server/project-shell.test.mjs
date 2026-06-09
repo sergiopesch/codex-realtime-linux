@@ -238,6 +238,9 @@ test('realtime voice sessions reset transcript state and clean up media resource
   assert.match(appSource, /Realtime voice data channel failed/)
   assert.match(serverSource, /acknowledge the device briefly before returning to the user/)
   assert.doesNotMatch(serverSource, /playful joke/)
+  assert.match(appSource, /Acknowledge the device connection briefly, then return to the user\./)
+  assert.doesNotMatch(appSource, /short funny spoken joke/)
+  assert.doesNotMatch(appSource, /dry and playful/)
 })
 
 test('screen context capture stops display streams after a frame is analyzed', async () => {
