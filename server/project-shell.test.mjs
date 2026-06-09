@@ -248,6 +248,7 @@ test('realtime voice sessions reset transcript state and clean up media resource
   assert.match(serverSource, /fallbackCode: 'realtime_token_failed'/)
   assert.match(appSource, /const cleanupVoiceSession = \(\) =>/)
   assert.match(appSource, /const microphoneStreamRef = useRef<MediaStream \| null>\(null\)/)
+  assert.match(appSource, /if \(!text\) \{\s+setRealtimeTranscript\(\(current\) =>\s+current\.map\(\(line\) => line\.id === id \? \{ \.\.\.line, speaker, status \} : line\),\s+\)\s+return\s+\}/)
   assert.match(appSource, /microphoneStream\?\.getTracks\(\)\.forEach\(\(track\) => track\.stop\(\)\)/)
   assert.match(appSource, /peer\?\.getSenders\(\)\.forEach\(\(sender\) => sender\.track\?\.stop\(\)\)/)
   assert.match(appSource, /audioRef\.current\.srcObject = null/)

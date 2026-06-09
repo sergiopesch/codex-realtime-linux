@@ -497,7 +497,12 @@ function App() {
     mode: 'append' | 'replace',
     status: TranscriptLine['status'],
   ) => {
-    if (!text) return
+    if (!text) {
+      setRealtimeTranscript((current) =>
+        current.map((line) => line.id === id ? { ...line, speaker, status } : line),
+      )
+      return
+    }
     setRealtimeTranscript((current) => {
       const index = current.findIndex((line) => line.id === id)
       if (index === -1) {
