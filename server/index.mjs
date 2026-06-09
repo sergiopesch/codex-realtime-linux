@@ -976,6 +976,17 @@ function threadToConversation(thread) {
   }
 }
 
+function normalizeCodexEntityId(entity, label) {
+  const id = normalizeBoundedString(entity?.id, '', MAX_CONVERSATION_ID_LENGTH)
+  if (!id) {
+    throw httpError(`Codex app-server did not return a ${label} id.`, {
+      statusCode: 502,
+      code: 'codex_invalid_response',
+    })
+  }
+  return id
+}
+
 function finiteNumber(value, fallback = 0) {
   const number = Number(value)
   return Number.isFinite(number) ? number : fallback
@@ -1412,12 +1423,13 @@ app.post('/api/codex/task', async (req, res) => {
       approvalPolicy: 'on-request',
       serviceName: 'codex_realtime_linux',
     })
-    const threadId = threadResult.thread.id
+    const threadId = normalizeCodexEntityId(threadResult.thread, 'thread')
     const turnResult = await codex.request('turn/start', {
       threadId,
       input: [{ type: 'text', text: goalForWorkspace(cwd, goal, artifactPlan) }],
     })
-    res.json({ thread: threadResult.thread, turn: turnResult.turn, artifact: artifactPlan })
+    const turnId = normalizeCodexEntityId(turnResult.turn, 'turn')
+    res.json({ thread: { id: threadId }, turn: { id: turnId }, artifact: artifactPlan })
   } catch (error) {
     sendJsonError(res, error, { fallbackStatus: 502, fallbackMessage: 'Failed to start Codex task.' })
   }
