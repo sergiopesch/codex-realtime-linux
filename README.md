@@ -71,7 +71,7 @@ After installation, open the app menu and launch **Codex**. The launcher starts 
 
 ## Generated HTML Previews
 
-Realtime-generated HTML presentations are written into the selected workspace under `public/agent-files/` and shown in the in-app browser preview when the Codex task finishes. Preview routes are workspace-scoped, require a real local workspace path, and serve generated files with browser safety headers; the app does not expose a fixed bundled presentation route. Previews are intended to be self-contained local artifacts: scripts may run inside the sandboxed iframe, but network/API connections are blocked by preview CSP.
+Realtime-generated HTML presentations are written into the selected workspace under `public/agent-files/` and shown in the in-app browser preview when the Codex task finishes. Preview routes are workspace-scoped, require a real local workspace path, and serve generated files with browser safety headers; the app does not expose a fixed bundled presentation route. The artifact list only includes safe artifact folder names whose `index.html` is a real file inside that artifact folder, so symlink escapes and malformed preview folders are not surfaced to the UI. Previews are intended to be self-contained local artifacts: scripts may run inside the sandboxed iframe, but network/API connections are blocked by preview CSP, the iframe does not get same-origin privileges, and same-origin preview/API routes are not allowed to replace the top-level Electron app shell.
 
 Codex task routing is also workspace-scoped. The renderer sends the currently selected workspace as `cwd`, and `/api/codex/task` rejects requests that omit a real workspace path instead of falling back to this app's source tree.
 
@@ -152,7 +152,7 @@ CODEX_REALTIME_JSON_LIMIT=25mb
 
 JSON limits accept `b`, `kb`, or `mb` units up to `25mb`; invalid or larger values fall back to `25mb`.
 
-Local sidebar state is saved outside the repo by default. Saved state is normalized and bounded on load so stale or oversized local state cannot dominate startup. To override it, use an absolute path:
+Local sidebar state is saved outside the repo by default. Saved state is normalized and bounded on load so stale or oversized local state cannot dominate startup. Writes go through a temp file, file sync, and atomic rename so state updates are durable without exposing partial JSON files. To override it, use an absolute path:
 
 ```bash
 CODEX_REALTIME_STATE_PATH=/tmp/codex-realtime-linux/app-state.json
@@ -160,7 +160,7 @@ CODEX_REALTIME_STATE_PATH=/tmp/codex-realtime-linux/app-state.json
 
 Relative state paths are ignored and fall back to the default XDG state location.
 
-Settings-saved secrets are also stored outside the repo by default with user-only file permissions, an oversized-file guard, and bounded key normalization on load. To override that path:
+Settings-saved secrets are also stored outside the repo by default with user-only file permissions, synced atomic writes, an oversized-file guard, and bounded key normalization on load. To override that path:
 
 ```bash
 CODEX_REALTIME_SECRETS_PATH=/tmp/codex-realtime-linux/secrets.json
@@ -193,8 +193,8 @@ OPENAI_USAGE_GBP_RATE_API=https://api.frankfurter.app/latest?from=USD&to=GBP
 - `/api/codex/task` requires an explicit existing workspace `cwd`; Realtime voice routing only accepts the workspace currently selected in the app.
 - `/api/codex/events` returns bounded, normalized Codex app-server notifications for lightweight UI activity tracking.
 - Mutating `/api/*` routes reject untrusted browser origins, and routes with JSON payloads reject form-style, malformed, or oversized requests before they can touch state, Codex, or Arduino hardware.
-- The server persists this client's local workspace/thread state to `CODEX_REALTIME_STATE_PATH`, defaulting to `~/.local/state/codex-realtime-linux/app-state.json`; overrides must be absolute paths.
-- The server persists Settings-saved API secrets to `CODEX_REALTIME_SECRETS_PATH`, defaulting to `~/.config/codex-realtime-linux/secrets.json`; overrides must be absolute paths, and malformed or oversized saved keys are ignored on load.
+- The server persists this client's local workspace/thread state to `CODEX_REALTIME_STATE_PATH`, defaulting to `~/.local/state/codex-realtime-linux/app-state.json`; overrides must be absolute paths, and writes are synced before atomic rename.
+- The server persists Settings-saved API secrets to `CODEX_REALTIME_SECRETS_PATH`, defaulting to `~/.config/codex-realtime-linux/secrets.json`; overrides must be absolute paths, writes are synced before atomic rename, and malformed or oversized saved keys are ignored on load.
 - Removing a workspace in the app hides that workspace from this client's sidebar state only; it does not delete the local folder.
 - `src/App.tsx` is the Electron renderer UI.
 - `src/App.css` defines the compact dark desktop layout.
