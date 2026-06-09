@@ -631,6 +631,7 @@ function App() {
   const analyserRef = useRef<AnalyserNode | null>(null)
   const waveformFrameRef = useRef<number | null>(null)
   const voiceStateRef = useRef<'idle' | 'connecting' | 'live'>('idle')
+  const voiceSessionIdRef = useRef(0)
   const microphoneStreamRef = useRef<MediaStream | null>(null)
   const screenStreamRef = useRef<MediaStream | null>(null)
   const screenEndedTrackRef = useRef<MediaStreamTrack | null>(null)
@@ -842,7 +843,8 @@ function App() {
     setWaveLevels(Array.from({ length: 18 }, () => 0.18))
   }, [])
 
-  const cleanupVoiceSession = useCallback(() => {
+  const cleanupVoiceSession = useCallback((invalidateSession = true) => {
+    if (invalidateSession) voiceSessionIdRef.current += 1
     const peer = peerRef.current
     const microphoneStream = microphoneStreamRef.current
     peerRef.current = null
@@ -1840,18 +1842,26 @@ function App() {
     setRealtimeTranscript([])
     handledRealtimeFunctionCallIdsRef.current.clear()
     setActivity('Voice router', 'Connecting')
+    const sessionId = voiceSessionIdRef.current + 1
+    voiceSessionIdRef.current = sessionId
+    let pc: RTCPeerConnection | null = null
+    const isCurrentVoiceSession = () => voiceSessionIdRef.current === sessionId && peerRef.current === pc
 
     try {
-      const pc = new RTCPeerConnection()
+      pc = new RTCPeerConnection()
       peerRef.current = pc
 
       audioRef.current = document.createElement('audio')
       audioRef.current.autoplay = true
       pc.ontrack = (event) => {
-        if (audioRef.current) audioRef.current.srcObject = event.streams[0]
+        if (peerRef.current === pc && audioRef.current) audioRef.current.srcObject = event.streams[0]
       }
 
       const stream = await getUserMediaWithTimeout({ audio: true })
+      if (!isCurrentVoiceSession()) {
+        stream.getTracks().forEach((track) => track.stop())
+        return
+      }
       microphoneStreamRef.current = stream
       const audioTrack = stream.getAudioTracks()[0]
       if (!audioTrack) {
@@ -1869,8 +1879,9 @@ function App() {
         setActivity('Voice router idle')
         setLastError(message)
       }
+      const activePeer = pc
       pc.addEventListener('connectionstatechange', () => {
-        if (peerRef.current === pc && ['failed', 'disconnected', 'closed'].includes(pc.connectionState)) {
+        if (peerRef.current === activePeer && ['failed', 'disconnected', 'closed'].includes(activePeer.connectionState)) {
           handleRealtimeDisconnect('Realtime voice connection failed.')
         }
       })
@@ -1885,6 +1896,7 @@ function App() {
         handleRealtimeDisconnect('Realtime voice data channel failed.')
       })
       dataChannel.addEventListener('message', (event) => {
+        if (dataChannelRef.current !== dataChannel) return
         let message: Record<string, unknown>
         try {
           if (typeof event.data !== 'string' || event.data.length > MAX_REALTIME_EVENT_MESSAGE_LENGTH) {
@@ -1909,13 +1921,16 @@ function App() {
       })
 
       const offer = await pc.createOffer()
+      if (!isCurrentVoiceSession()) return
       await pc.setLocalDescription(offer)
+      if (!isCurrentVoiceSession()) return
 
       const tokenData = await api<Record<string, unknown>>(
         '/api/realtime/token',
         { method: 'POST' },
         { timeoutMs: REALTIME_CONNECTION_TIMEOUT_MS },
       )
+      if (!isCurrentVoiceSession()) return
       const ephemeralKey =
         typeof tokenData?.value === 'string'
           ? tokenData.value
@@ -1940,17 +1955,22 @@ function App() {
         answerResponse,
         answerResponse.ok ? MAX_REALTIME_SDP_RESPONSE_LENGTH : MAX_API_ERROR_RESPONSE_TEXT_LENGTH,
       )
+      if (!isCurrentVoiceSession()) return
       if (!answerResponse.ok) throw new Error(boundedApiErrorText(answerText, 'Realtime call failed.'))
 
       await pc.setRemoteDescription({ type: 'answer', sdp: answerText })
+      if (!isCurrentVoiceSession()) return
       setVoiceLifecycleState('live')
       setActivity('Voice router', 'Listening')
       showNotice('Voice is live.')
     } catch (error) {
-      cleanupVoiceSession()
-      setVoiceLifecycleState('idle')
-      setActivity('Voice router idle')
-      setLastError(displayErrorMessage(error, 'Voice session failed'))
+      const sessionStillCurrent = voiceSessionIdRef.current === sessionId
+      cleanupVoiceSession(false)
+      if (sessionStillCurrent) {
+        setVoiceLifecycleState('idle')
+        setActivity('Voice router idle')
+        setLastError(displayErrorMessage(error, 'Voice session failed'))
+      }
     }
   }
 
