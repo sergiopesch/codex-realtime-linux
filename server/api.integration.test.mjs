@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { mkdir, mkdtemp, rm, symlink, truncate, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, rm, stat, symlink, truncate, writeFile } from 'node:fs/promises'
 import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
@@ -568,6 +568,26 @@ test('server ignores malformed persisted settings secrets', async (t) => {
 
   assert.equal(status.realtime, false)
   assert.equal(status.openAiKeySource, 'missing')
+})
+
+test('settings secret writes tighten existing directory and file permissions', async (t) => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-secrets-mode-'))
+  t.after(() => rm(tempDir, { recursive: true, force: true }))
+  const statePath = path.join(tempDir, 'state.json')
+  const secretsDir = path.join(tempDir, 'permissive-secrets')
+  const secretsPath = path.join(secretsDir, 'secrets.json')
+  await mkdir(secretsDir, { recursive: true, mode: 0o777 })
+  await chmod(secretsDir, 0o777)
+
+  const { baseUrl } = await startTestServer(t, {
+    CODEX_REALTIME_STATE_PATH: statePath,
+    CODEX_REALTIME_SECRETS_PATH: secretsPath,
+  })
+  const response = await fetch(`${baseUrl}/api/settings/openai-key`, { method: 'DELETE' })
+  assert.equal(response.status, 200)
+
+  assert.equal((await stat(secretsDir)).mode & 0o777, 0o700)
+  assert.equal((await stat(secretsPath)).mode & 0o777, 0o600)
 })
 
 test('realtime token route returns stable json errors when voice cannot start', async (t) => {

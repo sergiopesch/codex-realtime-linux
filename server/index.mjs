@@ -274,6 +274,7 @@ function normalizeLocalSecrets(value) {
 async function writeJsonFileAtomic(filePath, value, { dirMode, fileMode } = {}) {
   const directoryPath = path.dirname(filePath)
   await mkdir(directoryPath, { recursive: true, ...(dirMode ? { mode: dirMode } : {}) })
+  if (dirMode) await chmod(directoryPath, dirMode)
   const tempPath = path.join(
     directoryPath,
     `.${path.basename(filePath)}.${process.pid}.${randomUUID()}.tmp`,

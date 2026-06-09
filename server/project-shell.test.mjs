@@ -192,6 +192,7 @@ test('persisted workspaces and conversations require absolute workspace paths', 
   assert.match(serverSource, /async function writeJsonFileAtomic/)
   assert.match(serverSource, /`\.\$\{path\.basename\(filePath\)\}\.\$\{process\.pid\}\.\$\{randomUUID\(\)\}\.tmp`/)
   assert.doesNotMatch(serverSource, /`\.\$\{path\.basename\(filePath\)\}\.\$\{process\.pid\}\.\$\{Date\.now\(\)\}\.tmp`/)
+  assert.match(serverSource, /if \(dirMode\) await chmod\(directoryPath, dirMode\)/)
   assert.match(serverSource, /fileHandle = await open\(tempPath, fileMode \? 'wx' : 'w', fileMode\)/)
   assert.match(serverSource, /await fileHandle\.writeFile\(`\$\{JSON\.stringify\(value, null, 2\)\}\\n`\)/)
   assert.match(serverSource, /await fileHandle\.sync\(\)/)
