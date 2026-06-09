@@ -435,7 +435,7 @@ export async function uploadArduinoSketch(
   }
   const boardAddressForRequest = boardAddressForRequestedPort(request.port, ports)
   const matchingBoard = boardAddressForRequest ? boards.find((board) => board.address === boardAddressForRequest) : null
-  const autoDetectedBoard = request.port ? null : boards[0]
+  const autoDetectedBoard = request.port ? null : uploadableBoards[0]
   const detectedBoard = matchingBoard ?? autoDetectedBoard
   const detectedPort = detectedBoard?.address && isSupportedSerialPort(detectedBoard.address) ? detectedBoard.address : null
   const port = request.port ?? preferredPortForDetectedBoard(detectedPort, ports) ?? ports[0]

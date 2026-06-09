@@ -286,11 +286,14 @@ test('uploadArduinoSketch ignores unsupported detected board addresses and falls
     {
       run,
       listPorts: async () => ['/dev/ttyUSB0'],
-      listBoards: async () => [{ address: '192.168.1.42', fqbn: 'arduino:avr:uno', boardName: 'Network board' }],
+      listBoards: async () => [{ address: '192.168.1.42', fqbn: 'arduino:avr:nano', boardName: 'Network board' }],
     },
   )
 
   assert.equal(result.port, '/dev/ttyUSB0')
+  assert.equal(result.fqbn, 'arduino:avr:uno')
+  assert.equal(result.boardName, null)
+  assert.deepEqual(commands[0].slice(0, 3), ['compile', '--fqbn', 'arduino:avr:uno'])
   assert.deepEqual(commands[1].slice(0, 5), ['upload', '-p', '/dev/ttyUSB0', '--fqbn', 'arduino:avr:uno'])
 })
 
