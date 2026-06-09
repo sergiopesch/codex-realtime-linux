@@ -620,13 +620,16 @@ const realtimeFunctionCallItem = (message: Record<string, unknown>): RealtimeFun
   const item = message.item && typeof message.item === 'object'
     ? message.item as RealtimeFunctionCallItem
     : null
+  const itemArguments = typeof item?.arguments === 'string' ? item.arguments : undefined
+  const messageArguments = typeof message.arguments === 'string' ? message.arguments : undefined
 
   if (eventType === 'response.output_item.done' && item?.type === 'function_call') {
-    return item
+    if (itemArguments == null) return null
+    return { ...item, arguments: itemArguments }
   }
 
   if (eventType !== 'response.function_call_arguments.done') return null
-  if (item?.type === 'function_call') return item
+  if (item?.type === 'function_call') return { ...item, arguments: itemArguments ?? messageArguments }
 
   const name = typeof message.name === 'string' ? message.name : ''
   if (!name) return null
@@ -635,7 +638,7 @@ const realtimeFunctionCallItem = (message: Record<string, unknown>): RealtimeFun
     type: 'function_call',
     name,
     call_id: typeof message.call_id === 'string' ? message.call_id : undefined,
-    arguments: typeof message.arguments === 'string' ? message.arguments : undefined,
+    arguments: messageArguments,
   }
 }
 
