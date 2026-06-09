@@ -2120,6 +2120,8 @@ function App() {
         const workspacePath = selectedRoutableWorkspacePath(payload.cwd)
         setDismissedArtifact(null)
         closeArtifactPreview()
+        setPendingArtifact(null)
+        setActiveCodexTurn(null, null)
         result = await api('/api/codex/task', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
