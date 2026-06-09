@@ -13,7 +13,8 @@ import { getCurrentWeather, WeatherServiceError } from './weather.mjs'
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const DIST_DIR = path.join(REPO_ROOT, 'dist')
-const PORT = Number(process.env.PORT ?? 3311)
+const DEFAULT_PORT = 3311
+const PORT = configuredPort(process.env.PORT)
 const ENV_OPENAI_API_KEY = process.env.OPENAI_API_KEY
 const OPENAI_ADMIN_KEY = process.env.OPENAI_ADMIN_KEY ?? process.env.OPENAI_API_ADMIN_KEY
 const ENV_CODEX_API_KEY = process.env.CODEX_API_KEY
@@ -114,6 +115,11 @@ function apiRouteRequiresJsonBody(req) {
   if (!['POST', 'PATCH', 'PUT'].includes(req.method)) return false
   if (req.method === 'POST' && req.path === '/api/realtime/token') return false
   return true
+}
+
+function configuredPort(value, fallback = DEFAULT_PORT) {
+  const port = Number(value ?? fallback)
+  return Number.isInteger(port) && port > 0 && port <= 65535 ? port : fallback
 }
 
 function guardLocalApiRequests(req, res, next) {

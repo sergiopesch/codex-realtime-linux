@@ -14,7 +14,12 @@ if (process.platform === 'linux') {
   app.disableHardwareAcceleration()
 }
 
-const apiPort = Number(process.env.PORT || 3311)
+const defaultApiPort = 3311
+const configuredPort = (value, fallback = defaultApiPort) => {
+  const port = Number(value ?? fallback)
+  return Number.isInteger(port) && port > 0 && port <= 65535 ? port : fallback
+}
+const apiPort = configuredPort(process.env.PORT)
 const apiUrl = process.env.CODEX_DESKTOP_API_URL || `http://127.0.0.1:${apiPort}`
 const apiNodeBin = process.env.CODEX_REALTIME_NODE_BIN || process.execPath
 const apiNodeUsesElectronRuntime = !process.env.CODEX_REALTIME_NODE_BIN
