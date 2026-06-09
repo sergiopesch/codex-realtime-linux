@@ -142,6 +142,8 @@ CODEX_REALTIME_ALLOWED_ORIGINS=http://127.0.0.1:6006
 CODEX_REALTIME_JSON_LIMIT=25mb
 ```
 
+JSON limits accept `b`, `kb`, or `mb` units up to `25mb`; invalid or larger values fall back to `25mb`.
+
 Local sidebar state is saved outside the repo by default. Saved state is normalized and bounded on load so stale or oversized local state cannot dominate startup. To override it, use an absolute path:
 
 ```bash

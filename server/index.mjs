@@ -44,7 +44,9 @@ const UPSTREAM_FETCH_TIMEOUT_MS = configuredInteger(process.env.UPSTREAM_FETCH_T
   min: 1_000,
   max: MAX_UPSTREAM_FETCH_TIMEOUT_MS,
 })
-const JSON_BODY_LIMIT = process.env.CODEX_REALTIME_JSON_LIMIT ?? '25mb'
+const DEFAULT_JSON_BODY_LIMIT = '25mb'
+const MAX_JSON_BODY_LIMIT_BYTES = 25 * 1024 * 1024
+const JSON_BODY_LIMIT = configuredJsonBodyLimit(process.env.CODEX_REALTIME_JSON_LIMIT)
 const MAX_VISUAL_CONTEXT_DATA_URL_BYTES = 12 * 1024 * 1024
 const MAX_VISUAL_CONTEXT_SOURCE_LENGTH = 160
 const MAX_VISUAL_CONTEXT_PROMPT_LENGTH = 1_500
@@ -135,6 +137,18 @@ function configuredPort(value, fallback = DEFAULT_PORT) {
 function configuredInteger(value, { fallback, min, max }) {
   const number = Number(value ?? fallback)
   return Number.isInteger(number) && number >= min && number <= max ? number : fallback
+}
+
+function configuredJsonBodyLimit(value, fallback = DEFAULT_JSON_BODY_LIMIT) {
+  const text = typeof value === 'string' && value.trim() ? value.trim().toLowerCase() : fallback
+  const match = /^(\d+)\s*(b|kb|mb)$/.exec(text)
+  if (!match) return fallback
+
+  const amount = Number(match[1])
+  const unit = match[2]
+  const multiplier = unit === 'mb' ? 1024 * 1024 : unit === 'kb' ? 1024 : 1
+  const bytes = amount * multiplier
+  return Number.isInteger(amount) && amount > 0 && bytes <= MAX_JSON_BODY_LIMIT_BYTES ? `${amount}${unit}` : fallback
 }
 
 function guardLocalApiRequests(req, res, next) {
