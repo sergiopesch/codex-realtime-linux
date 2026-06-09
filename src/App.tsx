@@ -1510,14 +1510,31 @@ function App() {
         const data = await api<{ data: EventRecord[] }>('/api/codex/events', { signal: controller.signal })
         if (!effectActive) return
         setEvents((current) => mergeEvents(current, data.data))
-        if (
-          activeTurnIdRef.current &&
-          !pendingArtifactRef.current &&
-          data.data.some((event) => eventCompletesActiveCodexTurn(event, activeTurnIdRef.current))
-        ) {
+        if (activeTurnIdRef.current && data.data.some((event) => eventCompletesActiveCodexTurn(event, activeTurnIdRef.current))) {
           const completedThreadId = activeThreadIdRef.current
+          const pendingArtifactForTurn = pendingArtifactRef.current
+
+          if (pendingArtifactForTurn) {
+            const artifactData = await refreshArtifacts(pendingArtifactForTurn.workspacePath, {
+              signal: controller.signal,
+            })
+            if (!effectActive) return
+            const completedArtifact = artifactData.find((artifact) => artifact.url === pendingArtifactForTurn.url)
+            if (completedArtifact) {
+              setSelectedArtifact(completedArtifact)
+              setDismissedArtifact(null)
+              setActivity('Artifact ready', completedArtifact.title)
+              showNotice(`Preview ready: ${completedArtifact.relativePath}`)
+            } else {
+              setActivity('Codex work complete')
+              showNotice(`Codex finished without creating ${pendingArtifactForTurn.relativePath}.`)
+            }
+            setPendingArtifact(null)
+          } else {
+            setActivity('Codex work complete')
+          }
+
           setActiveCodexTurn(completedThreadId, null)
-          setActivity('Codex work complete')
           setConversationsByWorkspace((current) => {
             if (!completedThreadId) return current
             const next = { ...current }
@@ -1546,7 +1563,7 @@ function App() {
       controller.abort()
       window.clearInterval(interval)
     }
-  }, [])
+  }, [refreshArtifacts])
 
   useEffect(() => {
     const controller = new AbortController()
