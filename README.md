@@ -141,7 +141,7 @@ REALTIME_USER_LOCATION=
 REALTIME_PERSONA=
 ```
 
-The local API accepts app requests from the desktop origin and Vite dev origins only. To trust another local development origin, add it explicitly:
+The local API accepts app requests from the desktop origin and Vite dev origins only. To trust another local development origin, add it explicitly. Extra origins must be root `http://localhost`, `http://127.0.0.1`, or `http://[::1]` origins; non-loopback URLs, paths, credentials, query strings, and hashes are ignored:
 
 ```bash
 CODEX_REALTIME_ALLOWED_ORIGINS=http://127.0.0.1:6006

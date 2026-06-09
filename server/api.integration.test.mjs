@@ -307,6 +307,52 @@ test('server returns json errors for oversized API request bodies', async (t) =>
   assert.equal((await readJson(oversizedJson)).code, 'payload_too_large')
 })
 
+test('server only trusts configured loopback API origins', async (t) => {
+  const { baseUrl } = await startTestServer(t, {
+    CODEX_REALTIME_ALLOWED_ORIGINS: [
+      'http://127.0.0.1:6006',
+      'http://localhost:6007',
+      'http://[::1]:6008',
+      'https://example.invalid',
+      'http://127.0.0.1:6009/path',
+      'http://user:pass@127.0.0.1:6010',
+    ].join(','),
+  })
+
+  const trustedLoopback = await fetch(`${baseUrl}/api/status`, {
+    headers: { Origin: 'http://127.0.0.1:6006' },
+  })
+  assert.equal(trustedLoopback.status, 200)
+
+  const trustedLocalhost = await fetch(`${baseUrl}/api/status`, {
+    headers: { Origin: 'http://localhost:6007' },
+  })
+  assert.equal(trustedLocalhost.status, 200)
+
+  const trustedIpv6Loopback = await fetch(`${baseUrl}/api/status`, {
+    headers: { Origin: 'http://[::1]:6008' },
+  })
+  assert.equal(trustedIpv6Loopback.status, 200)
+
+  const untrustedRemote = await fetch(`${baseUrl}/api/status`, {
+    headers: { Origin: 'https://example.invalid' },
+  })
+  assert.equal(untrustedRemote.status, 403)
+  assert.equal((await readJson(untrustedRemote)).code, 'origin_not_allowed')
+
+  const untrustedPathOrigin = await fetch(`${baseUrl}/api/status`, {
+    headers: { Origin: 'http://127.0.0.1:6009' },
+  })
+  assert.equal(untrustedPathOrigin.status, 403)
+  assert.equal((await readJson(untrustedPathOrigin)).code, 'origin_not_allowed')
+
+  const untrustedCredentialOrigin = await fetch(`${baseUrl}/api/status`, {
+    headers: { Origin: 'http://127.0.0.1:6010' },
+  })
+  assert.equal(untrustedCredentialOrigin.status, 403)
+  assert.equal((await readJson(untrustedCredentialOrigin)).code, 'origin_not_allowed')
+})
+
 test('server bounds persisted app state loaded from disk', async (t) => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-persisted-state-'))
   t.after(() => rm(tempDir, { recursive: true, force: true }))

@@ -109,15 +109,18 @@ let localSecrets = {}
 
 const app = express()
 const usbMonitor = new UsbDeviceMonitor()
-const ALLOWED_API_ORIGINS = new Set([
+const localApiHostnames = new Set(['localhost', '127.0.0.1', '[::1]'])
+const DEFAULT_API_ORIGINS = [
   `http://127.0.0.1:${PORT}`,
   `http://localhost:${PORT}`,
+  `http://[::1]:${PORT}`,
   'http://127.0.0.1:5173',
   'http://localhost:5173',
-  ...normalizeString(process.env.CODEX_REALTIME_ALLOWED_ORIGINS)
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean),
+  'http://[::1]:5173',
+]
+const ALLOWED_API_ORIGINS = new Set([
+  ...DEFAULT_API_ORIGINS,
+  ...configuredAllowedApiOrigins(process.env.CODEX_REALTIME_ALLOWED_ORIGINS),
 ])
 
 function apiRouteRequiresJsonBody(req) {
@@ -152,6 +155,26 @@ function configuredJsonBodyLimit(value, fallback = DEFAULT_JSON_BODY_LIMIT) {
 function configuredAbsolutePath(value, fallback) {
   const candidate = typeof value === 'string' && value.trim() ? value.trim() : fallback
   return path.isAbsolute(candidate) ? path.resolve(candidate) : fallback
+}
+
+function configuredLocalApiOrigin(value) {
+  if (typeof value !== 'string' || !value.trim()) return ''
+  try {
+    const parsed = new URL(value)
+    const rootPath = parsed.pathname === '/' && !parsed.search && !parsed.hash
+    const localHttp = parsed.protocol === 'http:' && localApiHostnames.has(parsed.hostname)
+    if (!localHttp || !rootPath || parsed.username || parsed.password) return ''
+    return parsed.origin
+  } catch {
+    return ''
+  }
+}
+
+function configuredAllowedApiOrigins(value) {
+  return normalizeString(value)
+    .split(',')
+    .map((origin) => configuredLocalApiOrigin(origin))
+    .filter(Boolean)
 }
 
 function guardLocalApiRequests(req, res, next) {
