@@ -13,6 +13,9 @@ if (process.platform === 'linux') {
   app.setDesktopName('codex-realtime-linux.desktop')
   app.commandLine.appendSwitch('enable-transparent-visuals')
   app.commandLine.appendSwitch('disable-gpu')
+  app.commandLine.appendSwitch('disable-gpu-compositing')
+  app.commandLine.appendSwitch('disable-gpu-rasterization')
+  app.commandLine.appendSwitch('disable-accelerated-2d-canvas')
   app.disableHardwareAcceleration()
 }
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
