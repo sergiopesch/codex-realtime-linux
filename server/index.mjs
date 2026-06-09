@@ -358,6 +358,10 @@ function isSafeArtifactName(value) {
   return typeof value === 'string' && value.length <= MAX_ARTIFACT_NAME_LENGTH && /^[a-z0-9][a-z0-9-]*$/i.test(value)
 }
 
+function isIgnorableArtifactEntryError(error) {
+  return ['ENOENT', 'ENOTDIR', 'EACCES', 'EPERM', 'ELOOP'].includes(error?.code)
+}
+
 function setArtifactPreviewHeaders(res) {
   res.set({
     'Content-Security-Policy': [
@@ -535,7 +539,7 @@ async function listGeneratedArtifacts(workspacePath) {
           size: finiteNumber(details.size),
         })
       } catch (error) {
-        if (error?.code !== 'ENOENT') throw error
+        if (!isIgnorableArtifactEntryError(error)) throw error
       }
     }
   } finally {
