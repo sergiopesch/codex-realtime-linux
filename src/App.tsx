@@ -2229,6 +2229,7 @@ function App() {
   const attachImage = async (file: File | undefined) => {
     if (!file) return
     setLastError(null)
+    setAttachedImageName(null)
     try {
       validateVisualContextImageFile(file)
       appendEvent('context/image-attached', { name: file.name, size: file.size, type: file.type })

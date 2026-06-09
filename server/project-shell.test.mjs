@@ -1105,6 +1105,7 @@ test('realtime voice sessions reset transcript state and clean up media resource
   assert.match(appSource, /\$\{context\.source\} attached to Realtime\./)
   assert.match(appSource, /\$\{context\.source\} analyzed\. Start voice to use it live\./)
   assert.doesNotMatch(appSource, /setVisualContextLabel\(source\)/)
+  assert.match(appSource, /const attachImage = async \(file: File \| undefined\) => \{[\s\S]*setLastError\(null\)[\s\S]*setAttachedImageName\(null\)[\s\S]*await analyzeAndAttachVisualContext\(imageDataUrl, file\.name\)[\s\S]*setAttachedImageName\(file\.name\)/)
   assert.match(appSource, /await analyzeAndAttachVisualContext\(imageDataUrl, file\.name\)\s+setAttachedImageName\(file\.name\)/)
   assert.match(appSource, /const fetchWithTimeout = async/)
   assert.match(appSource, /Request timed out after/)
