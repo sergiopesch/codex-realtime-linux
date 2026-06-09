@@ -122,6 +122,10 @@ test('local API rejects untrusted origins and non-json mutation bodies', async (
 test('Codex app-server RPC bridge has bounded requests and single-flight initialization', async () => {
   const serverSource = await readFile(path.join(repoRoot, 'server', 'index.mjs'), 'utf8')
 
+  assert.match(serverSource, /const CODEX_BIN = process\.env\.CODEX_BIN \?\? 'codex'/)
+  assert.match(serverSource, /spawn\(CODEX_BIN, \['app-server'\]/)
+  assert.match(serverSource, /codexBin: CODEX_BIN/)
+  assert.doesNotMatch(serverSource, /spawn\('codex', \['app-server'\]/)
   assert.match(serverSource, /const CODEX_RPC_TIMEOUT_MS =/)
   assert.match(serverSource, /initPromise = null/)
   assert.match(serverSource, /if \(this\.initPromise\) return this\.initPromise/)

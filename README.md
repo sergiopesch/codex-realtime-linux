@@ -96,6 +96,12 @@ Use `CODEX_API_KEY` if Codex local execution should use a different key than Rea
 CODEX_API_KEY=sk-...
 ```
 
+The app starts Codex through `codex app-server` by default. If your standalone desktop environment cannot resolve `codex` from `PATH`, set the executable explicitly:
+
+```bash
+CODEX_BIN=/absolute/path/to/codex
+```
+
 Codex app-server RPC calls are bounded so the desktop app does not hang indefinitely if the local Codex bridge stalls. Override the timeout only when you have a known long-running local app-server operation:
 
 ```bash

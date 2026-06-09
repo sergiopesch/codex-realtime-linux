@@ -18,6 +18,7 @@ const ENV_OPENAI_API_KEY = process.env.OPENAI_API_KEY
 const OPENAI_ADMIN_KEY = process.env.OPENAI_ADMIN_KEY ?? process.env.OPENAI_API_ADMIN_KEY
 const ENV_CODEX_API_KEY = process.env.CODEX_API_KEY
 const CODEX_FORCE_API_KEY_AUTH = process.env.CODEX_FORCE_API_KEY_AUTH === 'true'
+const CODEX_BIN = process.env.CODEX_BIN ?? 'codex'
 const CODEX_MODEL = process.env.CODEX_MODEL ?? 'gpt-5.4'
 const REALTIME_MODEL = process.env.REALTIME_MODEL ?? 'gpt-realtime-2'
 const REALTIME_VOICE = process.env.REALTIME_VOICE ?? 'cedar'
@@ -538,7 +539,7 @@ class CodexRpc {
   }
 
   async #initialize() {
-    this.proc = spawn('codex', ['app-server'], {
+    this.proc = spawn(CODEX_BIN, ['app-server'], {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: process.env,
     })
@@ -983,7 +984,7 @@ app.get('/api/status', async (_req, res) => {
     adminApi: Boolean(OPENAI_ADMIN_KEY),
     codexApiKey: Boolean(codexApiKey),
     codexAuthPreference: codexApiKey ? 'api-key' : 'existing-codex-auth',
-    codexBin: 'codex',
+    codexBin: CODEX_BIN,
     realtimeModel: REALTIME_MODEL,
     codexModel: CODEX_MODEL,
     visionModel: VISION_MODEL,
