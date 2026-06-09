@@ -311,6 +311,7 @@ test('Codex task routes require explicit user goals and IDs before app-server ca
   assert.match(serverSource, /function normalizeCodexEntityId\(entity, label\)/)
   assert.match(serverSource, /code: 'codex_invalid_response'/)
   assert.match(serverSource, /function artifactPlanForWorkspace\(cwd, goal\)/)
+  assert.match(serverSource, /artifactPlanForGoal\(goal, new Date\(\), randomUUID\(\)\.slice\(0, 8\)\)/)
   assert.match(serverSource, /if \(isPathInside\(REPO_ROOT, workspacePath\)\) \{/)
   assert.doesNotMatch(serverSource, /if \(workspacePath === REPO_ROOT\) \{/)
   assert.match(serverSource, /Generated artifacts must be created in a selected workspace outside this app source tree\./)

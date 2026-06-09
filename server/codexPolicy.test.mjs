@@ -37,6 +37,19 @@ test('guard routes generic file creation away from protected app source', () => 
   assert.match(guarded, /User goal:\nCreate a simple index\.html/)
 })
 
+test('artifact plans accept a bounded unique suffix for runtime folders', () => {
+  const plan = artifactPlanForGoal(
+    'Create a simple index.html about this project.',
+    new Date('2026-06-08T20:00:00Z'),
+    'abcdef12-extra-suffix-that-should-be-bounded',
+  )
+
+  assert.equal(
+    plan?.relativePath,
+    `${GENERATED_ARTIFACT_DIR}/20260608t200000-create-a-simple-index-html-about-this-project-abcdef12-extra-s/index.html`,
+  )
+})
+
 test('guard still protects app shell when app edits are explicit', () => {
   const guarded = buildWorkspaceGuard('Edit this app and change src/App.tsx.')
 

@@ -71,10 +71,11 @@ export function hasExplicitAppEditIntent(goal) {
   return EXPLICIT_APP_EDIT_PATTERN.test(goal)
 }
 
-export function artifactPlanForGoal(goal, date = new Date()) {
+export function artifactPlanForGoal(goal, date = new Date(), uniqueSuffix = '') {
   if (!isArtifactRequest(goal) || hasExplicitAppEditIntent(goal)) return null
   const stamp = date.toISOString().replace(/[-:]/g, '').replace(/\..+$/, '').toLowerCase()
-  const directoryName = `${stamp}-${slug(goal)}`
+  const suffix = typeof uniqueSuffix === 'string' && uniqueSuffix.trim() ? slug(uniqueSuffix).slice(0, 16) : ''
+  const directoryName = `${stamp}-${slug(goal)}${suffix ? `-${suffix}` : ''}`
   return {
     directoryName,
     relativeDir: `${GENERATED_ARTIFACT_DIR}/${directoryName}`,

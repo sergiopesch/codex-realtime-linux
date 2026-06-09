@@ -459,7 +459,7 @@ async function readUpstreamJson(response, fallbackMessage = 'Upstream response w
 }
 
 function artifactPlanForWorkspace(cwd, goal) {
-  const basePlan = artifactPlanForGoal(goal)
+  const basePlan = artifactPlanForGoal(goal, new Date(), randomUUID().slice(0, 8))
   if (!basePlan) return null
 
   const workspacePath = path.resolve(cwd)
