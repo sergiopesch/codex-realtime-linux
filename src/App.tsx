@@ -1254,7 +1254,7 @@ function App() {
           if (event.device.action === 'add' && event.device.isArduinoLike) {
             const injected = injectUsbEventIntoRealtime(event)
             appendEvent('usb/arduino-connected', { summary: event.summary, injected })
-            setActivity('USB noticed', injected ? 'Realtime joke' : 'Arduino connected')
+            setActivity('USB noticed', injected ? 'Realtime updated' : 'Arduino connected')
             showNotice(
               injected
                 ? `Arduino noticed: ${event.summary}`
