@@ -559,6 +559,7 @@ function App() {
   const audioContextRef = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
   const waveformFrameRef = useRef<number | null>(null)
+  const voiceStateRef = useRef<'idle' | 'connecting' | 'live'>('idle')
   const microphoneStreamRef = useRef<MediaStream | null>(null)
   const screenStreamRef = useRef<MediaStream | null>(null)
   const screenEndedTrackRef = useRef<MediaStreamTrack | null>(null)
@@ -643,6 +644,11 @@ function App() {
   const showNotice = (message: string) => {
     setNotice(displayNoticeMessage(message))
     setLastError(null)
+  }
+
+  const setVoiceLifecycleState = (next: 'idle' | 'connecting' | 'live') => {
+    voiceStateRef.current = next
+    setVoiceState(next)
   }
 
   const setActivity = (...items: string[]) => {
@@ -1694,13 +1700,15 @@ function App() {
   }
 
   const startVoice = async () => {
+    if (voiceStateRef.current !== 'idle') return
+
     if (!voiceReady) {
       showNotice('Add an OpenAI API key in Settings to start a live Realtime voice session.')
       return
     }
 
     setLastError(null)
-    setVoiceState('connecting')
+    setVoiceLifecycleState('connecting')
     setVoiceMuted(false)
     setRealtimeTranscript([])
     handledRealtimeFunctionCallIdsRef.current.clear()
@@ -1730,7 +1738,7 @@ function App() {
       const handleRealtimeDisconnect = (message: string) => {
         if (dataChannelRef.current !== dataChannel) return
         cleanupVoiceSession()
-        setVoiceState('idle')
+        setVoiceLifecycleState('idle')
         setActivity('Voice router idle')
         setLastError(message)
       }
@@ -1808,12 +1816,12 @@ function App() {
       if (!answerResponse.ok) throw new Error(boundedApiErrorText(answerText, 'Realtime call failed.'))
 
       await pc.setRemoteDescription({ type: 'answer', sdp: answerText })
-      setVoiceState('live')
+      setVoiceLifecycleState('live')
       setActivity('Voice router', 'Listening')
       showNotice('Voice is live.')
     } catch (error) {
       cleanupVoiceSession()
-      setVoiceState('idle')
+      setVoiceLifecycleState('idle')
       setActivity('Voice router idle')
       setLastError(displayErrorMessage(error, 'Voice session failed'))
     }
@@ -1821,7 +1829,7 @@ function App() {
 
   const stopVoice = () => {
     cleanupVoiceSession()
-    setVoiceState('idle')
+    setVoiceLifecycleState('idle')
     setActivity('Voice router idle')
     showNotice('Voice session stopped.')
   }
