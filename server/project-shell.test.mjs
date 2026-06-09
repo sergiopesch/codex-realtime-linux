@@ -647,6 +647,7 @@ test('electron shell keeps renderer isolation and external navigation guarded', 
 
   assert.match(mainSource, /require\('dotenv\/config'\)/)
   assert.match(mainSource, /const \{ randomUUID \} = require\('node:crypto'\)/)
+  assert.match(mainSource, /app\.commandLine\.appendSwitch\('disable-gpu'\)/)
   assert.match(mainSource, /const gotSingleInstanceLock = app\.requestSingleInstanceLock\(\)/)
   assert.match(mainSource, /if \(!gotSingleInstanceLock\) app\.quit\(\)/)
   assert.match(mainSource, /app\.on\('second-instance'/)

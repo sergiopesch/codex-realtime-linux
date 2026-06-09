@@ -12,6 +12,7 @@ app.setName('Codex')
 if (process.platform === 'linux') {
   app.setDesktopName('codex-realtime-linux.desktop')
   app.commandLine.appendSwitch('enable-transparent-visuals')
+  app.commandLine.appendSwitch('disable-gpu')
   app.disableHardwareAcceleration()
 }
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
