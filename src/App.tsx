@@ -502,6 +502,20 @@ const makeDraftConversation = (
   }
 }
 
+const nextVoiceConversationTitle = (existing: AgentConversation[]) => {
+  const usedNumbers = new Set<number>()
+  for (const conversation of existing) {
+    const match = /^Voice conversation (\d+)$/i.exec(conversation.title.trim())
+    if (!match) continue
+    const number = Number(match[1])
+    if (Number.isSafeInteger(number) && number > 0) usedNumbers.add(number)
+  }
+
+  let nextNumber = 1
+  while (usedNumbers.has(nextNumber)) nextNumber += 1
+  return `Voice conversation ${nextNumber}`
+}
+
 const mergeConversations = (current: AgentConversation[], incoming: AgentConversation[]) => {
   const seen = new Set<string>()
   return [...incoming, ...current]
@@ -1357,7 +1371,7 @@ function App() {
       return
     }
     const existing = conversationsByWorkspace[workspacePath] ?? []
-    const title = `Voice conversation ${existing.length + 1}`
+    const title = nextVoiceConversationTitle(existing)
     const conversation = {
       ...makeDraftConversation(workspacePath, title, 'draft', 'draft'),
       source: 'local' as const,
