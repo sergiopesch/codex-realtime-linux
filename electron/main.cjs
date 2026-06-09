@@ -39,6 +39,10 @@ const configuredAbsoluteDir = (value, fallback) => {
 const apiPort = configuredPort(process.env.PORT)
 const apiUrl = configuredLocalHttpOrigin(process.env.CODEX_DESKTOP_API_URL, `http://127.0.0.1:${apiPort}`)
 const devServerUrl = configuredLocalHttpOrigin(process.env.VITE_DEV_SERVER_URL, '')
+const trustedRendererOrigins = new Set([
+  new URL(apiUrl).origin,
+  ...(devServerUrl ? [new URL(devServerUrl).origin] : []),
+])
 const apiNodeBin = process.env.CODEX_REALTIME_NODE_BIN || process.execPath
 const apiNodeUsesElectronRuntime = !process.env.CODEX_REALTIME_NODE_BIN
 const repoRoot = path.join(__dirname, '..')
@@ -167,6 +171,16 @@ const closeApiLog = () => {
   }
 }
 
+const isTrustedRendererEvent = (event) => {
+  try {
+    const frameUrl = event.senderFrame?.url
+    if (typeof frameUrl !== 'string' || !frameUrl) return false
+    return trustedRendererOrigins.has(new URL(frameUrl).origin)
+  } catch {
+    return false
+  }
+}
+
 const ensureApiServer = async () => {
   if (devServerUrl) return devServerUrl
 
@@ -258,6 +272,7 @@ const createWindow = async () => {
 
 app.whenReady().then(() => {
   ipcMain.on('window-control', (event, action) => {
+    if (!isTrustedRendererEvent(event)) return
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return
     if (action === 'minimize') win.minimize()
@@ -269,6 +284,7 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('select-workspace-folder', async (event) => {
+    if (!isTrustedRendererEvent(event)) return null
     const win = BrowserWindow.fromWebContents(event.sender)
     const result = await dialog.showOpenDialog(win ?? undefined, {
       properties: ['openDirectory'],
