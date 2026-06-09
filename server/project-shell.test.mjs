@@ -95,6 +95,12 @@ test('persisted workspaces and conversations require absolute workspace paths', 
   assert.match(serverSource, /workspacePath = await requireWorkspaceDirectory\(req\.body\.workspacePath \|\| req\.body\.conversation\?\.workspacePath, 'workspacePath'\)/)
   assert.match(serverSource, /workspacePath = await requireWorkspaceDirectory\(req\.body\.workspacePath, 'workspacePath'\)/)
   assert.match(serverSource, /workspacePath must be an absolute local path/)
+  assert.match(serverSource, /sendJsonError\(res, error, \{ fallbackStatus: 400, fallbackMessage: 'Invalid workspace path\.' \}\)/)
+  assert.match(serverSource, /fallbackCode: 'invalid_workspace_path'/)
+  assert.match(serverSource, /fallbackCode: 'invalid_request'/)
+  assert.match(serverSource, /sendJsonError\(res, error, \{ fallbackStatus: 502, fallbackMessage: 'Failed to list generated artifacts\.' \}\)/)
+  assert.doesNotMatch(serverSource, /res\.status\(error\.statusCode \|\| 400\)\.json\(\{ error: error\.message \}\)/)
+  assert.doesNotMatch(serverSource, /res\.status\(error\.statusCode \|\| 502\)\.json\(\{ error: error instanceof Error/)
   assert.doesNotMatch(serverSource, /workspace-\$\{Date\.now\(\)\}/)
 })
 

@@ -1269,7 +1269,7 @@ app.post('/api/app-state/workspaces', async (req, res) => {
   try {
     workspacePath = await requireWorkspaceDirectory((req.body.workspace ?? req.body)?.path || (req.body.workspace ?? req.body)?.id, 'workspacePath')
   } catch (error) {
-    res.status(error.statusCode || 400).json({ error: error.message })
+    sendJsonError(res, error, { fallbackStatus: 400, fallbackMessage: 'Invalid workspace path.' })
     return
   }
   const workspace = normalizeWorkspace({ ...(req.body.workspace ?? req.body), id: workspacePath, path: workspacePath })
@@ -1285,7 +1285,14 @@ app.post('/api/app-state/workspaces', async (req, res) => {
 app.post('/api/app-state/workspaces/delete', async (req, res) => {
   const workspacePath = normalizeWorkspacePath(req.body.workspacePath)
   if (!workspacePath) {
-    res.status(400).json({ error: 'workspacePath must be an absolute local path' })
+    sendJsonError(
+      res,
+      httpError('workspacePath must be an absolute local path', {
+        statusCode: 400,
+        code: 'invalid_workspace_path',
+      }),
+      { fallbackStatus: 400, fallbackCode: 'invalid_workspace_path' },
+    )
     return
   }
 
@@ -1316,7 +1323,14 @@ app.post('/api/app-state/conversations', async (req, res) => {
 app.patch('/api/app-state/conversations', async (req, res) => {
   const conversationId = normalizeString(req.body.conversationId)
   if (!conversationId) {
-    res.status(400).json({ error: 'conversationId is required' })
+    sendJsonError(
+      res,
+      httpError('conversationId is required', {
+        statusCode: 400,
+        code: 'invalid_request',
+      }),
+      { fallbackStatus: 400, fallbackCode: 'invalid_request' },
+    )
     return
   }
 
@@ -1345,7 +1359,14 @@ app.post('/api/app-state/conversations/delete', async (req, res) => {
   const workspacePath = normalizeWorkspacePath(req.body.workspacePath)
   const conversationId = normalizeString(req.body.conversationId)
   if (!workspacePath || !conversationId) {
-    res.status(400).json({ error: 'absolute workspacePath and conversationId are required' })
+    sendJsonError(
+      res,
+      httpError('absolute workspacePath and conversationId are required', {
+        statusCode: 400,
+        code: 'invalid_request',
+      }),
+      { fallbackStatus: 400, fallbackCode: 'invalid_request' },
+    )
     return
   }
 
@@ -1402,7 +1423,7 @@ app.get('/api/artifacts', async (req, res) => {
     const workspacePath = await requireWorkspaceDirectory(req.query.workspacePath, 'workspacePath')
     res.json({ data: await listGeneratedArtifacts(workspacePath) })
   } catch (error) {
-    res.status(error.statusCode || 502).json({ error: error instanceof Error ? error.message : 'Failed to list generated artifacts.' })
+    sendJsonError(res, error, { fallbackStatus: 502, fallbackMessage: 'Failed to list generated artifacts.' })
   }
 })
 

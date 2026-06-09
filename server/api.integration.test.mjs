@@ -155,6 +155,26 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   assert.equal(missingTaskWorkspace.status, 400)
   assert.equal((await readJson(missingTaskWorkspace)).code, 'invalid_workspace_path')
 
+  const missingArtifactWorkspace = await fetch(`${baseUrl}/api/artifacts?workspacePath=${encodeURIComponent(path.join(os.tmpdir(), 'missing-codex-realtime-artifacts'))}`)
+  assert.equal(missingArtifactWorkspace.status, 404)
+  assert.equal((await readJson(missingArtifactWorkspace)).code, 'workspace_not_found')
+
+  const missingWorkspaceAdd = await fetch(`${baseUrl}/api/app-state/workspaces`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspace: { path: path.join(os.tmpdir(), 'missing-codex-realtime-workspace-add') } }),
+  })
+  assert.equal(missingWorkspaceAdd.status, 404)
+  assert.equal((await readJson(missingWorkspaceAdd)).code, 'workspace_not_found')
+
+  const invalidWorkspaceDelete = await fetch(`${baseUrl}/api/app-state/workspaces/delete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspacePath: 'relative-workspace' }),
+  })
+  assert.equal(invalidWorkspaceDelete.status, 400)
+  assert.equal((await readJson(invalidWorkspaceDelete)).code, 'invalid_workspace_path')
+
   const missingWorkspaceSave = await fetch(`${baseUrl}/api/app-state/conversations`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -178,6 +198,22 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   const validBody = await validSave.json()
   assert.equal(validBody.conversation.id, 'ok')
   assert.equal(validBody.state.conversationsByWorkspace[workspacePath].length, 1)
+
+  const missingPatchId = await fetch(`${baseUrl}/api/app-state/conversations`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspacePath, patch: { title: 'No id' } }),
+  })
+  assert.equal(missingPatchId.status, 400)
+  assert.equal((await readJson(missingPatchId)).code, 'invalid_request')
+
+  const invalidConversationDelete = await fetch(`${baseUrl}/api/app-state/conversations/delete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspacePath: 'relative-workspace', conversationId: '' }),
+  })
+  assert.equal(invalidConversationDelete.status, 400)
+  assert.equal((await readJson(invalidConversationDelete)).code, 'invalid_request')
 })
 
 test('server returns json errors for oversized API request bodies', async (t) => {
