@@ -58,6 +58,7 @@ const maxLogBytes = 1024 * 1024
 const maxElectronErrorDetailLength = 500
 const maxApiLogErrorTailLength = 2000
 const maxApiProbeBytes = 64 * 1024
+const staleDesktopServerShutdownGraceMs = 2000
 let apiProcess = null
 let apiLogFd = null
 
@@ -92,6 +93,62 @@ const startupErrorDetail = (error) => {
   const detail = boundedErrorDetail(error)
   const logTail = recentApiLogTail()
   return logTail ? `${detail}\n\nRecent API server log:\n${logTail}` : detail
+}
+
+const refusingToLoadError = (message) => {
+  const error = new Error(message)
+  error.code = 'refusing_to_load'
+  return error
+}
+
+const staleDesktopServerError = (message, pid) => {
+  const error = refusingToLoadError(message)
+  error.code = 'stale_desktop_server'
+  error.pid = pid
+  return error
+}
+
+const isRefusingToLoadError = (error) =>
+  error instanceof Error && (error.code === 'refusing_to_load' || error.code === 'stale_desktop_server')
+
+const isStaleDesktopServerError = (error) =>
+  error instanceof Error && error.code === 'stale_desktop_server' && Number.isInteger(error.pid) && error.pid > 0
+
+const processIsRunning = (pid) => {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    return error?.code === 'EPERM'
+  }
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+const waitForProcessExit = async (pid, timeoutMs) => {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (!processIsRunning(pid)) return true
+    await sleep(100)
+  }
+  return !processIsRunning(pid)
+}
+
+const terminateStaleDesktopServer = async (error) => {
+  if (!isStaleDesktopServerError(error) || error.pid === process.pid) return false
+  if (!processIsRunning(error.pid)) return true
+  try {
+    process.kill(error.pid, 'SIGTERM')
+  } catch {
+    return !processIsRunning(error.pid)
+  }
+  if (await waitForProcessExit(error.pid, staleDesktopServerShutdownGraceMs)) return true
+  try {
+    process.kill(error.pid, 'SIGKILL')
+  } catch {
+    return !processIsRunning(error.pid)
+  }
+  return waitForProcessExit(error.pid, 500)
 }
 
 const readJson = (url) =>
@@ -131,20 +188,26 @@ const waitForAppServer = (baseUrl, timeoutMs = 15000, expectedDesktopServerToken
       try {
         const status = await readJson(`${baseUrl}/api/status`)
         if (path.resolve(status?.appRoot || '') !== path.resolve(repoRoot)) {
-          reject(new Error(`Refusing to load unrelated local server at ${baseUrl}`))
+          reject(refusingToLoadError(`Refusing to load unrelated local server at ${baseUrl}`))
           return
         }
         if (expectedDesktopServerToken) {
           const serverToken = status?.desktopServer?.token
           if (serverToken !== expectedDesktopServerToken) {
-            reject(new Error(`Refusing to load stale local server at ${baseUrl}. Stop the existing Codex desktop server and relaunch.`))
+            const serverPid = status?.desktopServer?.pid
+            const staleMessage = `Refusing to load stale local server at ${baseUrl}. Stop the existing Codex desktop server and relaunch.`
+            reject(
+              serverToken && Number.isInteger(serverPid) && serverPid > 0
+                ? staleDesktopServerError(staleMessage, serverPid)
+                : refusingToLoadError(staleMessage),
+            )
             return
           }
         }
         resolve(status)
         return
       } catch (error) {
-        if (error instanceof Error && error.message.startsWith('Refusing to load')) {
+        if (isRefusingToLoadError(error)) {
           reject(error)
           return
         }
@@ -230,7 +293,12 @@ const ensureApiServer = async () => {
     await waitForAppServer(apiUrl, 750, desktopServerToken)
     return apiUrl
   } catch (error) {
-    if (error instanceof Error && error.message.startsWith('Refusing to load')) throw error
+    if (isStaleDesktopServerError(error)) {
+      writeApiLog(`Stopping stale Electron-managed API server ${error.pid}`)
+      if (!(await terminateStaleDesktopServer(error))) throw error
+    } else if (isRefusingToLoadError(error)) {
+      throw error
+    }
     apiLogFd = createApiLogFd()
     const apiEnv = {
       ...process.env,
