@@ -7,7 +7,11 @@ import { fileURLToPath } from 'node:url'
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const appId = 'codex-realtime-linux'
 const desktopFileName = `${appId}.desktop`
-const xdgDataHome = process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share')
+const configuredAbsoluteDir = (value, fallback) => {
+  const candidate = typeof value === 'string' && value.trim() ? value.trim() : fallback
+  return path.isAbsolute(candidate) ? path.resolve(candidate) : fallback
+}
+const xdgDataHome = configuredAbsoluteDir(process.env.XDG_DATA_HOME, path.join(os.homedir(), '.local', 'share'))
 const applicationsDir = path.join(xdgDataHome, 'applications')
 const iconBaseDir = path.join(xdgDataHome, 'icons', 'hicolor')
 const iconSource = path.join(repoRoot, 'public', 'codex-app-icon.png')
