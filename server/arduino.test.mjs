@@ -595,6 +595,31 @@ test('uploadArduinoSketch does not borrow another board FQBN for an explicit por
   assert.deepEqual(commands[1].slice(0, 5), ['upload', '-p', '/dev/ttyACM0', '--fqbn', 'arduino:avr:uno'])
 })
 
+test('uploadArduinoSketch rejects explicit ports that are not currently detected', async () => {
+  let commands = 0
+  await assert.rejects(
+    () => uploadArduinoSketch(
+      { action: 'onboard_led_on', port: '/dev/ttyACM9', fqbn: 'arduino:avr:uno' },
+      {
+        run: async () => {
+          commands += 1
+          return { stdout: 'unexpected command', stderr: '' }
+        },
+        listPorts: async () => ['/dev/ttyACM0'],
+        listBoards: async () => [{ address: '/dev/ttyACM0', fqbn: 'arduino:avr:uno', boardName: 'Arduino Uno' }],
+      },
+    ),
+    (error) =>
+      error instanceof ArduinoUploadError &&
+      error.status === 404 &&
+      error.code === 'arduino_port_not_found' &&
+      error.details.requestedPort === '/dev/ttyACM9' &&
+      error.details.serialPorts.includes('/dev/ttyACM0') &&
+      /not currently detected/.test(error.message),
+  )
+  assert.equal(commands, 0)
+})
+
 test('uploadArduinoSketch fails clearly when no serial port is available', async () => {
   await assert.rejects(
     () => uploadArduinoSketch({ action: 'onboard_led_on' }, { listPorts: async () => [], listBoards: async () => [] }),

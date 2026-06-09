@@ -445,6 +445,18 @@ export async function uploadArduinoSketch(
   const ports = (Array.isArray(rawPorts) ? rawPorts : []).filter((port) => typeof port === 'string' && isSupportedSerialPort(port))
   const boards = (Array.isArray(rawBoards) ? rawBoards : []).map(normalizeDetectedBoard).filter(Boolean)
   const uploadableBoards = boards.filter((board) => board.address && isSupportedSerialPort(board.address))
+  if (request.port && !ports.includes(request.port)) {
+    throw new ArduinoUploadError('The requested Arduino serial port is not currently detected. Reconnect the board or choose a detected port before uploading.', {
+      code: 'arduino_port_not_found',
+      status: 404,
+      details: {
+        requestedPort: request.port,
+        serialPorts: ports,
+        detectedBoards: boards,
+        hint: 'Run /api/arduino/status or /api/usb/events?scan=true, then pass one of the detected serial ports.',
+      },
+    })
+  }
   if (!request.port && uploadableBoards.length > 1) {
     throw new ArduinoUploadError('Multiple Arduino boards were detected. Choose an explicit serial port before uploading.', {
       code: 'arduino_ambiguous_port',
