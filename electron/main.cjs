@@ -23,6 +23,7 @@ const stateDir = path.join(process.env.XDG_STATE_HOME || path.join(os.homedir(),
 const apiLogPath = path.join(stateDir, 'api-server.log')
 const maxLogBytes = 1024 * 1024
 const maxElectronErrorDetailLength = 500
+const maxApiProbeBytes = 64 * 1024
 let apiProcess = null
 let apiLogFd = null
 
@@ -50,6 +51,9 @@ const readJson = (url) =>
       response.setEncoding('utf8')
       response.on('data', (chunk) => {
         body += chunk
+        if (Buffer.byteLength(body, 'utf8') > maxApiProbeBytes) {
+          request.destroy(new Error(`Server response was too large for ${url}`))
+        }
       })
       response.on('end', () => {
         if (!response.statusCode || response.statusCode >= 500) {
