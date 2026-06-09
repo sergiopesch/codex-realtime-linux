@@ -104,6 +104,12 @@ The app starts Codex through `codex app-server` by default. If your standalone d
 CODEX_BIN=/absolute/path/to/codex
 ```
 
+Codex task approval defaults to `on-request`. The desktop voice flow does not yet expose an approval UI, so trusted non-interactive workspaces can opt into uninterrupted execution by setting `CODEX_APPROVAL_POLICY=never`; invalid values fall back to `on-request`.
+
+```bash
+CODEX_APPROVAL_POLICY=never
+```
+
 The desktop app starts the local API server through the Electron runtime by default. If you need to force a separate Node runtime, set it explicitly. The override must be an absolute path; blank or relative values are ignored so app-menu launches do not depend on a desktop shell `PATH`:
 
 ```bash

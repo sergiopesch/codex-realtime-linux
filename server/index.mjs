@@ -26,6 +26,9 @@ const MAX_RUNTIME_PERSONA_LENGTH = 2_000
 const CODEX_BIN = configuredExecutable(process.env.CODEX_BIN, 'codex')
 const DEFAULT_REALTIME_PERSONA = 'Speak naturally, stay technically sharp, keep replies concise, and route concrete work to Codex tools.'
 const CODEX_MODEL = configuredRuntimeString(process.env.CODEX_MODEL, 'gpt-5.4')
+const DEFAULT_CODEX_APPROVAL_POLICY = 'on-request'
+const CODEX_APPROVAL_POLICIES = new Set(['untrusted', 'on-failure', 'on-request', 'never'])
+const CODEX_APPROVAL_POLICY = configuredCodexApprovalPolicy(process.env.CODEX_APPROVAL_POLICY)
 const REALTIME_MODEL = configuredRuntimeString(process.env.REALTIME_MODEL, 'gpt-realtime-2')
 const REALTIME_VOICE = configuredRuntimeString(process.env.REALTIME_VOICE, 'cedar')
 const REALTIME_TRANSCRIPTION_MODEL = configuredRuntimeString(process.env.REALTIME_TRANSCRIPTION_MODEL, 'gpt-4o-mini-transcribe')
@@ -180,6 +183,11 @@ function configuredRuntimeString(value, fallback, maxLength = MAX_RUNTIME_CONFIG
   if (typeof text !== 'string') return ''
   if (text.length <= maxLength) return text
   return `${text.slice(0, Math.max(0, maxLength - 3))}...`
+}
+
+function configuredCodexApprovalPolicy(value, fallback = DEFAULT_CODEX_APPROVAL_POLICY) {
+  const policy = typeof value === 'string' ? value.trim() : ''
+  return CODEX_APPROVAL_POLICIES.has(policy) ? policy : fallback
 }
 
 function configuredAbsolutePath(value, fallback) {
@@ -1733,6 +1741,7 @@ app.get('/api/status', async (_req, res) => {
       codexBin: CODEX_BIN,
       realtimeModel: REALTIME_MODEL,
       codexModel: CODEX_MODEL,
+      codexApprovalPolicy: CODEX_APPROVAL_POLICY,
       visionModel: VISION_MODEL,
       realtimeVoice: REALTIME_VOICE,
       appRoot: REPO_ROOT,
@@ -1985,7 +1994,7 @@ app.post('/api/codex/task', async (req, res) => {
       model: CODEX_MODEL,
       cwd,
       sandbox: 'workspace-write',
-      approvalPolicy: 'on-request',
+      approvalPolicy: CODEX_APPROVAL_POLICY,
       serviceName: 'codex_realtime_linux',
     })
     const threadId = normalizeCodexEntityId(threadResult.thread, 'thread')

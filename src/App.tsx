@@ -27,6 +27,7 @@ type Status = {
   adminApi: boolean
   codexApiKey: boolean
   codexAuthPreference: string
+  codexApprovalPolicy?: string
   openAiKeySource?: 'env' | 'settings' | 'missing'
   realtimeModel: string
   realtimeVoice?: string

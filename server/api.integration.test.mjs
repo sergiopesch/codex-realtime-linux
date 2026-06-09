@@ -494,6 +494,7 @@ test('codex task returns public artifact metadata for external workspace artifac
   const { baseUrl } = await startTestServer(t, {
     CODEX_BIN: fakeCodexPath,
     CODEX_API_KEY: '',
+    CODEX_APPROVAL_POLICY: 'never',
     CODEX_USE_OPENAI_API_KEY: 'false',
     FAKE_CODEX_RPC_LOG: logPath,
   })
@@ -529,6 +530,9 @@ test('codex task returns public artifact metadata for external workspace artifac
     .trim()
     .split('\n')
     .map((line) => JSON.parse(line))
+  const threadStart = rpcMessages.find((message) => message.method === 'thread/start')
+  assert.equal(threadStart?.params?.approvalPolicy, 'never')
+  assert.equal(threadStart?.params?.sandbox, 'workspace-write')
   const turnStart = rpcMessages.find((message) => message.method === 'turn/start')
   const escapedRelativePath = body.artifact.relativePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const turnText = turnStart?.params?.input?.[0]?.text ?? ''
@@ -554,6 +558,7 @@ test('server exposes desktop launch metadata when managed by Electron', async (t
   const { baseUrl } = await startTestServer(t, {
     CODEX_DESKTOP_SERVER_TOKEN: 'test-desktop-token',
     CODEX_BIN: './relative-codex',
+    CODEX_APPROVAL_POLICY: 'danger',
   })
 
   const status = await fetch(`${baseUrl}/api/status`)
@@ -563,6 +568,7 @@ test('server exposes desktop launch metadata when managed by Electron', async (t
   assert.equal(body.desktopServer.token, 'test-desktop-token')
   assert.equal(Number.isInteger(body.desktopServer.pid), true)
   assert.equal(body.codexBin, 'codex')
+  assert.equal(body.codexApprovalPolicy, 'on-request')
 })
 
 test('server only trusts configured loopback API origins', async (t) => {
