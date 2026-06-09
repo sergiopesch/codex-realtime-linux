@@ -545,6 +545,8 @@ function App() {
   const waveformFrameRef = useRef<number | null>(null)
   const microphoneStreamRef = useRef<MediaStream | null>(null)
   const screenStreamRef = useRef<MediaStream | null>(null)
+  const screenEndedTrackRef = useRef<MediaStreamTrack | null>(null)
+  const screenEndedHandlerRef = useRef<(() => void) | null>(null)
   const pendingVisualContextRef = useRef<{ source: string; summary: string }[]>([])
   const pendingArtifactRef = useRef<ArtifactPlan | null>(null)
   const activeThreadIdRef = useRef<string | null>(null)
@@ -766,6 +768,11 @@ function App() {
   }
 
   const cleanupScreenShare = (stream = screenStreamRef.current) => {
+    if (screenEndedTrackRef.current && screenEndedHandlerRef.current) {
+      screenEndedTrackRef.current.removeEventListener('ended', screenEndedHandlerRef.current)
+      screenEndedTrackRef.current = null
+      screenEndedHandlerRef.current = null
+    }
     stream?.getTracks().forEach((track) => track.stop())
     if (!stream || screenStreamRef.current === stream) {
       screenStreamRef.current = null
@@ -1802,9 +1809,13 @@ function App() {
       stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false })
       screenStreamRef.current = stream
       setScreenShared(true)
-      stream.getVideoTracks()[0]?.addEventListener('ended', () => {
-        cleanupScreenShare(stream ?? undefined)
-      })
+      const videoTrack = stream.getVideoTracks()[0] ?? null
+      const handleScreenEnded = () => cleanupScreenShare(stream ?? undefined)
+      if (videoTrack) {
+        screenEndedTrackRef.current = videoTrack
+        screenEndedHandlerRef.current = handleScreenEnded
+        videoTrack.addEventListener('ended', handleScreenEnded)
+      }
       appendEvent('context/screen-attached', { tracks: stream.getVideoTracks().length })
       const imageDataUrl = await dataUrlFromVideoFrame(stream)
       await analyzeAndAttachVisualContext(imageDataUrl, 'screen')
