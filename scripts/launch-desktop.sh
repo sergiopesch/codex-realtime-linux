@@ -51,11 +51,36 @@ if [ ! -x "$electron_bin" ]; then
   exit 1
 fi
 
-if [ ! -f ./dist/index.html ]; then
+renderer_build_stamp="./dist/index.html"
+renderer_build_stale=0
+renderer_build_inputs=(
+  "./index.html"
+  "./package.json"
+  "./package-lock.json"
+  "./vite.config.ts"
+  "./tsconfig.json"
+  "./tsconfig.app.json"
+  "./src"
+  "./public"
+)
+
+if [ ! -f "$renderer_build_stamp" ]; then
+  renderer_build_stale=1
+else
+  for build_input in "${renderer_build_inputs[@]}"; do
+    if [ -e "$build_input" ] && find "$build_input" -newer "$renderer_build_stamp" -print -quit | grep -q .; then
+      renderer_build_stale=1
+      break
+    fi
+  done
+fi
+
+if [ "$renderer_build_stale" = "1" ]; then
   if ! command -v npm >/dev/null 2>&1; then
-    echo "Built renderer is missing and npm is not available. Run npm run build in $repo_root."
+    echo "Built renderer is missing or stale and npm is not available. Run npm run build in $repo_root."
     exit 1
   fi
+  printf '[%s] Building renderer before launch\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   npm run build
 fi
 
