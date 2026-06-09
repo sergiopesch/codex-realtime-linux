@@ -932,6 +932,16 @@ function normalizeEventRecord(event, fallbackMethod = 'app-server/event') {
   }
 }
 
+function codexRpcErrorMessage(error) {
+  const message =
+    error && typeof error === 'object' && !Array.isArray(error)
+      ? error.message
+      : typeof error === 'string'
+        ? error
+        : ''
+  return normalizeBoundedString(message, 'Codex app-server request failed.', MAX_ERROR_MESSAGE_LENGTH)
+}
+
 function normalizeCodexMetadataValue(value, depth = 0, seen = new WeakSet()) {
   if (value == null || typeof value === 'number' || typeof value === 'boolean') return value
   if (typeof value === 'string') return normalizeBoundedString(value, '', MAX_CODEX_METADATA_STRING_LENGTH)
@@ -1211,7 +1221,7 @@ class CodexRpc {
       const { resolve, reject, timeout } = this.pending.get(message.id)
       clearTimeout(timeout)
       this.pending.delete(message.id)
-      if (message.error) reject(new Error(message.error.message ?? 'Codex app-server request failed'))
+      if (message.error) reject(new Error(codexRpcErrorMessage(message.error)))
       else resolve(message.result)
       return
     }

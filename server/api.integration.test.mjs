@@ -93,6 +93,8 @@ import { appendFileSync } from 'node:fs'
 import { createInterface } from 'node:readline'
 
 const logPath = process.env.FAKE_CODEX_RPC_LOG
+const errorMethods = new Set((process.env.FAKE_CODEX_ERROR_METHODS ?? '').split(',').map((method) => method.trim()).filter(Boolean))
+const errorMessage = process.env.FAKE_CODEX_ERROR_MESSAGE ?? 'Fake Codex app-server failure.'
 const responses = {
   initialize: {},
   'thread/start': { thread: { id: 'thread-ok' } },
@@ -116,6 +118,10 @@ createInterface({ input: process.stdin }).on('line', (line) => {
   const message = JSON.parse(line)
   if (logPath) appendFileSync(logPath, \`\${JSON.stringify(message)}\\n\`)
   if (message.id == null) return
+  if (errorMethods.has(message.method)) {
+    process.stdout.write(\`\${JSON.stringify({ id: message.id, error: { message: errorMessage, code: 'fake_error' } })}\\n\`)
+    return
+  }
   const result = responses[message.method] ?? {}
   process.stdout.write(\`\${JSON.stringify({ id: message.id, result })}\\n\`)
 })
@@ -796,6 +802,29 @@ test('codex app-source tasks require an explicit environment opt-in', async (t) 
     .map((line) => JSON.parse(line))
   const threadStart = rpcMessages.find((message) => message.method === 'thread/start')
   assert.equal(threadStart?.params?.cwd, repoRoot)
+})
+
+test('codex routes bound app-server rpc error messages', async (t) => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-rpc-error-'))
+  t.after(() => rm(tempDir, { recursive: true, force: true }))
+  const { fakeCodexPath } = await writeFakeCodexAppServer(tempDir)
+  const workspacePath = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-rpc-error-workspace-'))
+  t.after(() => rm(workspacePath, { recursive: true, force: true }))
+  const oversizedError = `RPC failed: ${'x'.repeat(2_000)}`
+
+  const { baseUrl } = await startTestServer(t, {
+    CODEX_BIN: fakeCodexPath,
+    FAKE_CODEX_ERROR_METHODS: 'thread/list',
+    FAKE_CODEX_ERROR_MESSAGE: oversizedError,
+  })
+
+  const response = await fetch(`${baseUrl}/api/codex/threads?cwd=${encodeURIComponent(workspacePath)}`)
+  assert.equal(response.status, 502)
+  const body = await readJson(response)
+  assert.equal(body.error.length, 500)
+  assert.match(body.error, /^RPC failed: x+/)
+  assert.match(body.error, /\.\.\.$/)
+  assert.doesNotMatch(body.error, /x{600}/)
 })
 
 test('server returns json errors for oversized API request bodies', async (t) => {
