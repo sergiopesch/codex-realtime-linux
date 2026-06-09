@@ -917,7 +917,7 @@ function App() {
     () => workspaceSource.map(workspacePathFor).filter(Boolean),
     [workspaceSource],
   )
-  const workspaceRoots = workspaceSource.slice(0, 8).map((workspace) => {
+  const workspaceRoots = workspaceSource.map((workspace) => {
     const workspacePath = workspacePathFor(workspace)
     const conversations = conversationsByWorkspace[workspacePath] ?? []
     return { workspace, workspacePath, conversations }

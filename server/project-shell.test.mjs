@@ -514,6 +514,8 @@ test('Codex task routes require explicit user goals and IDs before app-server ca
   assert.doesNotMatch(appSource, /return trimmed\.replace\(\/\\\/\+\$\/g, ''\) \|\| '\/'/)
   assert.match(appSource, /const workspacePathFor = \(workspace: Workspace\) => normalizeAbsoluteLocalWorkspacePath\(workspace\.path \?\? workspace\.id\)/)
   assert.match(appSource, /source: 'local',\s+workspacePath,\s+\}/)
+  assert.match(appSource, /const workspaceRoots = workspaceSource\.map\(\(workspace\) => \{/)
+  assert.doesNotMatch(appSource, /workspaceSource\.slice\(0, 8\)/)
   assert.match(appSource, /const nextVoiceConversationTitle = \(existing: AgentConversation\[\]\) =>/)
   assert.match(appSource, /const usedNumbers = new Set<number>\(\)/)
   assert.match(appSource, /const match = \/\^Voice conversation \(\\d\+\)\$\/i\.exec/)
