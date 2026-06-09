@@ -862,6 +862,11 @@ const safeConversation = (value: unknown, workspacePath: string): AgentConversat
     updatedAt: typeof conversation.updatedAt === 'string' ? conversation.updatedAt : undefined,
   }
 }
+const requireSafeConversation = (value: unknown, workspacePath: string) => {
+  const conversation = safeConversation(value, workspacePath)
+  if (!conversation) throw new Error('Saved conversation response did not include a valid conversation.')
+  return conversation
+}
 const safeConversationsByWorkspace = (value: unknown) => {
   const groups: Record<string, AgentConversation[]> = {}
   if (!value || typeof value !== 'object' || Array.isArray(value)) return groups
@@ -1157,9 +1162,10 @@ function App() {
         body: JSON.stringify({ workspacePath, conversationId: threadId, patch: { status: 'ready' } }),
       })
         .then((savedConversation) => {
+          const conversation = requireSafeConversation(savedConversation.conversation, workspacePath)
           setConversationsByWorkspace((current) => ({
             ...current,
-            [workspacePath]: mergeConversations(current[workspacePath] ?? [], [savedConversation.conversation]),
+            [workspacePath]: mergeConversations(current[workspacePath] ?? [], [conversation]),
           }))
         })
         .catch((error: unknown) => {
@@ -1712,11 +1718,12 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ workspacePath, conversation: savedConversationPayload(conversation) }),
       })
+      const conversationResponse = requireSafeConversation(savedConversation.conversation, workspacePath)
       setConversationsByWorkspace((current) => ({
         ...current,
-        [workspacePath]: mergeConversations(current[workspacePath] ?? existing, [savedConversation.conversation]),
+        [workspacePath]: mergeConversations(current[workspacePath] ?? existing, [conversationResponse]),
       }))
-      openConversationWindow(workspacePath, savedConversation.conversation.id)
+      openConversationWindow(workspacePath, conversationResponse.id)
       showNotice(`${title} opened as a new agent conversation window. Start voice to describe the build goal.`)
     } catch (error) {
       setLastError(displayErrorMessage(error, 'Failed to save agent conversation'))
@@ -1738,26 +1745,29 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ workspace }),
       })
-      const savedWorkspacePath = workspacePathFor(savedWorkspace.workspace)
+      const savedWorkspaceResponse = safeWorkspace(savedWorkspace.workspace)
+      const savedWorkspacePath = savedWorkspaceResponse ? workspacePathFor(savedWorkspaceResponse) : ''
       if (!isAbsoluteLocalWorkspacePath(savedWorkspacePath)) {
         throw new Error('Saved workspace response did not include a local path.')
       }
-      const savedWorkspaces = (savedWorkspace.state.workspaces ?? [savedWorkspace.workspace]).filter((workspace) =>
-        isAbsoluteLocalWorkspacePath(workspacePathFor(workspace)),
-      )
+      const savedWorkspaces = safeWorkspaces([
+        ...(Array.isArray(savedWorkspace.state.workspaces) ? savedWorkspace.state.workspaces : []),
+        savedWorkspaceResponse,
+      ])
+      const savedConversationState = safeConversationsByWorkspace(savedWorkspace.state.conversationsByWorkspace)
 
       setUserWorkspaces(savedWorkspaces)
-      setHiddenWorkspacePaths((savedWorkspace.state.hiddenWorkspacePaths ?? []).map(normalizeAbsoluteLocalWorkspacePath))
+      setHiddenWorkspacePaths(safeHiddenWorkspacePaths(savedWorkspace.state.hiddenWorkspacePaths))
       setConversationsByWorkspace((current) => ({
         ...current,
-        [savedWorkspacePath]: current[savedWorkspacePath] ?? savedWorkspace.state.conversationsByWorkspace?.[savedWorkspacePath] ?? [],
+        [savedWorkspacePath]: current[savedWorkspacePath] ?? savedConversationState[savedWorkspacePath] ?? [],
       }))
       setCollapsedWorkspaces((current) => current.filter((item) => item !== savedWorkspacePath))
       setSelectedWorkspace(savedWorkspacePath)
       setSelectedConversationId('')
       setActiveSystemScreen(null)
       closeArtifactPreview()
-      showNotice(`${savedWorkspace.workspace.name} added as a workspace. Create a new agent conversation when you are ready.`)
+      showNotice(`${savedWorkspaceResponse?.name ?? name} added as a workspace. Create a new agent conversation when you are ready.`)
     } catch (error) {
       setLastError(displayErrorMessage(error, 'Failed to save workspace'))
     }
@@ -1823,7 +1833,7 @@ function App() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ workspacePath, conversationId }),
           })
-          confirmedConversations = deleteResult.state.conversationsByWorkspace[workspacePath] ?? []
+          confirmedConversations = safeConversationsByWorkspace(deleteResult.state.conversationsByWorkspace)[workspacePath] ?? []
         } catch (error) {
           if (deleted.source === 'local') throw error
           appendEvent('app-state/codex-conversation-delete-failed', {
@@ -1873,14 +1883,12 @@ function App() {
         body: JSON.stringify({ workspacePath: targetWorkspacePath }),
       })
 
-      const savedWorkspaces = (deleteResult.state.workspaces ?? []).filter((workspace) =>
-        isAbsoluteLocalWorkspacePath(workspacePathFor(workspace)),
-      )
-      setHiddenWorkspacePaths((deleteResult.state.hiddenWorkspacePaths ?? []).map(normalizeAbsoluteLocalWorkspacePath))
+      const savedWorkspaces = safeWorkspaces(deleteResult.state.workspaces)
+      setHiddenWorkspacePaths(safeHiddenWorkspacePaths(deleteResult.state.hiddenWorkspacePaths))
       setUserWorkspaces(savedWorkspaces)
       setCollapsedWorkspaces((current) => current.filter((item) => normalizeAbsoluteLocalWorkspacePath(item) !== targetWorkspacePath))
       setConversationsByWorkspace((current) => {
-        const confirmedConversations = deleteResult.state.conversationsByWorkspace ?? {}
+        const confirmedConversations = safeConversationsByWorkspace(deleteResult.state.conversationsByWorkspace)
         const next = { ...current, ...confirmedConversations }
         delete next[targetWorkspacePath]
         return next
@@ -2385,9 +2393,10 @@ function App() {
             body: JSON.stringify({ workspacePath, conversation: savedConversationPayload(routedConversation) }),
           })
             .then((savedConversation) => {
+              const conversation = requireSafeConversation(savedConversation.conversation, workspacePath)
               setConversationsByWorkspace((current) => ({
                 ...current,
-                [workspacePath]: mergeConversations(current[workspacePath] ?? [], [savedConversation.conversation]),
+                [workspacePath]: mergeConversations(current[workspacePath] ?? [], [conversation]),
               }))
             })
             .catch((error: unknown) => {
