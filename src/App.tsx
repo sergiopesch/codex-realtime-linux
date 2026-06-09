@@ -886,6 +886,7 @@ function App() {
   const pendingArtifactRef = useRef<ArtifactPlan | null>(null)
   const activeThreadIdRef = useRef<string | null>(null)
   const activeTurnIdRef = useRef<string | null>(null)
+  const activeSystemScreenRef = useRef<SystemScreen | null>(null)
   const handledRealtimeFunctionCallIdsRef = useRef<Set<string>>(new Set())
   const selectedWorkspaceRef = useRef(initialWorkspacePath)
   const routableWorkspacePathsRef = useRef<Set<string>>(new Set())
@@ -1397,13 +1398,17 @@ function App() {
   }, [])
 
   const openArtifactPreview = useCallback((artifact: GeneratedArtifact) => {
+    if (activeSystemScreenRef.current || artifact.workspacePath !== selectedWorkspaceRef.current) {
+      closeArtifactPreview()
+      return
+    }
     setSelectedArtifact(artifact)
     setArtifactPreviewLease({
       url: artifact.url,
       workspacePath: artifact.workspacePath,
       expiresAt: Date.now() + ARTIFACT_PREVIEW_SESSION_MS,
     })
-  }, [])
+  }, [closeArtifactPreview])
 
   const extendArtifactPreview = useCallback(() => {
     setArtifactPreviewLease((current) =>
@@ -1743,6 +1748,10 @@ function App() {
   useEffect(() => {
     activeTurnIdRef.current = activeTurnId
   }, [activeTurnId])
+
+  useEffect(() => {
+    activeSystemScreenRef.current = activeSystemScreen
+  }, [activeSystemScreen])
 
   useEffect(() => {
     pendingArtifactRef.current = pendingArtifact
