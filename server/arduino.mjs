@@ -16,6 +16,7 @@ const MAX_COMMAND_CAPTURE_CHARS = 16_000
 const MAX_COMMAND_OUTPUT_CHARS = 4_000
 const MAX_STATUS_FIELD_CHARS = 500
 const MAX_SERIAL_PORT_SCAN_ENTRIES = 400
+const COMMAND_TIMEOUT_KILL_GRACE_MS = 2_000
 const DEFAULT_SERIAL_BY_ID_DIR = '/dev/serial/by-id'
 const MAX_SERIAL_BY_ID_SCAN_ENTRIES = 400
 const MAX_SERIAL_PORTS = 80
@@ -255,15 +256,33 @@ function summarizeCommandOutput(stdout, stderr) {
     .slice(0, 700)
 }
 
-function runCommand(command, args, { spawnImpl = spawn, timeoutMs = 120_000 } = {}) {
+export function runCommand(command, args, { spawnImpl = spawn, timeoutMs = 120_000, killGraceMs = COMMAND_TIMEOUT_KILL_GRACE_MS } = {}) {
   return new Promise((resolve, reject) => {
     const proc = spawnImpl(command, args, { stdio: ['ignore', 'pipe', 'pipe'] })
     let stdout = ''
     let stderr = ''
+    let settled = false
+    let killTimeout = null
     const timeout = setTimeout(() => {
+      if (settled) return
+      settled = true
       proc.kill?.('SIGTERM')
+      killTimeout = setTimeout(() => {
+        proc.kill?.('SIGKILL')
+      }, killGraceMs)
       reject(new ArduinoUploadError(`${command} timed out.`, { code: 'arduino_cli_timeout', status: 504 }))
     }, timeoutMs)
+    const clearKillTimeout = () => {
+      if (killTimeout != null) clearTimeout(killTimeout)
+      killTimeout = null
+    }
+    const settle = (callback) => {
+      clearKillTimeout()
+      if (settled) return
+      settled = true
+      clearTimeout(timeout)
+      callback()
+    }
 
     proc.stdout?.on('data', (chunk) => {
       stdout = appendCommandOutput(stdout, chunk)
@@ -272,33 +291,33 @@ function runCommand(command, args, { spawnImpl = spawn, timeoutMs = 120_000 } = 
       stderr = appendCommandOutput(stderr, chunk)
     })
     proc.once('error', (error) => {
-      clearTimeout(timeout)
-      reject(
+      settle(() => reject(
         new ArduinoUploadError('arduino-cli is not available. Install it before uploading sketches.', {
           code: 'arduino_cli_missing',
           status: 503,
           details: error.message,
         }),
-      )
+      ))
     })
     proc.once('exit', (exitCode) => {
-      clearTimeout(timeout)
-      if (exitCode === 0) {
-        resolve({ stdout, stderr })
-        return
-      }
-      reject(
-        new ArduinoUploadError(
-          [`${command} failed with exit code ${exitCode}.`, summarizeCommandOutput(stdout, stderr)]
-            .filter(Boolean)
-            .join(' '),
-          {
-            code: 'arduino_cli_failed',
-            status: 502,
-            details: { stdout, stderr, exitCode },
-          },
-        ),
-      )
+      settle(() => {
+        if (exitCode === 0) {
+          resolve({ stdout, stderr })
+          return
+        }
+        reject(
+          new ArduinoUploadError(
+            [`${command} failed with exit code ${exitCode}.`, summarizeCommandOutput(stdout, stderr)]
+              .filter(Boolean)
+              .join(' '),
+            {
+              code: 'arduino_cli_failed',
+              status: 502,
+              details: { stdout, stderr, exitCode },
+            },
+          ),
+        )
+      })
     })
   })
 }

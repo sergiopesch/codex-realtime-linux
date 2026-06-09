@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { EventEmitter } from 'node:events'
 import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -9,6 +10,7 @@ import {
   listArduinoBoards,
   listSerialPorts,
   normalizeUploadRequest,
+  runCommand,
   sketchForAction,
   uploadArduinoSketch,
 } from './arduino.mjs'
@@ -355,6 +357,33 @@ process.stderr.write('stderr ' + 'y'.repeat(50000))
     else process.env.ARDUINO_CLI_PATH = previousCliPath
     await rm(cliDir, { recursive: true, force: true })
   }
+})
+
+test('runCommand escalates timed-out arduino-cli processes to SIGKILL', async () => {
+  const proc = new EventEmitter()
+  proc.stdout = new EventEmitter()
+  proc.stderr = new EventEmitter()
+  const killedSignals = []
+  proc.kill = (signal) => {
+    killedSignals.push(signal)
+    if (signal === 'SIGKILL') setImmediate(() => proc.emit('exit', null, signal))
+    return true
+  }
+
+  await assert.rejects(
+    () => runCommand('arduino-cli', ['compile'], {
+      spawnImpl: () => proc,
+      timeoutMs: 1,
+      killGraceMs: 5,
+    }),
+    (error) =>
+      error instanceof ArduinoUploadError &&
+      error.status === 504 &&
+      error.code === 'arduino_cli_timeout',
+  )
+
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  assert.deepEqual(killedSignals, ['SIGTERM', 'SIGKILL'])
 })
 
 test('uploadArduinoSketch compiles and uploads through arduino-cli', async () => {
