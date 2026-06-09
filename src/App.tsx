@@ -730,6 +730,7 @@ function App() {
   const voiceStateRef = useRef<'idle' | 'connecting' | 'live'>('idle')
   const voiceSessionIdRef = useRef(0)
   const voiceAbortControllerRef = useRef<AbortController | null>(null)
+  const weatherRequestIdRef = useRef(0)
   const microphoneStreamRef = useRef<MediaStream | null>(null)
   const screenStreamRef = useRef<MediaStream | null>(null)
   const screenEndedTrackRef = useRef<MediaStreamTrack | null>(null)
@@ -808,6 +809,7 @@ function App() {
     !artifactMatchesDismissal(selectedArtifact, dismissedArtifact)
       ? selectedArtifact
       : null
+  const shouldShowArtifactBrowser = Boolean(artifactPreview)
   const agentIsWorkingOnArtifact = Boolean(pendingArtifact && codexTurnInProgress)
   const showSubagentPreview = !activeSystemScreen && codexTurnInProgress && !agentIsWorkingOnArtifact
   const subagentTitle = activeConversation?.title ? briefThreadTitle(activeConversation.title) : 'Codex'
@@ -1210,22 +1212,33 @@ function App() {
     })
   }, [artifactPreviewLease, dismissedArtifact])
 
+  const closeArtifactPreview = useCallback(() => {
+    setSelectedArtifact(null)
+    setArtifactPreviewLease(null)
+  }, [])
+
   const requestWeather = async (event?: FormEvent<HTMLFormElement>) => {
     event?.preventDefault()
+    const requestId = weatherRequestIdRef.current + 1
+    weatherRequestIdRef.current = requestId
+    const requestedLocation = weatherLocationInput
+    const requestedUnits = weatherUnits
     setWeatherLoading(true)
     setWeatherError(null)
     setLastError(null)
 
     try {
-      const weather = await fetchWeather(weatherLocationInput, weatherUnits)
+      const weather = await fetchWeather(requestedLocation, requestedUnits)
+      if (weatherRequestIdRef.current !== requestId) return
       setWeatherResult(weather)
       showNotice(`Weather updated for ${weather.location.name}.`)
     } catch (error) {
+      if (weatherRequestIdRef.current !== requestId) return
       const message = displayErrorMessage(error, 'Weather lookup failed')
       setWeatherError(message)
       setWeatherResult(null)
     } finally {
-      setWeatherLoading(false)
+      if (weatherRequestIdRef.current === requestId) setWeatherLoading(false)
     }
   }
 
@@ -1270,8 +1283,7 @@ function App() {
     setSelectedWorkspace(workspacePath)
     setSelectedConversationId(conversationId)
     setActiveSystemScreen(null)
-    setSelectedArtifact(null)
-    setArtifactPreviewLease(null)
+    closeArtifactPreview()
     setNotice(null)
     setLastError(null)
     if (mobileSidebarShouldCollapse()) setSidebarCollapsed(true)
@@ -1343,8 +1355,7 @@ function App() {
       setSelectedWorkspace(savedWorkspacePath)
       setSelectedConversationId('')
       setActiveSystemScreen(null)
-      setSelectedArtifact(null)
-      setArtifactPreviewLease(null)
+      closeArtifactPreview()
       showNotice(`${savedWorkspace.workspace.name} added as a workspace. Create a new agent conversation when you are ready.`)
     } catch (error) {
       setLastError(displayErrorMessage(error, 'Failed to save workspace'))
@@ -1461,8 +1472,7 @@ function App() {
           setSelectedConversationId('')
           setActiveSystemScreen('settings')
         }
-        setSelectedArtifact(null)
-        setArtifactPreviewLease(null)
+        closeArtifactPreview()
       }
       showNotice('Workspace removed from this app. The local folder was not deleted.')
     } catch (error) {
@@ -1477,8 +1487,7 @@ function App() {
 
     setSelectedWorkspace(workspacePath)
     setActiveSystemScreen(null)
-    setSelectedArtifact(null)
-    setArtifactPreviewLease(null)
+    closeArtifactPreview()
     if (firstConversation) {
       setSelectedConversationId(firstConversation.id)
     } else {
@@ -1492,8 +1501,7 @@ function App() {
 
   const openSystemScreen = (screen: SystemScreen) => {
     setActiveSystemScreen(screen)
-    setSelectedArtifact(null)
-    setArtifactPreviewLease(null)
+    closeArtifactPreview()
     setNotice(null)
     setLastError(null)
     if (mobileSidebarShouldCollapse()) setSidebarCollapsed(true)
@@ -1894,8 +1902,7 @@ function App() {
         const goal = requireRealtimeToolText(payload.goal, 'A concrete Codex goal')
         const workspacePath = selectedRoutableWorkspacePath(payload.cwd)
         setDismissedArtifact(null)
-        setSelectedArtifact(null)
-        setArtifactPreviewLease(null)
+        closeArtifactPreview()
         result = await api('/api/codex/task', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -2764,7 +2771,7 @@ function App() {
                 <span>{primaryActivity}</span>
               </div>
 
-              {(agentIsWorkingOnArtifact || artifactPreview) && (
+              {(agentIsWorkingOnArtifact || shouldShowArtifactBrowser) && (
                 <section
                   className={agentIsWorkingOnArtifact ? 'artifact-stage artifact-stage-building' : 'artifact-stage'}
                   aria-label="Generated artifact preview"
@@ -2789,8 +2796,7 @@ function App() {
                             updatedAt: artifactPreview.updatedAt,
                             workspacePath: artifactPreview.workspacePath,
                           })
-                          setSelectedArtifact(null)
-                          setArtifactPreviewLease(null)
+                          closeArtifactPreview()
                         }}
                       >
                         <X size={14} />
