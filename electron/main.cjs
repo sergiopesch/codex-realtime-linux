@@ -167,10 +167,14 @@ const readJson = (url) =>
           reject(new Error(`Server returned ${response.statusCode || 'no status'} for ${url}`))
           return
         }
+        if (response.statusCode !== 200) {
+          reject(refusingToLoadError(`Refusing to load non-Codex local server at ${url}: HTTP ${response.statusCode}`))
+          return
+        }
         try {
           resolve(JSON.parse(body))
         } catch {
-          reject(new Error(`Server response was not JSON for ${url}`))
+          reject(refusingToLoadError(`Refusing to load non-Codex local server at ${url}: response was not JSON`))
         }
       })
     })
