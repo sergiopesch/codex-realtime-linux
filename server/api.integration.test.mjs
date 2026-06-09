@@ -373,6 +373,17 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   assert.equal(protectedAppDesiredArtifactTask.status, 400)
   assert.equal((await readJson(protectedAppDesiredArtifactTask)).code, 'protected_app_workspace')
 
+  const protectedAppNounPhraseArtifactTask = await fetch(`${baseUrl}/api/codex/task`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      cwd: repoRoot,
+      goal: 'A presentation about this app in the style of Apple.',
+    }),
+  })
+  assert.equal(protectedAppNounPhraseArtifactTask.status, 400)
+  assert.equal((await readJson(protectedAppNounPhraseArtifactTask)).code, 'protected_app_workspace')
+
   const protectedAppSubdirArtifactTask = await fetch(`${baseUrl}/api/codex/task`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

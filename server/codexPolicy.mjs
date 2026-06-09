@@ -91,6 +91,22 @@ const STRONG_ARTIFACT_OUTPUT_TERMS = [
   'website',
 ]
 
+const ARTIFACT_NOUN_QUALIFIERS = [
+  'beautiful',
+  'browser',
+  'clean',
+  'clickable',
+  'html',
+  'interactive',
+  'modern',
+  'polished',
+  'quick',
+  'short',
+  'simple',
+  'visual',
+  'web',
+]
+
 const EXPLICIT_APP_EDIT_PATTERN =
   /\b(edit|change|modify|update|fix|refactor|redesign|alter|touch)\b[\s\S]{0,100}\b(app source|application source|app shell|this app|the app|ui source|electron app|react app|src\/|server\/|electron\/|index\.html)\b/i
 
@@ -104,6 +120,19 @@ const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 const termPattern = (term) => escapeRegExp(term).replace(/\s+/g, '\\s+')
 
+const strongArtifactOutputPattern = STRONG_ARTIFACT_OUTPUT_TERMS
+  .slice()
+  .sort((a, b) => b.length - a.length)
+  .map(termPattern)
+  .join('|')
+
+const artifactNounQualifiersPattern = ARTIFACT_NOUN_QUALIFIERS.map(termPattern).join('|')
+
+const ARTIFACT_NOUN_REQUEST_PATTERN = new RegExp(
+  `^(?:please\\s+)?(?:(?:a|an|the|this|that|my|our)\\s+)?(?:(?:${artifactNounQualifiersPattern})\\s+){0,5}(?:${strongArtifactOutputPattern})\\b[\\s\\S]{0,140}\\b(?:about|from|for|using|with|based\\s+on|in\\s+the\\s+style\\s+of|that\\s+(?:uses|includes|shows|summarizes)|showing|summarizing)\\b`,
+  'i',
+)
+
 const containsTerm = (value, terms) => terms.some((term) => new RegExp(`\\b${termPattern(term)}\\b`, 'i').test(value))
 
 const slug = (value) =>
@@ -116,7 +145,8 @@ const slug = (value) =>
 export function isArtifactRequest(goal) {
   const explicitCreation = containsTerm(goal, ARTIFACT_ACTION_TERMS) && containsTerm(goal, ARTIFACT_OUTPUT_TERMS)
   const desiredArtifact = DESIRED_ARTIFACT_PATTERN.test(goal) && containsTerm(goal, STRONG_ARTIFACT_OUTPUT_TERMS)
-  return explicitCreation || desiredArtifact
+  const nounPhraseArtifact = ARTIFACT_NOUN_REQUEST_PATTERN.test(goal)
+  return explicitCreation || desiredArtifact || nounPhraseArtifact
 }
 
 export function hasExplicitAppEditIntent(goal) {

@@ -24,6 +24,10 @@ test('classifies generated HTML requests as artifact work', () => {
   assert.equal(isArtifactRequest('I want an HTML page from these screenshots.'), true)
   assert.equal(isArtifactRequest('Can I have a report from the files in this folder?'), true)
   assert.equal(isArtifactRequest("Let's have a slideshow that uses the images here."), true)
+  assert.equal(isArtifactRequest('A presentation about this workspace in the style of Apple.'), true)
+  assert.equal(isArtifactRequest('Beautiful HTML page from these screenshots.'), true)
+  assert.equal(isArtifactRequest('Interactive gallery using the images here.'), true)
+  assert.equal(isArtifactRequest('Review the presentation about this project.'), false)
   assert.equal(isArtifactRequest('Fix the USB watcher bug in the app.'), false)
   assert.equal(isArtifactRequest('Fix the file watcher bug in the app.'), false)
   assert.equal(isArtifactRequest('I need the file watcher bug fixed in the app.'), false)
@@ -41,6 +45,7 @@ test('keeps app-directed page creation out of artifact routing', () => {
   assert.equal(isArtifactRequest('Add a settings page to this app.'), true)
   assert.equal(artifactPlanForGoal('Add a settings page to this app.'), null)
   assert.notEqual(artifactPlanForGoal('Create a presentation about this app.'), null)
+  assert.notEqual(artifactPlanForGoal('A presentation about this app.'), null)
 })
 
 test('guard routes generic file creation away from protected app source', () => {
