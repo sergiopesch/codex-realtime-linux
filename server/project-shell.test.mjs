@@ -1393,6 +1393,11 @@ test('electron shell keeps renderer isolation and external navigation guarded', 
   assert.match(launcherSource, /chmod 600 "\$desktop_log" 2>\/dev\/null \|\| true/)
   assert.match(launcherSource, /exec >> "\$desktop_log" 2>&1/)
   assert.match(launcherSource, /Launching Codex desktop from %s/)
+  assert.ok(
+    launcherSource.indexOf('exec >> "$desktop_log" 2>&1') < launcherSource.indexOf('current_user="${USER:-$(id -un 2>/dev/null || true)}"'),
+    'desktop launch logging must be initialized before dialout re-exec checks',
+  )
+  assert.match(launcherSource, /Re-executing launcher with dialout group for %s/)
   assert.match(launcherSource, /electron_bin="\.\/node_modules\/electron\/dist\/electron"/)
   assert.match(launcherSource, /electron_bin="\.\/node_modules\/\.bin\/electron"/)
   assert.match(launcherSource, /Using Electron binary %s/)
