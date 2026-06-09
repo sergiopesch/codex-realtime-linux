@@ -696,14 +696,15 @@ async function listGeneratedArtifacts(workspacePath) {
       if (!isSafeArtifactName(entry.name)) continue
       const indexPath = path.join(artifactsDir, entry.name, 'index.html')
       try {
-        const details = await stat(indexPath)
-        if (!details.isFile()) continue
         const [realArtifactRoot, realIndexPath] = await Promise.all([
           realpath(path.join(artifactsDir, entry.name)),
           realpath(indexPath),
         ])
         if (!isPathInside(realArtifactsDir, realArtifactRoot)) continue
         if (!isPathInside(realArtifactRoot, realIndexPath)) continue
+        const details = await stat(realIndexPath)
+        if (!details.isFile()) continue
+        if (details.size > MAX_ARTIFACT_PREVIEW_FILE_BYTES) continue
         const title = entry.name.replace(/^\d{8}t?\d{6}-?/i, '').replace(/-/g, ' ') || entry.name
         artifacts.push({
           id: entry.name,

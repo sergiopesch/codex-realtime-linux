@@ -196,12 +196,17 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   const oversizedArtifactDir = path.join(workspacePath, 'public', 'agent-files', oversizedName)
   await mkdir(oversizedArtifactDir, { recursive: true })
   await writeFile(path.join(oversizedArtifactDir, 'index.html'), '<!doctype html><title>Oversized report</title>')
+  const oversizedIndexArtifactDir = path.join(workspacePath, 'public', 'agent-files', 'oversized-index')
+  await mkdir(oversizedIndexArtifactDir, { recursive: true })
+  await writeFile(path.join(oversizedIndexArtifactDir, 'index.html'), '')
+  await truncate(path.join(oversizedIndexArtifactDir, 'index.html'), 26 * 1024 * 1024)
 
   const boundedArtifactList = await fetch(`${baseUrl}/api/artifacts?workspacePath=${encodeURIComponent(workspacePath)}`)
   assert.equal(boundedArtifactList.status, 200)
   const boundedArtifactBody = await boundedArtifactList.json()
   assert.equal(boundedArtifactBody.data.length, 40)
   assert.equal(boundedArtifactBody.data.some((artifact) => artifact.id === oversizedName), false)
+  assert.equal(boundedArtifactBody.data.some((artifact) => artifact.id === 'oversized-index'), false)
   assert.ok(boundedArtifactBody.data.every((artifact) => artifact.title.length <= 180))
 
   const token = Buffer.from(path.resolve(workspacePath), 'utf8').toString('base64url')
@@ -270,6 +275,9 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   await truncate(oversizedPreviewFile, 26 * 1024 * 1024)
   const oversizedPreview = await fetch(`${baseUrl}/workspace-artifacts/${token}/sample-report/huge-preview.html`)
   assert.equal(oversizedPreview.status, 413)
+
+  const oversizedIndexPreview = await fetch(`${baseUrl}/workspace-artifacts/${token}/oversized-index/index.html`)
+  assert.equal(oversizedIndexPreview.status, 413)
 
   const invalidToken = await fetch(`${baseUrl}/workspace-artifacts/not-a-workspace-token/sample-report/index.html`)
   assert.equal(invalidToken.status, 400)
