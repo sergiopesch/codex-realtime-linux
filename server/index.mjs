@@ -38,6 +38,7 @@ const USAGE_PERIOD_DAYS = configuredInteger(process.env.OPENAI_USAGE_PERIOD_DAYS
   min: 1,
   max: MAX_USAGE_PERIOD_DAYS,
 })
+const MAX_USD_TO_GBP_RATE = 10
 const GBP_RATE_API = process.env.OPENAI_USAGE_GBP_RATE_API ?? 'https://api.frankfurter.app/latest?from=USD&to=GBP'
 const DEFAULT_UPSTREAM_FETCH_TIMEOUT_MS = 20_000
 const MAX_UPSTREAM_FETCH_TIMEOUT_MS = 120_000
@@ -149,6 +150,11 @@ function configuredPort(value, fallback = DEFAULT_PORT) {
 function configuredInteger(value, { fallback, min, max }) {
   const number = Number(value ?? fallback)
   return Number.isInteger(number) && number >= min && number <= max ? number : fallback
+}
+
+function configuredUsdToGbpRate(value) {
+  const rate = Number(value)
+  return Number.isFinite(rate) && rate > 0 && rate <= MAX_USD_TO_GBP_RATE ? rate : null
 }
 
 function configuredJsonBodyLimit(value, fallback = DEFAULT_JSON_BODY_LIMIT) {
@@ -1475,16 +1481,16 @@ function normalizeCompletionUsage(usage) {
 }
 
 async function getUsdToGbpRate() {
-  const configuredRate = Number(process.env.OPENAI_USAGE_GBP_RATE)
-  if (Number.isFinite(configuredRate) && configuredRate > 0) {
+  const configuredRate = configuredUsdToGbpRate(process.env.OPENAI_USAGE_GBP_RATE)
+  if (configuredRate != null) {
     return { rate: configuredRate, source: 'env' }
   }
 
   const response = await fetch(GBP_RATE_API, { signal: upstreamSignal() })
   if (!response.ok) throw new Error(`GBP conversion failed with ${response.status}`)
   const data = await readUpstreamJson(response, 'GBP conversion response was not JSON.')
-  const rate = Number(data?.rates?.GBP)
-  if (!Number.isFinite(rate) || rate <= 0) throw new Error('GBP conversion response did not include a USD to GBP rate')
+  const rate = configuredUsdToGbpRate(data?.rates?.GBP)
+  if (rate == null) throw new Error(`GBP conversion response did not include a USD to GBP rate from 0 to ${MAX_USD_TO_GBP_RATE}`)
   return { rate, source: 'frankfurter' }
 }
 
