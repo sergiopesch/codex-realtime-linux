@@ -9,6 +9,7 @@ const MAX_USB_SUMMARY_LENGTH = 320
 const MAX_USB_RAW_PROPERTIES = 40
 const MAX_USB_RAW_KEY_LENGTH = 80
 const MAX_USB_RAW_VALUE_LENGTH = 500
+const MAX_USB_STATUS_ERROR_LENGTH = 500
 const SERIAL_TTY_PATTERN = /^\/dev\/tty(?:ACM|USB)\d+$/
 const ARDUINO_VENDOR_IDS = new Set(['2341', '2a03', '1a86', '10c4', '0403', '1b4f'])
 const ARDUINO_TEXT_PATTERNS = [
@@ -48,6 +49,10 @@ function boundedString(value, maxLength) {
 
 function normalizeString(value) {
   return boundedString(value, MAX_USB_FIELD_LENGTH)
+}
+
+function boundedStatusError(value, fallback = 'USB monitor unavailable.') {
+  return boundedString(typeof value === 'string' && value.trim() ? value : fallback, MAX_USB_STATUS_ERROR_LENGTH)
 }
 
 function sanitizeUsbProperties(properties) {
@@ -131,7 +136,7 @@ export class UsbDeviceMonitor {
         stdio: ['ignore', 'pipe', 'pipe'],
       })
     } catch (error) {
-      this.error = error instanceof Error ? error.message : 'USB monitor failed to start.'
+      this.error = boundedStatusError(error instanceof Error ? error.message : 'USB monitor failed to start.')
       return
     }
 
@@ -141,17 +146,17 @@ export class UsbDeviceMonitor {
 
     this.proc.stderr?.on('data', (chunk) => {
       const message = chunk.toString().trim()
-      if (message) this.error = message
+      if (message) this.error = boundedStatusError(message)
     })
 
     this.proc.once('error', (error) => {
-      this.error = error.message
+      this.error = boundedStatusError(error.message)
       this.proc = null
     })
 
     this.proc.once('exit', (code, signal) => {
       if (code !== 0 && signal !== 'SIGTERM') {
-        this.error = `USB monitor exited with ${signal || code}`
+        this.error = boundedStatusError(`USB monitor exited with ${signal || code}`)
       }
       this.proc = null
     })
@@ -207,7 +212,7 @@ export class UsbDeviceMonitor {
     return {
       active: Boolean(this.proc),
       startedAt: this.startedAt,
-      error: this.error,
+      error: this.error ? boundedStatusError(this.error) : null,
     }
   }
 }

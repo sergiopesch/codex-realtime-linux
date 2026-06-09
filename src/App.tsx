@@ -242,6 +242,8 @@ const MAX_REALTIME_TRANSCRIPT_LINES = 80
 const MAX_REALTIME_TRANSCRIPT_ID_LENGTH = 240
 const MAX_REALTIME_TRANSCRIPT_TEXT_LENGTH = 8_000
 const MAX_UI_ERROR_MESSAGE_LENGTH = 500
+const MAX_UI_NOTICE_LENGTH = 320
+const MAX_UI_ACTIVITY_LENGTH = 120
 const MAX_UI_EVENT_STRING_LENGTH = 2_000
 const MAX_UI_EVENT_ARRAY_ITEMS = 20
 const MAX_UI_EVENT_OBJECT_KEYS = 30
@@ -357,6 +359,12 @@ const displayErrorMessage = (error: unknown, fallback: string) => {
   const rawMessage = error instanceof Error ? error.message : ''
   return boundedPlainString(rawMessage, fallback, MAX_UI_ERROR_MESSAGE_LENGTH)
 }
+
+const displayNoticeMessage = (message: unknown) =>
+  boundedPlainString(message, '', MAX_UI_NOTICE_LENGTH)
+
+const displayActivityLabel = (message: unknown, fallback = 'Voice router idle') =>
+  boundedPlainString(message, fallback, MAX_UI_ACTIVITY_LENGTH)
 
 const boundedEventString = (value: unknown, fallback = '') => {
   const text = typeof value === 'string' && value.trim() ? value.trim() : fallback
@@ -587,12 +595,15 @@ function App() {
   }
 
   const showNotice = (message: string) => {
-    setNotice(message)
+    setNotice(displayNoticeMessage(message))
     setLastError(null)
   }
 
   const setActivity = (...items: string[]) => {
-    setRoutingActivity(items.length > 0 ? items.slice(0, 4) : ['Voice router idle'])
+    const labels = items.slice(0, 4).map((item) => displayActivityLabel(item)).filter(Boolean)
+    setRoutingActivity(
+      labels.length > 0 ? labels : ['Voice router idle'],
+    )
   }
 
   const setActiveCodexTurn = (threadId: string | null, turnId: string | null) => {

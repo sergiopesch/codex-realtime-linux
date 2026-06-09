@@ -22,6 +22,7 @@ const repoRoot = path.join(__dirname, '..')
 const stateDir = path.join(process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local', 'state'), 'codex-realtime-linux')
 const apiLogPath = path.join(stateDir, 'api-server.log')
 const maxLogBytes = 1024 * 1024
+const maxElectronErrorDetailLength = 500
 let apiProcess = null
 let apiLogFd = null
 
@@ -33,6 +34,13 @@ const openExternalIfAllowed = (url) => {
   } catch {
     // Ignore invalid external URLs from renderer content.
   }
+}
+
+const boundedErrorDetail = (error, fallback = 'Unexpected desktop startup error.') => {
+  const message = error instanceof Error ? error.message : typeof error === 'string' ? error : fallback
+  return message.length > maxElectronErrorDetailLength
+    ? `${message.slice(0, maxElectronErrorDetailLength - 3)}...`
+    : message
 }
 
 const readJson = (url) =>
@@ -151,7 +159,7 @@ const ensureApiServer = async () => {
       stdio: ['ignore', apiLogFd, apiLogFd],
     })
     apiProcess.once('error', (error) => {
-      writeApiLog(`API server failed to start: ${error.message}`)
+      writeApiLog(`API server failed to start: ${boundedErrorDetail(error)}`)
       closeApiLog()
     })
     apiProcess.once('exit', (code, signal) => {
@@ -214,7 +222,7 @@ const createWindow = async () => {
       type: 'error',
       title: 'Codex failed to start',
       message: 'Codex could not start the local desktop server.',
-      detail: error instanceof Error ? error.message : String(error),
+      detail: boundedErrorDetail(error),
     })
     app.quit()
   }

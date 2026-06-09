@@ -5,6 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import {
   ArduinoUploadError,
+  getArduinoCliStatus,
   listSerialPorts,
   normalizeUploadRequest,
   sketchForAction,
@@ -71,6 +72,26 @@ test('ArduinoUploadError bounds large diagnostic detail strings', () => {
   assert.equal(error.details.stdout.endsWith('... [truncated]'), true)
   assert.equal(error.details.nested.stderr.length < 4_100, true)
   assert.equal(error.details.nested.stderr.endsWith('... [truncated]'), true)
+})
+
+test('getArduinoCliStatus bounds version, command, and error fields', async () => {
+  const available = await getArduinoCliStatus({
+    run: async () => ({ stdout: `Version ${'v'.repeat(2_000)}`, stderr: '' }),
+  })
+
+  assert.equal(available.available, true)
+  assert.equal(available.version.length <= 500, true)
+  assert.equal(available.command.length <= 500, true)
+
+  const unavailable = await getArduinoCliStatus({
+    run: async () => {
+      throw new Error(`arduino-cli failed ${'e'.repeat(2_000)}`)
+    },
+  })
+
+  assert.equal(unavailable.available, false)
+  assert.equal(unavailable.error.length <= 500, true)
+  assert.equal(unavailable.error.endsWith('...'), true)
 })
 
 test('listSerialPorts returns ttyACM and ttyUSB devices', async () => {

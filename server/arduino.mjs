@@ -10,6 +10,7 @@ const ARDUINO_CLI_PATH = process.env.ARDUINO_CLI_PATH || path.join(REPO_ROOT, 'b
 const DEFAULT_SKETCH_NAME = 'CodexRealtimeSketch'
 const MAX_SKETCH_BYTES = 64 * 1024
 const MAX_COMMAND_OUTPUT_CHARS = 4_000
+const MAX_STATUS_FIELD_CHARS = 500
 const SERIAL_PORT_PATTERN = /^tty(?:ACM|USB)\d+$/
 const SERIAL_PORT_PATH_PATTERN = /^\/dev\/tty(?:ACM|USB)\d+$/
 const SERIAL_BY_ID_PATTERN = /^\/dev\/serial\/by-id\/[a-zA-Z0-9._:-]+$/
@@ -28,6 +29,12 @@ export class ArduinoUploadError extends Error {
 function limitDiagnosticString(value) {
   if (value.length <= MAX_COMMAND_OUTPUT_CHARS) return value
   return `${value.slice(0, MAX_COMMAND_OUTPUT_CHARS)}... [truncated]`
+}
+
+function limitStatusString(value) {
+  const text = typeof value === 'string' && value.trim() ? value.trim() : ''
+  if (text.length <= MAX_STATUS_FIELD_CHARS) return text
+  return `${text.slice(0, MAX_STATUS_FIELD_CHARS - 3)}...`
 }
 
 function sanitizeDiagnosticDetails(value, depth = 0) {
@@ -250,17 +257,17 @@ export async function getArduinoCliStatus({ run = runArduinoCli } = {}) {
     const version = await run(['version'], { timeoutMs: 10_000 })
     return {
       available: true,
-      version: version.stdout.trim() || version.stderr.trim(),
+      version: limitStatusString(version.stdout) || limitStatusString(version.stderr),
       defaultFqbn: DEFAULT_FQBN,
-      command: ARDUINO_CLI_PATH,
+      command: limitStatusString(ARDUINO_CLI_PATH),
     }
   } catch (error) {
     return {
       available: false,
       version: null,
       defaultFqbn: DEFAULT_FQBN,
-      command: ARDUINO_CLI_PATH,
-      error: error instanceof Error ? error.message : 'arduino-cli is not available.',
+      command: limitStatusString(ARDUINO_CLI_PATH),
+      error: limitStatusString(error instanceof Error ? error.message : 'arduino-cli is not available.'),
     }
   }
 }

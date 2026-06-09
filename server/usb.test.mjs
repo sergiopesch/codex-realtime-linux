@@ -93,3 +93,16 @@ test('UsbDeviceMonitor bounds device event payloads before exposing them', () =>
   assert.ok(Object.keys(event.raw).every((key) => key.length <= 80))
   assert.ok(Object.values(event.raw).every((value) => value.length <= 500))
 })
+
+test('UsbDeviceMonitor bounds status error text before exposing it', () => {
+  const monitor = new UsbDeviceMonitor({
+    spawnImpl: () => {
+      throw new Error(`udevadm failed ${'x'.repeat(2_000)}`)
+    },
+  })
+
+  monitor.start()
+
+  assert.equal(monitor.status().error.length <= 500, true)
+  assert.equal(monitor.status().error.endsWith('...'), true)
+})
