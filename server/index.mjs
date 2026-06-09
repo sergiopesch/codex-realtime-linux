@@ -2468,6 +2468,7 @@ app.get(/^\/workspace-artifacts\/([^/]+)\/([^/]+)\/(.+)$/, async (req, res) => {
     const workspacePath = await requireWorkspaceDirectory(workspaceFromToken(token), 'workspace token')
     const artifactsDir = path.join(workspacePath, GENERATED_ARTIFACT_DIR)
     const artifactRoot = path.join(workspacePath, GENERATED_ARTIFACT_DIR, artifactName)
+    const artifactIndexPath = path.join(artifactRoot, 'index.html')
     const requestedPath = path.resolve(artifactRoot, filePath)
 
     if (!isPathInside(artifactRoot, requestedPath)) {
@@ -2478,18 +2479,21 @@ app.get(/^\/workspace-artifacts\/([^/]+)\/([^/]+)\/(.+)$/, async (req, res) => {
     let realWorkspacePath
     let realArtifactRoot
     let realArtifactsDir
+    let realArtifactIndexPath
     let realRequestedPath
     try {
       const resolvedPaths = await Promise.all([
         realpath(workspacePath),
         realpath(artifactsDir),
         realpath(artifactRoot),
+        realpath(artifactIndexPath),
         realpath(requestedPath),
       ])
       realWorkspacePath = resolvedPaths[0]
       realArtifactsDir = resolvedPaths[1]
       realArtifactRoot = resolvedPaths[2]
-      realRequestedPath = resolvedPaths[3]
+      realArtifactIndexPath = resolvedPaths[3]
+      realRequestedPath = resolvedPaths[4]
     } catch {
       res.status(404).send('Not found')
       return
@@ -2507,9 +2511,19 @@ app.get(/^\/workspace-artifacts\/([^/]+)\/([^/]+)\/(.+)$/, async (req, res) => {
       res.status(403).send('Forbidden')
       return
     }
+    if (!isPathInside(realArtifactRoot, realArtifactIndexPath)) {
+      res.status(403).send('Forbidden')
+      return
+    }
     let requestedDetails
+    let artifactIndexDetails
     try {
-      requestedDetails = await stat(realRequestedPath)
+      const details = await Promise.all([
+        stat(realRequestedPath),
+        stat(realArtifactIndexPath),
+      ])
+      requestedDetails = details[0]
+      artifactIndexDetails = details[1]
     } catch (error) {
       if (isIgnorableArtifactEntryError(error)) {
         res.status(404).send('Not found')
@@ -2518,6 +2532,10 @@ app.get(/^\/workspace-artifacts\/([^/]+)\/([^/]+)\/(.+)$/, async (req, res) => {
       throw error
     }
     if (!requestedDetails.isFile()) {
+      res.status(404).send('Not found')
+      return
+    }
+    if (!artifactIndexDetails.isFile()) {
       res.status(404).send('Not found')
       return
     }

@@ -160,9 +160,13 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   const outsideIndexFile = path.join(workspacePath, 'outside-index.html')
   await writeFile(outsideIndexFile, '<!doctype html><title>Outside index</title>')
   await symlink(outsideIndexFile, path.join(escapedIndexDir, 'index.html'))
+  await writeFile(path.join(escapedIndexDir, 'notes.txt'), 'escaped index note')
   const loopedIndexDir = path.join(workspacePath, 'public', 'agent-files', 'looped-index')
   await mkdir(loopedIndexDir, { recursive: true })
   await symlink('index.html', path.join(loopedIndexDir, 'index.html'))
+  const orphanArtifactDir = path.join(workspacePath, 'public', 'agent-files', 'orphan-report')
+  await mkdir(orphanArtifactDir, { recursive: true })
+  await writeFile(path.join(orphanArtifactDir, 'notes.txt'), 'not a generated preview artifact')
   const outsideArtifactRoot = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-outside-artifact-root-'))
   t.after(() => rm(outsideArtifactRoot, { recursive: true, force: true }))
   await writeFile(path.join(outsideArtifactRoot, 'index.html'), '<!doctype html><title>Outside artifact root</title>')
@@ -221,6 +225,12 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
 
   const nestedHiddenPreviewFile = await fetch(`${baseUrl}/workspace-artifacts/${token}/sample-report/assets/.private/secret.txt`)
   assert.equal(nestedHiddenPreviewFile.status, 404)
+
+  const orphanPreviewFile = await fetch(`${baseUrl}/workspace-artifacts/${token}/orphan-report/notes.txt`)
+  assert.equal(orphanPreviewFile.status, 404)
+
+  const escapedIndexAsset = await fetch(`${baseUrl}/workspace-artifacts/${token}/escaped-index/notes.txt`)
+  assert.equal(escapedIndexAsset.status, 403)
 
   const traversal = await fetch(`${baseUrl}/workspace-artifacts/${token}/sample-report/..%2F..%2F..%2Fpackage.json`)
   assert.equal(traversal.status, 404)
