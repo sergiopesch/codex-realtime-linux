@@ -400,7 +400,7 @@ async function listGeneratedArtifacts(workspacePath = REPO_ROOT) {
   }
 
   return artifacts
-    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+    .sort((a, b) => finiteTimestamp(b.updatedAt) - finiteTimestamp(a.updatedAt))
     .slice(0, MAX_GENERATED_ARTIFACTS)
 }
 
@@ -1099,6 +1099,11 @@ function normalizeCodexEntityId(entity, label) {
 function finiteNumber(value, fallback = 0) {
   const number = Number(value)
   return Number.isFinite(number) ? number : fallback
+}
+
+function finiteTimestamp(value, fallback = 0) {
+  const timestamp = typeof value === 'string' ? Date.parse(value) : Number.NaN
+  return Number.isFinite(timestamp) ? timestamp : fallback
 }
 
 function topUsageBuckets(totalsByLabel) {
