@@ -117,6 +117,13 @@ type TranscriptLine = {
   createdAt: number
 }
 
+type RealtimeFunctionCallItem = {
+  type?: string
+  name?: string
+  arguments?: string
+  call_id?: string
+}
+
 type AppStateResponse = {
   workspaces: Workspace[]
   conversationsByWorkspace: Record<string, AgentConversation[]>
@@ -328,6 +335,30 @@ const savedConversationPayload = (conversation: AgentConversation) => ({
 const eventKey = (event: EventRecord) => `${event.method ?? 'event'}::${event.receivedAt ?? ''}`
 const workspacePathFor = (workspace: Workspace) => workspace.path ?? workspace.id
 const isAbsoluteLocalWorkspacePath = (workspacePath: string) => workspacePath.startsWith('/')
+
+const realtimeFunctionCallItem = (message: Record<string, unknown>): RealtimeFunctionCallItem | null => {
+  const eventType = typeof message.type === 'string' ? message.type : ''
+  const item = message.item && typeof message.item === 'object'
+    ? message.item as RealtimeFunctionCallItem
+    : null
+
+  if (eventType === 'response.output_item.done' && item?.type === 'function_call') {
+    return item
+  }
+
+  if (eventType !== 'response.function_call_arguments.done') return null
+  if (item?.type === 'function_call') return item
+
+  const name = typeof message.name === 'string' ? message.name : ''
+  if (!name) return null
+
+  return {
+    type: 'function_call',
+    name,
+    call_id: typeof message.call_id === 'string' ? message.call_id : undefined,
+    arguments: typeof message.arguments === 'string' ? message.arguments : undefined,
+  }
+}
 
 const mergeEvents = (current: EventRecord[], incoming: EventRecord[]) => {
   const seen = new Set<string>()
@@ -1277,8 +1308,8 @@ function App() {
   }, [])
 
   const handleRealtimeToolCall = async (message: Record<string, unknown>) => {
-    const item = message.item as { type?: string; name?: string; arguments?: string; call_id?: string } | undefined
-    if (message.type !== 'response.output_item.done' || item?.type !== 'function_call') return
+    const item = realtimeFunctionCallItem(message)
+    if (!item) return
 
     if (typeof item.call_id !== 'string' || !item.call_id.trim()) {
       const error = 'Realtime function call did not include a call_id.'
@@ -1492,10 +1523,8 @@ function App() {
           return
         }
         recordRealtimeTranscript(message)
-        if (typeof message?.type === 'string' && message.type.startsWith('response.output_item')) {
-          const item = message.item as { type?: string; name?: string } | undefined
-          if (item?.type === 'function_call') setActivity('Voice router', item.name ?? 'Tool call')
-        }
+        const functionCallItem = realtimeFunctionCallItem(message)
+        if (functionCallItem) setActivity('Voice router', functionCallItem.name ?? 'Tool call')
         setEvents((current) =>
           mergeEvents(current, [{
             method: typeof message.type === 'string' ? message.type : 'realtime/event',
