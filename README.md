@@ -261,7 +261,7 @@ ARDUINO_CLI_PATH=/absolute/path/to/arduino-cli
 ARDUINO_DEFAULT_FQBN=arduino:avr:uno
 ```
 
-With voice running and the board connected, say something like: “turn on the Arduino light” or “make the Arduino LED blink”. Realtime calls `arduino_upload_sketch`, the server compiles the sketch, and uploads it to the first detected `/dev/ttyACM*` or `/dev/ttyUSB*` port unless a supported `/dev/ttyACM*`, `/dev/ttyUSB*`, or `/dev/serial/by-id/*` port is supplied explicitly.
+With voice running and the board connected, say something like: “turn on the Arduino light” or “make the Arduino LED blink”. Realtime calls `arduino_upload_sketch`, the server compiles the sketch, and uploads it to the first detected stable `/dev/serial/by-id/*` link when available, falling back to `/dev/ttyACM*` or `/dev/ttyUSB*` ports. A supported `/dev/ttyACM*`, `/dev/ttyUSB*`, or `/dev/serial/by-id/*` port can also be supplied explicitly.
 
 You can test the API directly:
 

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import {
@@ -134,13 +134,33 @@ test('invalid ARDUINO_DEFAULT_FQBN falls back to a safe Uno target', async () =>
   }
 })
 
-test('listSerialPorts returns ttyACM and ttyUSB devices', async () => {
+test('listSerialPorts returns ttyACM and ttyUSB devices', async (t) => {
   const devDir = await mkdtemp(path.join(os.tmpdir(), 'codex-arduino-dev-'))
+  t.after(() => rm(devDir, { recursive: true, force: true }))
+  const serialByIdDir = path.join(devDir, 'missing-serial-by-id')
   await writeFile(path.join(devDir, 'ttyACM0'), '')
   await writeFile(path.join(devDir, 'ttyUSB1'), '')
   await writeFile(path.join(devDir, 'ttyS0'), '')
 
-  assert.deepEqual(await listSerialPorts({ devDir }), [
+  assert.deepEqual(await listSerialPorts({ devDir, serialByIdDir }), [
+    path.join(devDir, 'ttyACM0'),
+    path.join(devDir, 'ttyUSB1'),
+  ])
+})
+
+test('listSerialPorts prefers stable serial-by-id links before tty fallbacks', async (t) => {
+  const devDir = await mkdtemp(path.join(os.tmpdir(), 'codex-arduino-dev-'))
+  t.after(() => rm(devDir, { recursive: true, force: true }))
+  const serialByIdDir = path.join(devDir, 'serial', 'by-id')
+  const byIdPort = path.join(serialByIdDir, 'usb-Arduino_Uno-if00')
+
+  await mkdir(serialByIdDir, { recursive: true })
+  await writeFile(path.join(devDir, 'ttyACM0'), '')
+  await writeFile(path.join(devDir, 'ttyUSB1'), '')
+  await symlink('../../ttyACM0', byIdPort)
+
+  assert.deepEqual(await listSerialPorts({ devDir, serialByIdDir }), [
+    byIdPort,
     path.join(devDir, 'ttyACM0'),
     path.join(devDir, 'ttyUSB1'),
   ])
@@ -149,12 +169,13 @@ test('listSerialPorts returns ttyACM and ttyUSB devices', async () => {
 test('listSerialPorts bounds returned serial ports', async (t) => {
   const devDir = await mkdtemp(path.join(os.tmpdir(), 'codex-arduino-dev-'))
   t.after(() => rm(devDir, { recursive: true, force: true }))
+  const serialByIdDir = path.join(devDir, 'missing-serial-by-id')
 
   await Promise.all(
     Array.from({ length: 100 }, (_, index) => writeFile(path.join(devDir, `ttyUSB${index}`), '')),
   )
 
-  const ports = await listSerialPorts({ devDir })
+  const ports = await listSerialPorts({ devDir, serialByIdDir })
 
   assert.equal(ports.length, 80)
   assert.ok(ports.every((port) => port.startsWith(devDir)))
@@ -231,6 +252,32 @@ test('uploadArduinoSketch ignores unsupported detected board addresses and falls
 
   assert.equal(result.port, '/dev/ttyUSB0')
   assert.deepEqual(commands[1].slice(0, 5), ['upload', '-p', '/dev/ttyUSB0', '--fqbn', 'arduino:avr:uno'])
+})
+
+test('uploadArduinoSketch prefers serial-by-id ports when board metadata is unavailable', async () => {
+  const commands = []
+  const run = async (args) => {
+    commands.push(args)
+    return { stdout: `${args[0]} ok`, stderr: '' }
+  }
+
+  const result = await uploadArduinoSketch(
+    { action: 'onboard_led_on' },
+    {
+      run,
+      listPorts: async () => ['/dev/serial/by-id/usb-Arduino_Uno-if00', '/dev/ttyACM0'],
+      listBoards: async () => [],
+    },
+  )
+
+  assert.equal(result.port, '/dev/serial/by-id/usb-Arduino_Uno-if00')
+  assert.deepEqual(commands[1].slice(0, 5), [
+    'upload',
+    '-p',
+    '/dev/serial/by-id/usb-Arduino_Uno-if00',
+    '--fqbn',
+    'arduino:avr:uno',
+  ])
 })
 
 test('uploadArduinoSketch bounds compile and upload command output', async () => {

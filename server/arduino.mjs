@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { mkdir, mkdtemp, opendir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, opendir, readlink, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -16,10 +16,13 @@ const MAX_COMMAND_CAPTURE_CHARS = 16_000
 const MAX_COMMAND_OUTPUT_CHARS = 4_000
 const MAX_STATUS_FIELD_CHARS = 500
 const MAX_SERIAL_PORT_SCAN_ENTRIES = 400
+const DEFAULT_SERIAL_BY_ID_DIR = '/dev/serial/by-id'
+const MAX_SERIAL_BY_ID_SCAN_ENTRIES = 400
 const MAX_SERIAL_PORTS = 80
 const SERIAL_PORT_PATTERN = /^tty(?:ACM|USB)\d+$/
 const SERIAL_PORT_PATH_PATTERN = /^\/dev\/tty(?:ACM|USB)\d+$/
-const SERIAL_BY_ID_PATTERN = /^\/dev\/serial\/by-id\/[a-zA-Z0-9._:-]+$/
+const SERIAL_BY_ID_NAME_PATTERN = /^[a-zA-Z0-9._:+-]+$/
+const SERIAL_BY_ID_PATTERN = /^\/dev\/serial\/by-id\/[a-zA-Z0-9._:+-]+$/
 
 export class ArduinoUploadError extends Error {
   constructor(message, { code = 'arduino_error', status = 500, details } = {}) {
@@ -151,7 +154,7 @@ function normalizeSketchName(value) {
   })
 }
 
-export async function listSerialPorts({ devDir = '/dev' } = {}) {
+async function listTtySerialPorts(devDir) {
   let directory
   try {
     directory = await opendir(devDir)
@@ -172,6 +175,47 @@ export async function listSerialPorts({ devDir = '/dev' } = {}) {
   }
 
   return ports.sort()
+}
+
+async function listSerialByIdPorts(serialByIdDir, devDir) {
+  let directory
+  try {
+    directory = await opendir(serialByIdDir)
+  } catch {
+    return []
+  }
+
+  const ports = []
+  let scannedEntries = 0
+  try {
+    for await (const entry of directory) {
+      scannedEntries += 1
+      if (scannedEntries > MAX_SERIAL_BY_ID_SCAN_ENTRIES || ports.length >= MAX_SERIAL_PORTS) break
+      if (!entry.isSymbolicLink() || !SERIAL_BY_ID_NAME_PATTERN.test(entry.name)) continue
+      const portPath = path.join(serialByIdDir, entry.name)
+      try {
+        const target = await readlink(portPath)
+        const resolvedTarget = path.resolve(serialByIdDir, target)
+        const targetName = path.basename(resolvedTarget)
+        if (SERIAL_PORT_PATTERN.test(targetName) && resolvedTarget === path.join(devDir, targetName)) ports.push(portPath)
+      } catch {
+        // Ignore stale symlinks while boards are being attached or removed.
+      }
+    }
+  } finally {
+    await directory.close().catch(() => {})
+  }
+
+  return ports.sort()
+}
+
+export async function listSerialPorts({ devDir = '/dev', serialByIdDir = DEFAULT_SERIAL_BY_ID_DIR } = {}) {
+  const [serialByIdPorts, ttyPorts] = await Promise.all([
+    listSerialByIdPorts(serialByIdDir, devDir),
+    listTtySerialPorts(devDir),
+  ])
+
+  return [...new Set([...serialByIdPorts, ...ttyPorts])].slice(0, MAX_SERIAL_PORTS)
 }
 
 function isSupportedSerialPort(port) {
