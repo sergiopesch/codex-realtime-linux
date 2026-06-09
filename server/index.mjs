@@ -80,6 +80,7 @@ const MAX_GENERATED_ARTIFACTS = 40
 const MAX_ARTIFACT_DIRECTORY_SCAN_ENTRIES = 400
 const MAX_ARTIFACT_NAME_LENGTH = 120
 const MAX_ARTIFACT_TITLE_LENGTH = 180
+const MAX_ARTIFACT_PREVIEW_FILE_BYTES = 25 * 1024 * 1024
 const MAX_USAGE_BUCKETS = 20
 const MAX_USAGE_BUCKET_LABEL_LENGTH = 120
 const MAX_ADMIN_WORKSPACES = 20
@@ -1996,6 +1997,15 @@ app.get(/^\/workspace-artifacts\/([^/]+)\/([^/]+)\/(.+)$/, async (req, res) => {
 
     if (!isPathInside(realArtifactRoot, realRequestedPath)) {
       res.status(403).send('Forbidden')
+      return
+    }
+    const requestedDetails = await stat(realRequestedPath)
+    if (!requestedDetails.isFile()) {
+      res.status(404).send('Not found')
+      return
+    }
+    if (requestedDetails.size > MAX_ARTIFACT_PREVIEW_FILE_BYTES) {
+      res.status(413).send('Artifact preview file is too large')
       return
     }
 
