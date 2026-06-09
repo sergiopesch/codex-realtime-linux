@@ -81,6 +81,8 @@ type EventRecord = {
   params?: Record<string, unknown>
 }
 
+type UnknownRecord = Record<string, unknown>
+
 type SpendResponse = {
   source: string
   error?: string
@@ -333,6 +335,7 @@ const savedConversationPayload = (conversation: AgentConversation) => ({
 })
 
 const eventKey = (event: EventRecord) => `${event.method ?? 'event'}::${event.receivedAt ?? ''}`
+const completedCodexTurnWords = new Set(['complete', 'completed', 'done', 'finished', 'failed', 'failure', 'cancelled', 'canceled'])
 const normalizeAbsoluteLocalWorkspacePath = (workspacePath: string) => {
   const trimmed = workspacePath.trim()
   if (!trimmed.startsWith('/')) return trimmed
@@ -373,6 +376,35 @@ const mergeEvents = (current: EventRecord[], incoming: EventRecord[]) => {
     seen.add(key)
     return true
   }).slice(0, 160)
+}
+
+const valueContainsString = (value: unknown, needle: string): boolean => {
+  if (!needle) return false
+  if (typeof value === 'string') return value === needle
+  if (!value || typeof value !== 'object') return false
+  if (Array.isArray(value)) return value.some((item) => valueContainsString(item, needle))
+  return Object.values(value as UnknownRecord).some((item) => valueContainsString(item, needle))
+}
+
+const valueContainsCompletedCodexStatus = (value: unknown): boolean => {
+  if (typeof value === 'string') return completedCodexTurnWords.has(value.toLowerCase())
+  if (!value || typeof value !== 'object') return false
+  if (Array.isArray(value)) return value.some(valueContainsCompletedCodexStatus)
+
+  return Object.entries(value as UnknownRecord).some(([key, item]) => {
+    const statusKey = /status|state|type|outcome|phase/i.test(key)
+    if (statusKey && typeof item === 'string' && completedCodexTurnWords.has(item.toLowerCase())) return true
+    return valueContainsCompletedCodexStatus(item)
+  })
+}
+
+const eventCompletesActiveCodexTurn = (event: EventRecord, turnId: string | null) => {
+  if (!turnId || !valueContainsString(event.params, turnId)) return false
+  const methodLooksComplete =
+    typeof event.method === 'string' &&
+    /turn/i.test(event.method) &&
+    /(complete|done|finish|fail|cancel)/i.test(event.method)
+  return methodLooksComplete || valueContainsCompletedCodexStatus(event.params)
 }
 
 function App() {
@@ -423,6 +455,7 @@ function App() {
   const microphoneStreamRef = useRef<MediaStream | null>(null)
   const screenStreamRef = useRef<MediaStream | null>(null)
   const pendingVisualContextRef = useRef<{ source: string; summary: string }[]>([])
+  const pendingArtifactRef = useRef<ArtifactPlan | null>(null)
   const activeThreadIdRef = useRef<string | null>(null)
   const activeTurnIdRef = useRef<string | null>(null)
   const selectedWorkspaceRef = useRef(initialWorkspacePath)
@@ -1120,6 +1153,10 @@ function App() {
   }, [activeTurnId])
 
   useEffect(() => {
+    pendingArtifactRef.current = pendingArtifact
+  }, [pendingArtifact])
+
+  useEffect(() => {
     if (!notice) return undefined
     const timeout = window.setTimeout(() => setNotice(null), 3600)
     return () => window.clearTimeout(timeout)
@@ -1225,6 +1262,27 @@ function App() {
       try {
         const data = await api<{ data: EventRecord[] }>('/api/codex/events')
         setEvents((current) => mergeEvents(current, data.data))
+        if (
+          activeTurnIdRef.current &&
+          !pendingArtifactRef.current &&
+          data.data.some((event) => eventCompletesActiveCodexTurn(event, activeTurnIdRef.current))
+        ) {
+          const completedThreadId = activeThreadIdRef.current
+          setActiveCodexTurn(completedThreadId, null)
+          setActivity('Codex work complete')
+          setConversationsByWorkspace((current) => {
+            if (!completedThreadId) return current
+            const next = { ...current }
+            for (const [workspacePath, conversations] of Object.entries(next)) {
+              next[workspacePath] = conversations.map((conversation) =>
+                conversation.id === completedThreadId
+                  ? { ...conversation, status: 'ready', updatedAt: new Date().toISOString() }
+                  : conversation,
+              )
+            }
+            return next
+          })
+        }
       } catch {
         // The app-server may not be started until the first Codex action.
       }
