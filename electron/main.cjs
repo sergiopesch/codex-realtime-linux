@@ -19,8 +19,22 @@ const configuredPort = (value, fallback = defaultApiPort) => {
   const port = Number(value ?? fallback)
   return Number.isInteger(port) && port > 0 && port <= 65535 ? port : fallback
 }
+const localAppHostnames = new Set(['localhost', '127.0.0.1', '[::1]'])
+const configuredLocalHttpOrigin = (value, fallback) => {
+  if (typeof value !== 'string' || !value.trim()) return fallback
+  try {
+    const parsed = new URL(value)
+    const rootPath = parsed.pathname === '/' && !parsed.search && !parsed.hash
+    const localHttp = parsed.protocol === 'http:' && localAppHostnames.has(parsed.hostname)
+    if (!localHttp || !rootPath || parsed.username || parsed.password) return fallback
+    return parsed.origin
+  } catch {
+    return fallback
+  }
+}
 const apiPort = configuredPort(process.env.PORT)
-const apiUrl = process.env.CODEX_DESKTOP_API_URL || `http://127.0.0.1:${apiPort}`
+const apiUrl = configuredLocalHttpOrigin(process.env.CODEX_DESKTOP_API_URL, `http://127.0.0.1:${apiPort}`)
+const devServerUrl = configuredLocalHttpOrigin(process.env.VITE_DEV_SERVER_URL, '')
 const apiNodeBin = process.env.CODEX_REALTIME_NODE_BIN || process.execPath
 const apiNodeUsesElectronRuntime = !process.env.CODEX_REALTIME_NODE_BIN
 const repoRoot = path.join(__dirname, '..')
@@ -149,7 +163,7 @@ const closeApiLog = () => {
 }
 
 const ensureApiServer = async () => {
-  if (process.env.VITE_DEV_SERVER_URL) return process.env.VITE_DEV_SERVER_URL
+  if (devServerUrl) return devServerUrl
 
   try {
     await waitForAppServer(apiUrl, 750)

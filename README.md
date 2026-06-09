@@ -108,6 +108,12 @@ The desktop app starts the local API server through the Electron runtime by defa
 CODEX_REALTIME_NODE_BIN=/absolute/path/to/node
 ```
 
+The desktop app renderer loads only from a local HTTP origin. `CODEX_DESKTOP_API_URL` is available for development or port overrides, but non-loopback URLs, paths, credentials, query strings, and hashes are ignored:
+
+```bash
+CODEX_DESKTOP_API_URL=http://127.0.0.1:3311
+```
+
 Codex app-server RPC calls are bounded so the desktop app does not hang indefinitely if the local Codex bridge stalls. Override the timeout only when you have a known long-running local app-server operation. Values must be whole milliseconds from `1000` to `600000`; invalid or larger values fall back to `120000`:
 
 ```bash
