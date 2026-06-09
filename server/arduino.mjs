@@ -253,7 +253,9 @@ export async function uploadArduinoSketch(
 ) {
   const request = normalizeUploadRequest(input)
   const [ports, boards] = await Promise.all([listPorts(), listBoards({ run })])
-  const detectedBoard = boards.find((board) => board.address === request.port) ?? boards[0]
+  const matchingBoard = request.port ? boards.find((board) => board.address === request.port) : null
+  const autoDetectedBoard = request.port ? null : boards[0]
+  const detectedBoard = matchingBoard ?? autoDetectedBoard
   const detectedPort = detectedBoard?.address && isSupportedSerialPort(detectedBoard.address) ? detectedBoard.address : null
   const port = request.port ?? detectedPort ?? ports[0]
   if (!port) {

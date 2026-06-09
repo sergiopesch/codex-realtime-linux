@@ -131,6 +131,29 @@ test('uploadArduinoSketch uses detected board FQBN when no FQBN is supplied', as
   assert.deepEqual(commands[1].slice(0, 5), ['upload', '-p', '/dev/ttyACM0', '--fqbn', 'arduino:avr:nano'])
 })
 
+test('uploadArduinoSketch does not borrow another board FQBN for an explicit port', async () => {
+  const commands = []
+  const run = async (args) => {
+    commands.push(args)
+    return { stdout: `${args[0]} ok`, stderr: '' }
+  }
+
+  const result = await uploadArduinoSketch(
+    { action: 'onboard_led_on', port: '/dev/ttyACM0' },
+    {
+      run,
+      listPorts: async () => ['/dev/ttyACM0', '/dev/ttyUSB0'],
+      listBoards: async () => [{ address: '/dev/ttyUSB0', fqbn: 'arduino:avr:nano', boardName: 'Arduino Nano' }],
+    },
+  )
+
+  assert.equal(result.port, '/dev/ttyACM0')
+  assert.equal(result.fqbn, 'arduino:avr:uno')
+  assert.equal(result.boardName, null)
+  assert.deepEqual(commands[0].slice(0, 3), ['compile', '--fqbn', 'arduino:avr:uno'])
+  assert.deepEqual(commands[1].slice(0, 5), ['upload', '-p', '/dev/ttyACM0', '--fqbn', 'arduino:avr:uno'])
+})
+
 test('uploadArduinoSketch fails clearly when no serial port is available', async () => {
   await assert.rejects(
     () => uploadArduinoSketch({ action: 'onboard_led_on' }, { listPorts: async () => [], listBoards: async () => [] }),

@@ -168,6 +168,15 @@ test('upstream OpenAI and usage fetches are timeout bounded', async () => {
   assert.match(serverSource, /fetch\(`https:\/\/api\.openai\.com\/v1\$\{path\}`,[\s\S]*signal: upstreamSignal\(\)/)
 })
 
+test('Arduino explicit-port uploads do not borrow unrelated detected board metadata', async () => {
+  const arduinoSource = await readFile(path.join(repoRoot, 'server', 'arduino.mjs'), 'utf8')
+
+  assert.match(arduinoSource, /const matchingBoard = request\.port \? boards\.find\(\(board\) => board\.address === request\.port\) : null/)
+  assert.match(arduinoSource, /const autoDetectedBoard = request\.port \? null : boards\[0\]/)
+  assert.match(arduinoSource, /const detectedBoard = matchingBoard \?\? autoDetectedBoard/)
+  assert.doesNotMatch(arduinoSource, /boards\.find\(\(board\) => board\.address === request\.port\) \?\? boards\[0\]/)
+})
+
 test('electron shell keeps renderer isolation and external navigation guarded', async () => {
   const mainSource = await readFile(path.join(repoRoot, 'electron', 'main.cjs'), 'utf8')
 
