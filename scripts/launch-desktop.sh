@@ -24,7 +24,12 @@ fi
 
 state_dir="${XDG_STATE_HOME:-$home_dir/.local/state}/codex-realtime-linux"
 mkdir -p "$state_dir"
-exec >> "$state_dir/desktop-launch.log" 2>&1
+desktop_log="$state_dir/desktop-launch.log"
+max_log_bytes=1048576
+if [ -f "$desktop_log" ] && [ "$(wc -c < "$desktop_log" 2>/dev/null || echo 0)" -gt "$max_log_bytes" ]; then
+  mv -f "$desktop_log" "$desktop_log.1"
+fi
+exec >> "$desktop_log" 2>&1
 
 electron_bin="./node_modules/electron/dist/electron"
 if [ ! -x "$electron_bin" ]; then

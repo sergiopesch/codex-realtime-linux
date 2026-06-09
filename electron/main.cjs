@@ -2,7 +2,7 @@ require('dotenv/config')
 
 const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron')
 const { spawn } = require('node:child_process')
-const { closeSync, mkdirSync, openSync, writeSync } = require('node:fs')
+const { closeSync, mkdirSync, openSync, renameSync, statSync, writeSync } = require('node:fs')
 const http = require('node:http')
 const os = require('node:os')
 const path = require('node:path')
@@ -21,6 +21,7 @@ const apiNodeUsesElectronRuntime = !process.env.CODEX_REALTIME_NODE_BIN
 const repoRoot = path.join(__dirname, '..')
 const stateDir = path.join(process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local', 'state'), 'codex-realtime-linux')
 const apiLogPath = path.join(stateDir, 'api-server.log')
+const maxLogBytes = 1024 * 1024
 let apiProcess = null
 let apiLogFd = null
 
@@ -92,11 +93,21 @@ const waitForAppServer = (baseUrl, timeoutMs = 15000) =>
 const createApiLogFd = () => {
   try {
     mkdirSync(stateDir, { recursive: true })
+    rotateLogFile(apiLogPath)
     const fd = openSync(apiLogPath, 'a')
     writeSync(fd, `\n[${new Date().toISOString()}] Starting API server from Electron with ${apiNodeBin}\n`)
     return fd
   } catch {
     return 'ignore'
+  }
+}
+
+const rotateLogFile = (logPath) => {
+  try {
+    if (statSync(logPath).size <= maxLogBytes) return
+    renameSync(logPath, `${logPath}.1`)
+  } catch {
+    // Missing or unrotatable logs must not block app startup.
   }
 }
 
