@@ -2007,14 +2007,10 @@ function App() {
         }
       }
 
-      const visibleConversationsAfterDelete = serverConfirmedWorkspace
-        ? confirmedConversations
-        : conversationsAfterDelete(current, confirmedConversations, conversationId)
+      const visibleConversationsAfterDelete = conversationsAfterDelete(current, confirmedConversations, conversationId)
       setConversationsByWorkspace((state) => ({
         ...state,
-        [workspacePath]: serverConfirmedWorkspace
-          ? confirmedConversations
-          : conversationsAfterDelete(state[workspacePath] ?? current, confirmedConversations, conversationId),
+        [workspacePath]: conversationsAfterDelete(state[workspacePath] ?? current, confirmedConversations, conversationId),
       }))
       const deletedWorkspaceWasSelected = sameWorkspacePath(selectedWorkspace, workspacePath)
       const deletedActiveConversation = deletedWorkspaceWasSelected && selectedConversationId === conversationId
