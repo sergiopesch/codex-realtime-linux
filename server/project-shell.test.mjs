@@ -712,6 +712,8 @@ test('Codex task routes require explicit user goals and IDs before app-server ca
   assert.match(appSource, /normalizedWorkspaceBuckets \+= 1\s+if \(normalizedWorkspaceBuckets >= MAX_UI_WORKSPACE_BUCKETS\) break/)
   assert.doesNotMatch(appSource, /Object\.entries\(value\)\.slice\(0, MAX_UI_WORKSPACE_BUCKETS\)/)
   assert.match(appSource, /const localWorkspaceData = safeWorkspaces\(workspaceData\.data\)/)
+  assert.match(appSource, /const roots = localWorkspaceData\.slice\(0, MAX_UI_WORKSPACES\)/)
+  assert.doesNotMatch(appSource, /localWorkspaceData\.slice\(0, 5\)/)
   assert.match(appSource, /const savedWorkspaces = safeWorkspaces\(appStateData\.workspaces\)/)
   assert.match(appSource, /const hiddenPaths = safeHiddenWorkspacePaths\(appStateData\.hiddenWorkspacePaths\)/)
   assert.match(appSource, /const savedConversationState = safeConversationsByWorkspace\(appStateData\.conversationsByWorkspace\)/)

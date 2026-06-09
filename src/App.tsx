@@ -2232,7 +2232,7 @@ function App() {
         ])
         if (!effectActive) return
         const localWorkspaceData = safeWorkspaces(workspaceData.data)
-        const roots = localWorkspaceData.slice(0, 5)
+        const roots = localWorkspaceData.slice(0, MAX_UI_WORKSPACES)
         const savedWorkspaces = safeWorkspaces(appStateData.workspaces)
         const hiddenPaths = safeHiddenWorkspacePaths(appStateData.hiddenWorkspacePaths)
         const savedConversationState = safeConversationsByWorkspace(appStateData.conversationsByWorkspace)
