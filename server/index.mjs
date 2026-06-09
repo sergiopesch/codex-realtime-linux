@@ -100,12 +100,10 @@ const CODEX_RPC_TIMEOUT_MS = configuredInteger(process.env.CODEX_RPC_TIMEOUT_MS,
   min: 1_000,
   max: MAX_CODEX_RPC_TIMEOUT_MS,
 })
-const STATE_PATH =
-  process.env.CODEX_REALTIME_STATE_PATH ??
-  path.join(os.homedir(), '.local', 'state', 'codex-realtime-linux', 'app-state.json')
-const SECRETS_PATH =
-  process.env.CODEX_REALTIME_SECRETS_PATH ??
-  path.join(os.homedir(), '.config', 'codex-realtime-linux', 'secrets.json')
+const DEFAULT_STATE_PATH = path.join(os.homedir(), '.local', 'state', 'codex-realtime-linux', 'app-state.json')
+const DEFAULT_SECRETS_PATH = path.join(os.homedir(), '.config', 'codex-realtime-linux', 'secrets.json')
+const STATE_PATH = configuredAbsolutePath(process.env.CODEX_REALTIME_STATE_PATH, DEFAULT_STATE_PATH)
+const SECRETS_PATH = configuredAbsolutePath(process.env.CODEX_REALTIME_SECRETS_PATH, DEFAULT_SECRETS_PATH)
 
 let localSecrets = {}
 
@@ -149,6 +147,11 @@ function configuredJsonBodyLimit(value, fallback = DEFAULT_JSON_BODY_LIMIT) {
   const multiplier = unit === 'mb' ? 1024 * 1024 : unit === 'kb' ? 1024 : 1
   const bytes = amount * multiplier
   return Number.isInteger(amount) && amount > 0 && bytes <= MAX_JSON_BODY_LIMIT_BYTES ? `${amount}${unit}` : fallback
+}
+
+function configuredAbsolutePath(value, fallback) {
+  const candidate = typeof value === 'string' && value.trim() ? value.trim() : fallback
+  return path.isAbsolute(candidate) ? path.resolve(candidate) : fallback
 }
 
 function guardLocalApiRequests(req, res, next) {
