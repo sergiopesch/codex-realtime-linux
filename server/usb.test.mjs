@@ -67,3 +67,29 @@ test('UsbDeviceMonitor records complete add events from streamed udev chunks', (
   assert.equal(monitor.events[0].device.isArduinoLike, true)
   assert.equal(monitor.events[0].summary, 'Arduino Uno on /dev/ttyACM0')
 })
+
+test('UsbDeviceMonitor bounds device event payloads before exposing them', () => {
+  const monitor = new UsbDeviceMonitor({ spawnImpl: () => null })
+  const properties = {
+    ACTION: 'add',
+    SUBSYSTEM: 'tty',
+    DEVNAME: `/dev/ttyACM0${'x'.repeat(500)}`,
+    ID_VENDOR: 'Arduino',
+    ID_MODEL: `Uno ${'m'.repeat(500)}`,
+    ID_SERIAL: 's'.repeat(900),
+  }
+  for (let index = 0; index < 80; index += 1) {
+    properties[`EXTRA_${index}_${'k'.repeat(120)}`] = 'v'.repeat(900)
+  }
+
+  const event = monitor.record(properties)
+
+  assert.ok(event)
+  assert.ok(event.summary.length <= 320)
+  assert.ok(event.device.devname.length <= 240)
+  assert.ok(event.device.model.length <= 240)
+  assert.ok(event.device.serial.length <= 240)
+  assert.ok(Object.keys(event.raw).length <= 40)
+  assert.ok(Object.keys(event.raw).every((key) => key.length <= 80))
+  assert.ok(Object.values(event.raw).every((value) => value.length <= 500))
+})

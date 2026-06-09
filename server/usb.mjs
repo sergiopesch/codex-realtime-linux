@@ -4,6 +4,11 @@ import path from 'node:path'
 
 const DEFAULT_EVENT_LIMIT = 80
 const DEFAULT_SERIAL_BY_ID_DIR = '/dev/serial/by-id'
+const MAX_USB_FIELD_LENGTH = 240
+const MAX_USB_SUMMARY_LENGTH = 320
+const MAX_USB_RAW_PROPERTIES = 40
+const MAX_USB_RAW_KEY_LENGTH = 80
+const MAX_USB_RAW_VALUE_LENGTH = 500
 const SERIAL_TTY_PATTERN = /^\/dev\/tty(?:ACM|USB)\d+$/
 const ARDUINO_VENDOR_IDS = new Set(['2341', '2a03', '1a86', '10c4', '0403', '1b4f'])
 const ARDUINO_TEXT_PATTERNS = [
@@ -35,8 +40,26 @@ export function parseUdevProperties(rawEvent) {
     }, {})
 }
 
+function boundedString(value, maxLength) {
+  const text = typeof value === 'string' ? value.trim() : ''
+  if (text.length <= maxLength) return text
+  return `${text.slice(0, Math.max(0, maxLength - 3))}...`
+}
+
 function normalizeString(value) {
-  return typeof value === 'string' ? value.trim() : ''
+  return boundedString(value, MAX_USB_FIELD_LENGTH)
+}
+
+function sanitizeUsbProperties(properties) {
+  return Object.fromEntries(
+    Object.entries(properties)
+      .slice(0, MAX_USB_RAW_PROPERTIES)
+      .map(([key, value]) => [
+        boundedString(key, MAX_USB_RAW_KEY_LENGTH),
+        boundedString(value, MAX_USB_RAW_VALUE_LENGTH),
+      ])
+      .filter(([key]) => key),
+  )
 }
 
 function textMatchesArduinoHints(text) {
@@ -76,7 +99,7 @@ export function eventSummary(device) {
   const name = [device.vendor, device.model].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim()
   const port = device.devname ? ` on ${device.devname}` : ''
   const label = name || (device.isArduinoLike ? 'Arduino-like USB device' : 'USB device')
-  return `${label}${port}`
+  return boundedString(`${label}${port}`, MAX_USB_SUMMARY_LENGTH)
 }
 
 export class UsbDeviceMonitor {
@@ -159,7 +182,7 @@ export class UsbDeviceMonitor {
       receivedAt: new Date().toISOString(),
       summary: eventSummary(device),
       device,
-      raw: properties,
+      raw: sanitizeUsbProperties(properties),
     }
     this.events = [event, ...this.events].slice(0, this.eventLimit)
     return event

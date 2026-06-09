@@ -238,6 +238,9 @@ type DesktopWindow = Window & {
 const initialWorkspacePath = ''
 const DEFAULT_API_TIMEOUT_MS = 130_000
 const REALTIME_CONNECTION_TIMEOUT_MS = 30_000
+const MAX_REALTIME_TRANSCRIPT_LINES = 80
+const MAX_REALTIME_TRANSCRIPT_ID_LENGTH = 240
+const MAX_REALTIME_TRANSCRIPT_TEXT_LENGTH = 8_000
 const MAX_UI_EVENT_STRING_LENGTH = 2_000
 const MAX_UI_EVENT_ARRAY_ITEMS = 20
 const MAX_UI_EVENT_OBJECT_KEYS = 30
@@ -337,6 +340,17 @@ const savedConversationPayload = (conversation: AgentConversation) => ({
   source: conversation.source === 'codex' ? 'codex' : 'local',
   updatedAt: new Date().toISOString(),
 })
+
+const boundedPlainString = (value: unknown, fallback = '', maxLength = 1_000) => {
+  const text = typeof value === 'string' && value ? value : fallback
+  return text.length > maxLength ? `${text.slice(0, Math.max(0, maxLength - 3))}...` : text
+}
+
+const boundedRealtimeTranscriptId = (value: unknown) =>
+  boundedPlainString(value, 'transcript-line', MAX_REALTIME_TRANSCRIPT_ID_LENGTH)
+
+const boundedRealtimeTranscriptText = (value: unknown) =>
+  boundedPlainString(value, '', MAX_REALTIME_TRANSCRIPT_TEXT_LENGTH)
 
 const boundedEventString = (value: unknown, fallback = '') => {
   const text = typeof value === 'string' && value.trim() ? value.trim() : fallback
@@ -608,16 +622,20 @@ function App() {
     mode: 'append' | 'replace',
     status: TranscriptLine['status'],
   ) => {
-    if (!text) {
+    const lineId = boundedRealtimeTranscriptId(id)
+    const nextText = boundedRealtimeTranscriptText(text)
+
+    if (!nextText) {
       setRealtimeTranscript((current) =>
-        current.map((line) => line.id === id ? { ...line, speaker, status } : line),
+        current.map((line) => line.id === lineId ? { ...line, speaker, status } : line),
       )
       return
     }
     setRealtimeTranscript((current) => {
-      const index = current.findIndex((line) => line.id === id)
+      const index = current.findIndex((line) => line.id === lineId)
       if (index === -1) {
-        return [...current, { id, speaker, text, status, createdAt: Date.now() }].slice(-80)
+        return [...current, { id: lineId, speaker, text: nextText, status, createdAt: Date.now() }]
+          .slice(-MAX_REALTIME_TRANSCRIPT_LINES)
       }
 
       const next = [...current]
@@ -625,7 +643,7 @@ function App() {
       next[index] = {
         ...existing,
         speaker,
-        text: mode === 'append' ? `${existing.text}${text}` : text,
+        text: boundedRealtimeTranscriptText(mode === 'append' ? `${existing.text}${nextText}` : nextText),
         status,
       }
       return next
