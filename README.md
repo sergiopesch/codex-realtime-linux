@@ -69,7 +69,7 @@ After installation, open the app menu and launch **Codex**. The launcher starts 
 
 ## Generated HTML Previews
 
-Realtime-generated HTML presentations are written into the selected workspace under `public/agent-files/` and shown in the in-app browser preview when the Codex task finishes. Preview routes are workspace-scoped and require a real local workspace path; the app does not expose a fixed bundled presentation route.
+Realtime-generated HTML presentations are written into the selected workspace under `public/agent-files/` and shown in the in-app browser preview when the Codex task finishes. Preview routes are workspace-scoped, require a real local workspace path, and serve generated files with browser safety headers; the app does not expose a fixed bundled presentation route.
 
 Codex task routing is also workspace-scoped. The renderer sends the currently selected workspace as `cwd`, and `/api/codex/task` rejects requests that omit a real workspace path instead of falling back to this app's source tree.
 

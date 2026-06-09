@@ -207,6 +207,26 @@ function isSafeArtifactName(value) {
   return /^[a-z0-9][a-z0-9-]*$/i.test(value)
 }
 
+function setArtifactPreviewHeaders(res) {
+  res.set({
+    'Content-Security-Policy': [
+      "default-src 'self' data: blob:",
+      "script-src 'self' 'unsafe-inline' data: blob:",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: blob:",
+      "font-src 'self' data:",
+      "connect-src 'self' data: blob:",
+      "object-src 'none'",
+      "base-uri 'none'",
+      "form-action 'none'",
+      "frame-ancestors 'self'",
+    ].join('; '),
+    'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), usb=(), serial=()',
+    'Referrer-Policy': 'no-referrer',
+    'X-Content-Type-Options': 'nosniff',
+  })
+}
+
 function httpError(message, { statusCode = 400, code = 'bad_request' } = {}) {
   const error = new Error(message)
   error.statusCode = statusCode
@@ -1545,6 +1565,7 @@ app.get(/^\/workspace-artifacts\/([^/]+)\/([^/]+)\/(.+)$/, async (req, res) => {
       return
     }
 
+    setArtifactPreviewHeaders(res)
     res.sendFile(requestedPath, (error) => {
       if (!error || res.headersSent) return
       res.status(error.statusCode || 404).send('Not found')

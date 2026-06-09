@@ -106,6 +106,12 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   const token = Buffer.from(path.resolve(workspacePath), 'utf8').toString('base64url')
   const preview = await fetch(`${baseUrl}/workspace-artifacts/${token}/sample-report/index.html`)
   assert.equal(preview.status, 200)
+  assert.equal(preview.headers.get('x-content-type-options'), 'nosniff')
+  assert.equal(preview.headers.get('referrer-policy'), 'no-referrer')
+  assert.match(preview.headers.get('permissions-policy') ?? '', /microphone=\(\)/)
+  assert.match(preview.headers.get('permissions-policy') ?? '', /serial=\(\)/)
+  assert.match(preview.headers.get('content-security-policy') ?? '', /frame-ancestors 'self'/)
+  assert.match(preview.headers.get('content-security-policy') ?? '', /object-src 'none'/)
   assert.match(await preview.text(), /Sample report/)
 
   const traversal = await fetch(`${baseUrl}/workspace-artifacts/${token}/sample-report/..%2F..%2F..%2Fpackage.json`)
