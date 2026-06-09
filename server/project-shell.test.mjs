@@ -463,6 +463,8 @@ test('Codex task routes require explicit user goals and IDs before app-server ca
   assert.match(serverSource, /workspacePath: artifactPlan\.workspacePath/)
   assert.match(serverSource, /url: artifactPlan\.url/)
   assert.match(serverSource, /const artifactPlan = await artifactPlanForWorkspace\(cwd, goal\)/)
+  assert.match(serverSource, /For this app, protect the app source by default\. \$\{buildWorkspaceGuard\('', null\)\}/)
+  assert.doesNotMatch(serverSource, /buildWorkspaceGuard\('create an html file'\)/)
   assert.match(serverSource, /const threadId = normalizeCodexEntityId\(threadResult\.thread, 'thread'\)/)
   assert.match(serverSource, /const turnId = normalizeCodexEntityId\(turnResult\.turn, 'turn'\)/)
   assert.match(serverSource, /res\.json\(\{ thread: \{ id: threadId \}, turn: \{ id: turnId \}, artifact: publicArtifactPlan\(artifactPlan\) \}\)/)

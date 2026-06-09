@@ -74,3 +74,11 @@ test('guard still protects app shell when app edits are explicit', () => {
   assert.match(guarded, /Protected app source paths:/)
   assert.doesNotMatch(guarded, new RegExp(`${GENERATED_ARTIFACT_DIR}/`))
 })
+
+test('generic realtime guard does not embed a stale artifact path', () => {
+  const guarded = buildWorkspaceGuard('', null)
+
+  assert.match(guarded, /Protected app source paths:/)
+  assert.match(guarded, /Never turn it into a standalone content page/)
+  assert.doesNotMatch(guarded, new RegExp(`${GENERATED_ARTIFACT_DIR}/`))
+})

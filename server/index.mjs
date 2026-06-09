@@ -676,7 +676,7 @@ function realtimeSessionConfig() {
       'Use codex_start_task when the user gives a concrete build, fix, review, refactor, test, or debugging goal.',
       'Use codex_steer_task when an active Codex task exists and the user changes priority, scope, style, or direction.',
       'Use codex_interrupt_task when the user asks to stop, pause, cancel, or abandon the active Codex turn.',
-      `For this app, protect the app source by default. ${buildWorkspaceGuard('create an html file')}`,
+      `For this app, protect the app source by default. ${buildWorkspaceGuard('', null)}`,
       `For simple HTML, demo, presentation, slide, page, or generated-file requests, tell Codex to inspect the selected workspace, including images and documents, then create files under ${GENERATED_ARTIFACT_DIR}/ in that workspace unless the user explicitly asks to modify this app.`,
       'When the generated presentation is finished, it will appear in the app browser preview automatically.',
       'Use get_current_weather when the user asks for current weather conditions in a specific place.',
