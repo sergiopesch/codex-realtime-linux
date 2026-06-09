@@ -309,6 +309,7 @@ test('upstream OpenAI and usage fetches are timeout bounded', async () => {
   assert.match(serverSource, /const MAX_VISUAL_CONTEXT_DATA_URL_BYTES =/)
   assert.match(serverSource, /const MAX_VISUAL_CONTEXT_SOURCE_LENGTH = 160/)
   assert.match(serverSource, /const MAX_VISUAL_CONTEXT_PROMPT_LENGTH = 1_500/)
+  assert.match(serverSource, /const MAX_VISUAL_CONTEXT_SUMMARY_LENGTH = 4_000/)
   assert.match(serverSource, /function normalizeBoundedString\(value, fallback = '', maxLength = 1_000\)/)
   assert.match(
     serverSource,
@@ -317,6 +318,10 @@ test('upstream OpenAI and usage fetches are timeout bounded', async () => {
   assert.match(
     serverSource,
     /const promptText = normalizeBoundedString\(prompt, DEFAULT_VISUAL_CONTEXT_PROMPT, MAX_VISUAL_CONTEXT_PROMPT_LENGTH\)/,
+  )
+  assert.match(
+    serverSource,
+    /summary: normalizeBoundedString\(\s*extractResponseText\(data\),\s*'Visual context was attached, but no summary was returned\.',\s*MAX_VISUAL_CONTEXT_SUMMARY_LENGTH,\s*\)/,
   )
   assert.match(serverSource, /function upstreamSignal\(\)/)
   assert.match(serverSource, /AbortSignal\.timeout\(UPSTREAM_FETCH_TIMEOUT_MS\)/)

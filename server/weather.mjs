@@ -1,6 +1,12 @@
 const GEOCODING_API_URL = 'https://geocoding-api.open-meteo.com/v1/search'
 const WEATHER_API_URL = 'https://api.open-meteo.com/v1/forecast'
 const DEFAULT_TIMEOUT_MS = 8000
+const MAX_LOCATION_QUERY_LENGTH = 160
+const MAX_LOCATION_LABEL_LENGTH = 160
+const MAX_TIMEZONE_LENGTH = 120
+const MAX_WEATHER_TIME_LENGTH = 80
+const MAX_WEATHER_SUMMARY_LENGTH = 500
+const MAX_UPSTREAM_REASON_LENGTH = 300
 
 const WEATHER_CODE_LABELS = new Map([
   [0, 'Clear sky'],
@@ -50,7 +56,14 @@ function normalizeLocationQuery(location) {
     })
   }
 
-  return location.trim()
+  const query = location.trim()
+  if (query.length > MAX_LOCATION_QUERY_LENGTH) {
+    throw new WeatherServiceError('Location is too long.', {
+      code: 'weather_invalid_location',
+      status: 400,
+    })
+  }
+  return query
 }
 
 function normalizeUnits(units) {
@@ -67,9 +80,16 @@ function weatherCodeLabel(code) {
   return WEATHER_CODE_LABELS.get(code) ?? 'Current conditions unavailable'
 }
 
+function boundedString(value, fallback = '', maxLength = 1_000) {
+  const text = typeof value === 'string' && value.trim() ? value.trim() : fallback
+  if (text.length <= maxLength) return text
+  return `${text.slice(0, Math.max(0, maxLength - 3))}...`
+}
+
 function formatLocationName(location) {
   return [location?.name, location?.admin1, location?.country]
-    .filter((value, index, all) => typeof value === 'string' && value.trim() && all.indexOf(value) === index)
+    .map((value) => boundedString(value, '', MAX_LOCATION_LABEL_LENGTH))
+    .filter((value, index, all) => value && all.indexOf(value) === index)
     .join(', ')
 }
 
@@ -114,9 +134,9 @@ async function fetchJson(url, { fetchImpl = fetch, timeoutMs = DEFAULT_TIMEOUT_M
   if (!response.ok) {
     const reason =
       typeof data?.reason === 'string'
-        ? data.reason
+        ? boundedString(data.reason, '', MAX_UPSTREAM_REASON_LENGTH)
         : typeof data?.error?.message === 'string'
-          ? data.error.message
+          ? boundedString(data.error.message, '', MAX_UPSTREAM_REASON_LENGTH)
           : null
     throw new WeatherServiceError(
       reason ? `Weather service request failed: ${reason}` : 'Weather service request failed.',
@@ -149,7 +169,7 @@ function buildWeatherSummary(location, current, units) {
     pieces.push(`humidity ${current.relativeHumidity}%`)
   }
 
-  return pieces.join(', ')
+  return boundedString(pieces.join(', '), 'Current weather is available.', MAX_WEATHER_SUMMARY_LENGTH)
 }
 
 export async function getCurrentWeather(locationQuery, options = {}) {
@@ -206,12 +226,16 @@ export async function getCurrentWeather(locationQuery, options = {}) {
     source: 'open-meteo',
     query: location,
     location: {
-      name: resolvedLocation.name,
-      admin1: resolvedLocation.admin1,
-      country: resolvedLocation.country,
+      name: boundedString(resolvedLocation.name, 'Unknown location', MAX_LOCATION_LABEL_LENGTH),
+      admin1: boundedString(resolvedLocation.admin1, '', MAX_LOCATION_LABEL_LENGTH),
+      country: boundedString(resolvedLocation.country, '', MAX_LOCATION_LABEL_LENGTH),
       latitude: resolvedLocation.latitude,
       longitude: resolvedLocation.longitude,
-      timezone: typeof weather?.timezone === 'string' ? weather.timezone : resolvedLocation.timezone,
+      timezone: boundedString(
+        typeof weather?.timezone === 'string' ? weather.timezone : resolvedLocation.timezone,
+        '',
+        MAX_TIMEZONE_LENGTH,
+      ),
     },
     units: {
       mode: unitsMode,
@@ -219,7 +243,7 @@ export async function getCurrentWeather(locationQuery, options = {}) {
       windSpeed: unitsMode === 'imperial' ? 'mph' : 'km/h',
     },
     current: {
-      time: typeof current.time === 'string' ? current.time : new Date().toISOString(),
+      time: boundedString(current.time, new Date().toISOString(), MAX_WEATHER_TIME_LENGTH),
       temperature: formatNumber(current.temperature_2m),
       apparentTemperature: formatNumber(current.apparent_temperature),
       relativeHumidity: formatNumber(current.relative_humidity_2m),

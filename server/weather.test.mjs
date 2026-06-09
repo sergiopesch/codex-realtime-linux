@@ -57,6 +57,58 @@ test('getCurrentWeather rejects invalid locations before calling upstream servic
   )
 })
 
+test('getCurrentWeather bounds upstream labels and summaries', async () => {
+  const longLabel = 'L'.repeat(400)
+  const fetchImpl = async (url) => {
+    if (String(url).startsWith('https://geocoding-api.open-meteo.com/')) {
+      return Response.json({
+        results: [
+          {
+            name: longLabel,
+            admin1: `${longLabel} admin`,
+            country: `${longLabel} country`,
+            latitude: 52.52,
+            longitude: 13.41,
+            timezone: longLabel,
+          },
+        ],
+      })
+    }
+
+    return Response.json({
+      timezone: longLabel,
+      current: {
+        time: longLabel,
+        temperature_2m: 19.4,
+        apparent_temperature: 18.9,
+        relative_humidity_2m: 54,
+        weather_code: 2,
+        wind_speed_10m: 12.2,
+        is_day: 1,
+      },
+    })
+  }
+
+  const weather = await getCurrentWeather('Berlin', { fetchImpl })
+
+  assert.equal(weather.location.name.length, 160)
+  assert.equal(weather.location.admin1.length, 160)
+  assert.equal(weather.location.country.length, 160)
+  assert.equal(weather.location.timezone.length, 120)
+  assert.equal(weather.current.time.length, 80)
+  assert.ok(weather.summary.length <= 500)
+})
+
+test('getCurrentWeather rejects oversized location queries before calling upstream services', async () => {
+  await assert.rejects(
+    () => getCurrentWeather('x'.repeat(200)),
+    (error) =>
+      error instanceof WeatherServiceError &&
+      error.status === 400 &&
+      error.code === 'weather_invalid_location',
+  )
+})
+
 test('getCurrentWeather surfaces not-found locations as a 404', async () => {
   const fetchImpl = async () => Response.json({ results: [] })
 

@@ -39,6 +39,7 @@ const JSON_BODY_LIMIT = process.env.CODEX_REALTIME_JSON_LIMIT ?? '25mb'
 const MAX_VISUAL_CONTEXT_DATA_URL_BYTES = 12 * 1024 * 1024
 const MAX_VISUAL_CONTEXT_SOURCE_LENGTH = 160
 const MAX_VISUAL_CONTEXT_PROMPT_LENGTH = 1_500
+const MAX_VISUAL_CONTEXT_SUMMARY_LENGTH = 4_000
 const DEFAULT_VISUAL_CONTEXT_PROMPT =
   'Focus on UI state, visible errors, design issues, code clues, and what Codex should know before acting.'
 const MAX_CONVERSATION_ID_LENGTH = 240
@@ -647,7 +648,11 @@ async function analyzeVisualContext({ imageDataUrl, source, prompt }) {
 
   return {
     source: sourceLabel,
-    summary: extractResponseText(data) || 'Visual context was attached, but no summary was returned.',
+    summary: normalizeBoundedString(
+      extractResponseText(data),
+      'Visual context was attached, but no summary was returned.',
+      MAX_VISUAL_CONTEXT_SUMMARY_LENGTH,
+    ),
   }
 }
 
