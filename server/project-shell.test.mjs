@@ -200,6 +200,7 @@ test('artifact previews are served through workspace-scoped routes only', async 
   assert.match(appSource, /const openConversationWindow = \(workspacePath: string, conversationId: string\) => \{[\s\S]*closeArtifactPreview\(\)/)
   assert.match(appSource, /const toggleWorkspace = \(workspacePath: string\) => \{[\s\S]*closeArtifactPreview\(\)/)
   assert.match(appSource, /const openSystemScreen = \(screen: SystemScreen\) => \{[\s\S]*closeArtifactPreview\(\)/)
+  assert.match(appSource, /if \(!activeSystemScreen\) return\s+closeArtifactPreview\(\)\s+\}, \[activeSystemScreen, closeArtifactPreview\]\)/)
   assert.match(appSource, /if \(toolName === 'codex_start_task'\) \{[\s\S]*setDismissedArtifact\(null\)[\s\S]*closeArtifactPreview\(\)[\s\S]*setPendingArtifact\(artifact \?\? null\)/)
   assert.match(appSource, /if \(!artifactPreviewLease\) return null/)
   assert.match(appSource, /if \(!current\) return null/)

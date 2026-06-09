@@ -1655,6 +1655,11 @@ function App() {
   }, [artifactPreviewLease, closeArtifactPreview])
 
   useEffect(() => {
+    if (!activeSystemScreen) return
+    closeArtifactPreview()
+  }, [activeSystemScreen, closeArtifactPreview])
+
+  useEffect(() => {
     if (!notice) return undefined
     const timeout = window.setTimeout(() => setNotice(null), 3600)
     return () => window.clearTimeout(timeout)
