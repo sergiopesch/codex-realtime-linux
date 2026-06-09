@@ -858,11 +858,15 @@ class CodexRpc {
     })
 
     this.proc.stderr.on('data', (chunk) => {
-      const message = chunk.toString().trim()
+      const chunkLength = typeof chunk?.length === 'number' ? chunk.length : String(chunk).length
+      const rawMessage = Buffer.isBuffer(chunk)
+        ? chunk.subarray(0, MAX_CODEX_RPC_LINE_LENGTH).toString()
+        : String(chunk).slice(0, MAX_CODEX_RPC_LINE_LENGTH)
+      const message = rawMessage.trim()
       if (message) {
         this.recordNotification({
           method: 'app-server/stderr',
-          params: { message, at: new Date().toISOString() },
+          params: { message, truncated: chunkLength > MAX_CODEX_RPC_LINE_LENGTH, at: new Date().toISOString() },
         })
       }
     })
