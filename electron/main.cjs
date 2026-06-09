@@ -201,7 +201,8 @@ const waitForAppServer = (baseUrl, timeoutMs = 15000, expectedDesktopServerToken
     const attempt = async () => {
       try {
         const status = await readJson(`${baseUrl}/api/status`)
-        if (path.resolve(status?.appRoot || '') !== path.resolve(repoRoot)) {
+        const statusAppRoot = typeof status?.appRoot === 'string' ? path.resolve(status.appRoot) : ''
+        if (statusAppRoot !== path.resolve(repoRoot)) {
           reject(refusingToLoadError(`Refusing to load unrelated local server at ${baseUrl}`))
           return
         }
