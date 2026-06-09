@@ -2466,8 +2466,9 @@ function App() {
       if (pollInFlight) return
       pollInFlight = true
       try {
+        const initialUsbPoll = !usbInitializedRef.current
         const data = await api<UsbEventsResponse>(
-          `/api/usb/events${usbInitializedRef.current ? '' : '?scan=true'}`,
+          `/api/usb/events${initialUsbPoll ? '?scan=true' : ''}`,
           { signal: controller.signal },
         )
         if (!effectActive) return
@@ -2490,12 +2491,12 @@ function App() {
           seenUsbEventIdsRef.current = retainedIds
         }
 
-        if (!usbInitializedRef.current) {
+        if (initialUsbPoll) {
           usbInitializedRef.current = true
-          return
         }
 
         for (const event of unseen) {
+          if (initialUsbPoll && !(event.device.action === 'add' && event.device.isArduinoLike)) continue
           appendEvent('usb/device-event', {
             summary: event.summary,
             action: event.device.action,
