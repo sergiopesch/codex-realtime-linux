@@ -87,6 +87,8 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   const { baseUrl } = await startTestServer(t)
   const workspacePath = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-workspace-'))
   t.after(() => rm(workspacePath, { recursive: true, force: true }))
+  const emptyStateWorkspacePath = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-empty-state-workspace-'))
+  t.after(() => rm(emptyStateWorkspacePath, { recursive: true, force: true }))
 
   const artifactDir = path.join(workspacePath, 'public', 'agent-files', 'sample-report')
   await mkdir(artifactDir, { recursive: true })
@@ -354,6 +356,16 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   assert.equal(missingPatchConversation.status, 404)
   assert.equal((await readJson(missingPatchConversation)).code, 'conversation_not_found')
 
+  const missingPatchInEmptyWorkspace = await fetch(`${baseUrl}/api/app-state/conversations`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspacePath: emptyStateWorkspacePath, conversationId: 'missing-conversation', patch: { title: 'No target' } }),
+  })
+  assert.equal(missingPatchInEmptyWorkspace.status, 404)
+  assert.equal((await readJson(missingPatchInEmptyWorkspace)).code, 'conversation_not_found')
+  let stateAfterMissingConversationMutation = await (await fetch(`${baseUrl}/api/app-state`)).json()
+  assert.equal(stateAfterMissingConversationMutation.conversationsByWorkspace[emptyStateWorkspacePath], undefined)
+
   const invalidConversationDelete = await fetch(`${baseUrl}/api/app-state/conversations/delete`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -372,6 +384,15 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   })
   assert.equal(missingWorkspaceDelete.status, 404)
   assert.equal((await readJson(missingWorkspaceDelete)).code, 'workspace_not_found')
+
+  const missingConversationDelete = await fetch(`${baseUrl}/api/app-state/conversations/delete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspacePath: emptyStateWorkspacePath, conversationId: 'missing-conversation' }),
+  })
+  assert.equal(missingConversationDelete.status, 200)
+  stateAfterMissingConversationMutation = await missingConversationDelete.json()
+  assert.equal(stateAfterMissingConversationMutation.state.conversationsByWorkspace[emptyStateWorkspacePath], undefined)
 })
 
 test('server returns json errors for oversized API request bodies', async (t) => {

@@ -1892,28 +1892,32 @@ app.patch('/api/app-state/conversations', async (req, res) => {
     return
   }
 
-  const { state, result } = await mutateAppState(async (state) => {
-    const conversations = state.conversationsByWorkspace[workspacePath] ?? []
-    const next = conversations.map((conversation) =>
-      conversation.id === conversationId
-        ? normalizeConversation({ ...conversation, ...req.body.patch, updatedAt: new Date().toISOString() }, workspacePath)
-        : conversation,
-    )
-    state.conversationsByWorkspace[workspacePath] = next
-    return next.find((conversation) => conversation.id === conversationId) ?? null
-  })
-  if (!result) {
+  let mutation
+  try {
+    mutation = await mutateAppState(async (state) => {
+      const conversations = state.conversationsByWorkspace[workspacePath] ?? []
+      const index = conversations.findIndex((conversation) => conversation.id === conversationId)
+      if (index === -1) {
+        throw httpError('conversationId was not found in this workspace', {
+          statusCode: 404,
+          code: 'conversation_not_found',
+        })
+      }
+
+      const next = [...conversations]
+      next[index] = normalizeConversation({ ...conversations[index], ...req.body.patch, updatedAt: new Date().toISOString() }, workspacePath)
+      state.conversationsByWorkspace[workspacePath] = next
+      return next[index]
+    })
+  } catch (error) {
     sendJsonError(
       res,
-      httpError('conversationId was not found in this workspace', {
-        statusCode: 404,
-        code: 'conversation_not_found',
-      }),
+      error,
       { fallbackStatus: 404, fallbackCode: 'conversation_not_found' },
     )
     return
   }
-  res.json({ conversation: result, state })
+  res.json({ conversation: mutation.result, state: mutation.state })
 })
 
 app.post('/api/app-state/conversations/delete', async (req, res) => {
@@ -1939,9 +1943,14 @@ app.post('/api/app-state/conversations/delete', async (req, res) => {
   }
 
   const { state } = await mutateAppState(async (state) => {
-    state.conversationsByWorkspace[workspacePath] = (state.conversationsByWorkspace[workspacePath] ?? []).filter(
-      (conversation) => conversation.id !== conversationId,
-    )
+    const conversations = state.conversationsByWorkspace[workspacePath] ?? []
+    const next = conversations.filter((conversation) => conversation.id !== conversationId)
+    if (next.length === conversations.length) return
+    if (next.length > 0) {
+      state.conversationsByWorkspace[workspacePath] = next
+    } else {
+      delete state.conversationsByWorkspace[workspacePath]
+    }
   })
   res.json({ state })
 })
