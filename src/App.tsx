@@ -2001,17 +2001,18 @@ function App() {
       return
     }
 
-    responseChannel.send(
-      JSON.stringify({
-        type: 'conversation.item.create',
-        item: {
-          type: 'function_call_output',
-          call_id: callId,
-          output: JSON.stringify(result),
-        },
-      }),
-    )
-    responseChannel.send(JSON.stringify({ type: 'response.create' }))
+    const outputSent = sendRealtimeEvent(responseChannel, {
+      type: 'conversation.item.create',
+      item: {
+        type: 'function_call_output',
+        call_id: callId,
+        output: JSON.stringify(result),
+      },
+    })
+    const responseRequested = outputSent && sendRealtimeEvent(responseChannel, { type: 'response.create' })
+    if (!outputSent || !responseRequested) {
+      appendEvent('realtime/function-call-output-dropped', { name: toolName, callId })
+    }
   }
 
   const startVoice = async () => {
