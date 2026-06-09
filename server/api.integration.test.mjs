@@ -297,6 +297,65 @@ test('server returns json errors for oversized API request bodies', async (t) =>
   assert.equal((await readJson(oversizedJson)).code, 'payload_too_large')
 })
 
+test('server bounds persisted app state loaded from disk', async (t) => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-persisted-state-'))
+  t.after(() => rm(tempDir, { recursive: true, force: true }))
+  const statePath = path.join(tempDir, 'state.json')
+  const secretsPath = path.join(tempDir, 'secrets.json')
+
+  const manyWorkspaces = Array.from({ length: 100 }, (_, index) => ({
+    id: path.join('/tmp', `codex-realtime-saved-${index}`),
+    name: `Saved ${index}`,
+  }))
+  const conversations = Array.from({ length: 100 }, (_, index) => ({
+    id: `conversation-${index}`,
+    title: `Conversation ${index}`,
+    transcript: [{ speaker: 'user', text: 'hello' }],
+  }))
+  await writeFile(
+    statePath,
+    JSON.stringify({
+      workspaces: manyWorkspaces,
+      hiddenWorkspacePaths: manyWorkspaces.map((workspace) => workspace.id),
+      conversationsByWorkspace: Object.fromEntries(
+        manyWorkspaces.map((workspace) => [workspace.id, conversations]),
+      ),
+    }),
+  )
+
+  const { baseUrl } = await startTestServer(t, {
+    CODEX_REALTIME_STATE_PATH: statePath,
+    CODEX_REALTIME_SECRETS_PATH: secretsPath,
+  })
+  const state = await (await fetch(`${baseUrl}/api/app-state`)).json()
+
+  assert.equal(state.workspaces.length, 40)
+  assert.equal(state.hiddenWorkspacePaths.length, 80)
+  assert.equal(Object.keys(state.conversationsByWorkspace).length, 40)
+  assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id].length, 80)
+})
+
+test('server ignores oversized persisted app state and secrets files', async (t) => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-oversized-state-'))
+  t.after(() => rm(tempDir, { recursive: true, force: true }))
+  const statePath = path.join(tempDir, 'state.json')
+  const secretsPath = path.join(tempDir, 'secrets.json')
+  await writeFile(statePath, 'x'.repeat(3 * 1024 * 1024))
+  await writeFile(secretsPath, 'x'.repeat(128 * 1024))
+
+  const { baseUrl } = await startTestServer(t, {
+    CODEX_REALTIME_STATE_PATH: statePath,
+    CODEX_REALTIME_SECRETS_PATH: secretsPath,
+  })
+  const state = await (await fetch(`${baseUrl}/api/app-state`)).json()
+  const status = await (await fetch(`${baseUrl}/api/status`)).json()
+
+  assert.deepEqual(state.workspaces, [])
+  assert.deepEqual(state.hiddenWorkspacePaths, [])
+  assert.deepEqual(state.conversationsByWorkspace, {})
+  assert.equal(status.openAiKeySource, 'missing')
+})
+
 test('realtime token route returns stable json errors when voice cannot start', async (t) => {
   const { baseUrl } = await startTestServer(t, {
     OPENAI_API_KEY: '',

@@ -48,6 +48,12 @@ const MAX_CONVERSATION_TEXT_LENGTH = 8_000
 const MAX_CONVERSATION_TRACE_LENGTH = 500
 const MAX_CONVERSATION_TRACES = 40
 const MAX_CONVERSATION_TRANSCRIPT_LINES = 200
+const MAX_LOCAL_WORKSPACES = 40
+const MAX_LOCAL_HIDDEN_WORKSPACES = 80
+const MAX_LOCAL_WORKSPACE_BUCKETS = 40
+const MAX_LOCAL_CONVERSATIONS_PER_WORKSPACE = 80
+const MAX_APP_STATE_FILE_BYTES = 2 * 1024 * 1024
+const MAX_SECRETS_FILE_BYTES = 64 * 1024
 const MAX_GENERATED_ARTIFACTS = 40
 const MAX_ARTIFACT_NAME_LENGTH = 120
 const MAX_ARTIFACT_TITLE_LENGTH = 180
@@ -145,6 +151,8 @@ app.use(handleJsonBodyError)
 
 async function loadLocalSecrets() {
   try {
+    const details = await stat(SECRETS_PATH)
+    if (details.size > MAX_SECRETS_FILE_BYTES) throw new Error('Saved secrets file is too large.')
     localSecrets = JSON.parse(await readFile(SECRETS_PATH, 'utf8'))
   } catch {
     localSecrets = {}
@@ -927,19 +935,21 @@ function normalizeConversation(input, workspacePath) {
 
 function normalizeAppState(input) {
   const state = emptyAppState()
-  state.workspaces = Array.isArray(input?.workspaces) ? input.workspaces.map(normalizeWorkspace).filter(Boolean) : []
+  state.workspaces = Array.isArray(input?.workspaces)
+    ? input.workspaces.map(normalizeWorkspace).filter(Boolean).slice(0, MAX_LOCAL_WORKSPACES)
+    : []
   state.hiddenWorkspacePaths = Array.isArray(input?.hiddenWorkspacePaths)
-    ? input.hiddenWorkspacePaths.map(normalizeWorkspacePath).filter(Boolean)
+    ? input.hiddenWorkspacePaths.map(normalizeWorkspacePath).filter(Boolean).slice(0, MAX_LOCAL_HIDDEN_WORKSPACES)
     : []
 
   if (input?.conversationsByWorkspace && typeof input.conversationsByWorkspace === 'object') {
-    for (const [workspacePath, conversations] of Object.entries(input.conversationsByWorkspace)) {
+    for (const [workspacePath, conversations] of Object.entries(input.conversationsByWorkspace).slice(0, MAX_LOCAL_WORKSPACE_BUCKETS)) {
       const normalizedWorkspacePath = normalizeWorkspacePath(workspacePath)
       if (!normalizedWorkspacePath) continue
       if (Array.isArray(conversations)) {
-        state.conversationsByWorkspace[normalizedWorkspacePath] = conversations.map((conversation) =>
-          normalizeConversation(conversation, normalizedWorkspacePath),
-        )
+        state.conversationsByWorkspace[normalizedWorkspacePath] = conversations
+          .map((conversation) => normalizeConversation(conversation, normalizedWorkspacePath))
+          .slice(0, MAX_LOCAL_CONVERSATIONS_PER_WORKSPACE)
       }
     }
   }
@@ -949,6 +959,8 @@ function normalizeAppState(input) {
 
 async function readAppState() {
   try {
+    const details = await stat(STATE_PATH)
+    if (details.size > MAX_APP_STATE_FILE_BYTES) throw new Error('Saved app state file is too large.')
     return normalizeAppState(JSON.parse(await readFile(STATE_PATH, 'utf8')))
   } catch (error) {
     if (error.code !== 'ENOENT') {

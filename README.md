@@ -142,13 +142,13 @@ CODEX_REALTIME_ALLOWED_ORIGINS=http://127.0.0.1:6006
 CODEX_REALTIME_JSON_LIMIT=25mb
 ```
 
-Local sidebar state is saved outside the repo by default. To override it, use an absolute path:
+Local sidebar state is saved outside the repo by default. Saved state is normalized and bounded on load so stale or oversized local state cannot dominate startup. To override it, use an absolute path:
 
 ```bash
 CODEX_REALTIME_STATE_PATH=/tmp/codex-realtime-linux/app-state.json
 ```
 
-Settings-saved secrets are also stored outside the repo by default with user-only file permissions. To override that path:
+Settings-saved secrets are also stored outside the repo by default with user-only file permissions and an oversized-file guard. To override that path:
 
 ```bash
 CODEX_REALTIME_SECRETS_PATH=/tmp/codex-realtime-linux/secrets.json
