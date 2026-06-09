@@ -198,7 +198,7 @@ OPENAI_USAGE_GBP_RATE_API=https://api.frankfurter.app/latest?from=USD&to=GBP
 - Mutating `/api/*` routes reject untrusted browser origins, and routes with JSON payloads reject form-style, malformed, or oversized requests before they can touch state, Codex, or Arduino hardware.
 - The server persists this client's local workspace/thread state to `CODEX_REALTIME_STATE_PATH`, defaulting to `~/.local/state/codex-realtime-linux/app-state.json`; overrides must be absolute paths, the state directory is tightened to `0700`, and writes are synced before atomic rename.
 - The server persists Settings-saved API secrets to `CODEX_REALTIME_SECRETS_PATH`, defaulting to `~/.config/codex-realtime-linux/secrets.json`; overrides must be absolute paths, the secrets directory is tightened to `0700`, writes are synced before atomic rename, and malformed or oversized saved keys are ignored on load.
-- Removing a workspace in the app hides that workspace from this client's sidebar state only; it does not delete the local folder.
+- Removing a workspace in the app clears that workspace and its saved local conversation buckets from this client's sidebar state; it does not delete the local folder.
 - `src/App.tsx` is the Electron renderer UI.
 - `src/App.css` defines the compact dark desktop layout.
 - `electron/main.cjs` creates the desktop window. In development it loads the Vite renderer; from the app-menu launcher it starts the local API server and loads the built renderer served by `server/index.mjs`.

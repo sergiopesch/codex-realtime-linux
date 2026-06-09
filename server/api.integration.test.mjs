@@ -587,6 +587,17 @@ test('server returns normalized app state after mutations', async (t) => {
   const conversationBody = await conversationSave.json()
   assert.equal(conversationBody.state.conversationsByWorkspace[workspacePath].length, 80)
   assert.equal(conversationBody.state.conversationsByWorkspace[workspacePath][0].id, 'new-conversation')
+
+  const workspaceDelete = await fetch(`${baseUrl}/api/app-state/workspaces/delete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspacePath }),
+  })
+  assert.equal(workspaceDelete.status, 200)
+  const workspaceDeleteBody = await workspaceDelete.json()
+  assert.equal(workspaceDeleteBody.state.workspaces.some((workspace) => workspace.path === workspacePath), false)
+  assert.equal(workspaceDeleteBody.state.hiddenWorkspacePaths.includes(workspacePath), true)
+  assert.equal(workspaceDeleteBody.state.conversationsByWorkspace[workspacePath], undefined)
 })
 
 test('server ignores oversized persisted app state and secrets files', async (t) => {

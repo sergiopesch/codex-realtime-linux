@@ -1874,6 +1874,7 @@ app.post('/api/app-state/workspaces/delete', async (req, res) => {
   const { state } = await mutateAppState(async (state) => {
     state.workspaces = state.workspaces.filter((item) => (item.path ?? item.id) !== workspacePath)
     state.hiddenWorkspacePaths = [...new Set([...(state.hiddenWorkspacePaths ?? []), workspacePath])]
+    delete state.conversationsByWorkspace[workspacePath]
   })
   res.json({ state })
 })

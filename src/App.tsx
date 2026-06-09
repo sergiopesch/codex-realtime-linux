@@ -1323,6 +1323,11 @@ function App() {
     setHiddenWorkspacePaths((current) => [...new Set([...current.map(normalizeAbsoluteLocalWorkspacePath), targetWorkspacePath])])
     setUserWorkspaces((current) => current.filter((workspace) => workspacePathFor(workspace) !== targetWorkspacePath))
     setCollapsedWorkspaces((current) => current.filter((item) => normalizeAbsoluteLocalWorkspacePath(item) !== targetWorkspacePath))
+    setConversationsByWorkspace((current) => {
+      const next = { ...current }
+      delete next[targetWorkspacePath]
+      return next
+    })
 
     if (normalizeAbsoluteLocalWorkspacePath(selectedWorkspace) === targetWorkspacePath) {
       if (nextWorkspace) {
