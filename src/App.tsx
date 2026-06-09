@@ -251,6 +251,7 @@ const MAX_UI_EVENT_STRING_LENGTH = 2_000
 const MAX_UI_EVENT_ARRAY_ITEMS = 20
 const MAX_UI_EVENT_OBJECT_KEYS = 30
 const MAX_UI_EVENT_DEPTH = 6
+const MAX_SEEN_USB_EVENT_IDS = 240
 
 const boundedApiErrorText = (value: unknown, fallback = '') => {
   const text = typeof value === 'string' && value ? value : fallback
@@ -1412,6 +1413,15 @@ function App() {
 
         for (const event of unseen) {
           seenUsbEventIdsRef.current.add(event.id)
+        }
+
+        if (seenUsbEventIdsRef.current.size > MAX_SEEN_USB_EVENT_IDS) {
+          const retainedIds = new Set(data.data.map((event) => event.id).slice(0, MAX_SEEN_USB_EVENT_IDS))
+          for (const eventId of [...seenUsbEventIdsRef.current].reverse()) {
+            if (retainedIds.size >= MAX_SEEN_USB_EVENT_IDS) break
+            retainedIds.add(eventId)
+          }
+          seenUsbEventIdsRef.current = retainedIds
         }
 
         if (!usbInitializedRef.current) {
