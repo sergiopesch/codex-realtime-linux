@@ -122,6 +122,13 @@ test('local API rejects untrusted origins and non-json mutation bodies', async (
   assert.match(serverSource, /invalid_json/)
   assert.match(serverSource, /app\.use\(guardLocalApiRequests\)/)
   assert.match(serverSource, /app\.use\(handleJsonBodyError\)/)
+  assert.match(serverSource, /app\.use\('\/api', \(_req, res\) =>/)
+  assert.match(serverSource, /api_not_found/)
+  assert.match(serverSource, /function handleApiError/)
+  assert.match(serverSource, /const statusCode = error\?\.statusCode \|\| error\?\.status \|\| 500/)
+  assert.match(serverSource, /code: statusCode >= 500 \? 'api_request_failed' : error\?\.code \|\| 'api_request_failed'/)
+  assert.match(serverSource, /api_request_failed/)
+  assert.match(serverSource, /app\.use\(handleApiError\)[\s\S]*app\.use\(express\.static\(DIST_DIR\)\)/)
 })
 
 test('Codex app-server RPC bridge has bounded requests and single-flight initialization', async () => {

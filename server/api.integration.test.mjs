@@ -177,3 +177,21 @@ test('server returns json errors for oversized API request bodies', async (t) =>
   assert.equal(oversizedJson.status, 413)
   assert.equal((await readJson(oversizedJson)).code, 'payload_too_large')
 })
+
+test('server returns json errors for unmatched API routes and unhandled route failures', async (t) => {
+  const badSecretsPath = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-secrets-dir-'))
+  t.after(() => rm(badSecretsPath, { recursive: true, force: true }))
+  const { baseUrl } = await startTestServer(t, { CODEX_REALTIME_SECRETS_PATH: badSecretsPath })
+
+  const missingApi = await fetch(`${baseUrl}/api/does-not-exist`)
+  assert.equal(missingApi.status, 404)
+  assert.equal(missingApi.headers.get('content-type')?.includes('application/json'), true)
+  assert.equal((await readJson(missingApi)).code, 'api_not_found')
+
+  const failedSecretWrite = await fetch(`${baseUrl}/api/settings/openai-key`, {
+    method: 'DELETE',
+  })
+  assert.equal(failedSecretWrite.status, 500)
+  assert.equal(failedSecretWrite.headers.get('content-type')?.includes('application/json'), true)
+  assert.equal((await readJson(failedSecretWrite)).code, 'api_request_failed')
+})

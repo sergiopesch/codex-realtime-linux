@@ -1407,6 +1407,30 @@ app.use('/workspace-artifacts', (_req, res) => {
   res.status(404).send('Artifact not found')
 })
 
+app.use('/api', (_req, res) => {
+  res.status(404).json({ error: 'API route not found.', code: 'api_not_found' })
+})
+
+function handleApiError(error, req, res, next) {
+  if (!req.path.startsWith('/api/')) {
+    next(error)
+    return
+  }
+
+  if (res.headersSent) {
+    next(error)
+    return
+  }
+
+  const statusCode = error?.statusCode || error?.status || 500
+  res.status(statusCode).json({
+    error: error instanceof Error ? error.message : 'API request failed.',
+    code: statusCode >= 500 ? 'api_request_failed' : error?.code || 'api_request_failed',
+  })
+}
+
+app.use(handleApiError)
+
 app.use(express.static(DIST_DIR))
 app.get(/^(?!\/api(?:\/|$)).*/, (_req, res) => {
   res.sendFile(path.join(DIST_DIR, 'index.html'))
