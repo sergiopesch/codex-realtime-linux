@@ -57,6 +57,23 @@ test('getCurrentWeather rejects invalid locations before calling upstream servic
   )
 })
 
+test('getCurrentWeather rejects invalid units before calling upstream services', async () => {
+  let requests = 0
+  const fetchImpl = async () => {
+    requests += 1
+    return Response.json({})
+  }
+
+  await assert.rejects(
+    () => getCurrentWeather('Berlin', { units: 'kelvin', fetchImpl }),
+    (error) =>
+      error instanceof WeatherServiceError &&
+      error.status === 400 &&
+      error.code === 'weather_invalid_units',
+  )
+  assert.equal(requests, 0)
+})
+
 test('getCurrentWeather bounds upstream labels and summaries', async () => {
   const longLabel = 'L'.repeat(400)
   const fetchImpl = async (url) => {

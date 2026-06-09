@@ -1002,6 +1002,9 @@ test('weather upstream responses are timeout and size bounded', async () => {
 
   assert.match(weatherSource, /const DEFAULT_TIMEOUT_MS = 8000/)
   assert.match(weatherSource, /const MAX_WEATHER_RESPONSE_BYTES = 256 \* 1024/)
+  assert.match(weatherSource, /function normalizeUnits\(units\)/)
+  assert.match(weatherSource, /if \(units === 'metric' \|\| units === 'imperial'\) return units/)
+  assert.match(weatherSource, /code: 'weather_invalid_units'/)
   assert.match(weatherSource, /async function readBoundedResponseText\(response, stage\)/)
   assert.match(weatherSource, /totalBytes > MAX_WEATHER_RESPONSE_BYTES/)
   assert.match(weatherSource, /await reader\.cancel\(\)\.catch\(\(\) => \{\}\)/)
