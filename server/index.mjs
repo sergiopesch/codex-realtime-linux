@@ -101,6 +101,7 @@ const MAX_ERROR_MESSAGE_LENGTH = 500
 const MAX_OPENAI_SAFETY_IDENTIFIER_LENGTH = 128
 const DEFAULT_CODEX_RPC_TIMEOUT_MS = 120_000
 const MAX_CODEX_RPC_TIMEOUT_MS = 600_000
+const CODEX_PROCESS_KILL_GRACE_MS = 2_000
 const CODEX_RPC_TIMEOUT_MS = configuredInteger(process.env.CODEX_RPC_TIMEOUT_MS, {
   fallback: DEFAULT_CODEX_RPC_TIMEOUT_MS,
   min: 1_000,
@@ -900,6 +901,7 @@ class CodexRpc {
   initPromise = null
   pending = new Map()
   notifications = []
+  killTimer = null
 
   recordNotification(event, limit = MAX_CODEX_NOTIFICATIONS) {
     this.notifications.unshift(normalizeEventRecord(event))
@@ -911,8 +913,8 @@ class CodexRpc {
     if (this.initPromise) return this.initPromise
 
     this.initPromise = this.#initialize().catch((error) => {
-      if (this.proc && !this.proc.killed) this.proc.kill()
-      this.#resetProcessState(error)
+      this.#terminateProcess()
+      this.#resetProcessState(error, { keepKillTimer: true })
       throw error
     })
     return this.initPromise
@@ -973,12 +975,30 @@ class CodexRpc {
     }
   }
 
-  #resetProcessState(error) {
+  #clearKillTimer() {
+    if (this.killTimer != null) clearTimeout(this.killTimer)
+    this.killTimer = null
+  }
+
+  #terminateProcess() {
+    const proc = this.proc
+    if (!proc || proc.exitCode != null || proc.signalCode != null) return
+    proc.kill('SIGTERM')
+    this.#clearKillTimer()
+    this.killTimer = setTimeout(() => {
+      this.killTimer = null
+      if (proc.exitCode == null && proc.signalCode == null) proc.kill('SIGKILL')
+    }, CODEX_PROCESS_KILL_GRACE_MS)
+    this.killTimer.unref?.()
+  }
+
+  #resetProcessState(error, { keepKillTimer = false } = {}) {
     this.ready = false
     this.initPromise = null
     this.proc = null
     this.rl?.close()
     this.rl = null
+    if (!keepKillTimer) this.#clearKillTimer()
     for (const { reject, timeout } of this.pending.values()) {
       clearTimeout(timeout)
       reject(error)
@@ -1028,8 +1048,13 @@ class CodexRpc {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         if (!this.pending.has(id)) return
-        this.pending.delete(id)
-        reject(new Error(`codex app-server request timed out: ${method}`))
+        const error = new Error(`codex app-server request timed out: ${method}`)
+        this.recordNotification({
+          method: 'app-server/request-timeout',
+          params: { method, id, at: new Date().toISOString() },
+        })
+        this.#terminateProcess()
+        this.#resetProcessState(error, { keepKillTimer: true })
       }, CODEX_RPC_TIMEOUT_MS)
 
       this.pending.set(id, { resolve, reject, timeout })
@@ -1049,9 +1074,8 @@ class CodexRpc {
   }
 
   dispose(reason = 'codex app-server stopped.') {
-    const proc = this.proc
-    if (proc && !proc.killed) proc.kill()
-    this.#resetProcessState(new Error(reason))
+    this.#terminateProcess()
+    this.#resetProcessState(new Error(reason), { keepKillTimer: true })
   }
 }
 
