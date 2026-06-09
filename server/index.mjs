@@ -49,6 +49,12 @@ const MAX_CONVERSATION_TRACES = 40
 const MAX_CONVERSATION_TRANSCRIPT_LINES = 200
 const MAX_USAGE_BUCKETS = 20
 const MAX_USAGE_BUCKET_LABEL_LENGTH = 120
+const MAX_CODEX_NOTIFICATIONS = 160
+const MAX_EVENT_METHOD_LENGTH = 160
+const MAX_EVENT_STRING_LENGTH = 2_000
+const MAX_EVENT_ARRAY_ITEMS = 20
+const MAX_EVENT_OBJECT_KEYS = 30
+const MAX_EVENT_DEPTH = 4
 const CONFIGURED_CODEX_RPC_TIMEOUT_MS = Number(process.env.CODEX_RPC_TIMEOUT_MS)
 const CODEX_RPC_TIMEOUT_MS =
   Number.isFinite(CONFIGURED_CODEX_RPC_TIMEOUT_MS) && CONFIGURED_CODEX_RPC_TIMEOUT_MS > 0
@@ -476,6 +482,37 @@ function extractResponseText(response) {
     .join('\n')
 }
 
+function normalizeEventValue(value, depth = 0, seen = new WeakSet()) {
+  if (value == null || typeof value === 'number' || typeof value === 'boolean') return value
+  if (typeof value === 'string') return normalizeBoundedString(value, '', MAX_EVENT_STRING_LENGTH)
+  if (depth >= MAX_EVENT_DEPTH) return '[truncated]'
+  if (Array.isArray(value)) {
+    return value.slice(0, MAX_EVENT_ARRAY_ITEMS).map((item) => normalizeEventValue(item, depth + 1, seen))
+  }
+  if (typeof value !== 'object') return undefined
+  if (seen.has(value)) return '[circular]'
+  seen.add(value)
+
+  const normalized = {}
+  for (const [key, entryValue] of Object.entries(value).slice(0, MAX_EVENT_OBJECT_KEYS)) {
+    const normalizedKey = normalizeBoundedString(key, 'field', MAX_EVENT_METHOD_LENGTH)
+    const normalizedValue = normalizeEventValue(entryValue, depth + 1, seen)
+    if (normalizedKey && normalizedValue !== undefined) normalized[normalizedKey] = normalizedValue
+  }
+  return normalized
+}
+
+function normalizeEventRecord(event, fallbackMethod = 'app-server/event') {
+  const source = event && typeof event === 'object' ? event : {}
+  const { method, receivedAt, params, ...rest } = source
+  const eventParams = params != null ? params : rest
+  return {
+    method: normalizeBoundedString(method, fallbackMethod, MAX_EVENT_METHOD_LENGTH),
+    receivedAt: typeof receivedAt === 'string' ? receivedAt : new Date().toISOString(),
+    params: normalizeEventValue(eventParams) ?? {},
+  }
+}
+
 async function analyzeVisualContext({ imageDataUrl, source, prompt }) {
   const sourceLabel = normalizeBoundedString(source, 'attached image', MAX_VISUAL_CONTEXT_SOURCE_LENGTH)
   const promptText = normalizeBoundedString(prompt, DEFAULT_VISUAL_CONTEXT_PROMPT, MAX_VISUAL_CONTEXT_PROMPT_LENGTH)
@@ -561,6 +598,11 @@ class CodexRpc {
   pending = new Map()
   notifications = []
 
+  recordNotification(event, limit = MAX_CODEX_NOTIFICATIONS) {
+    this.notifications.unshift(normalizeEventRecord(event))
+    this.notifications = this.notifications.slice(0, limit)
+  }
+
   async ensure() {
     if (this.ready) return
     if (this.initPromise) return this.initPromise
@@ -586,11 +628,10 @@ class CodexRpc {
     this.proc.stderr.on('data', (chunk) => {
       const message = chunk.toString().trim()
       if (message) {
-        this.notifications.unshift({
+        this.recordNotification({
           method: 'app-server/stderr',
           params: { message, at: new Date().toISOString() },
         })
-        this.notifications = this.notifications.slice(0, 80)
       }
     })
 
@@ -655,8 +696,7 @@ class CodexRpc {
       return
     }
 
-    this.notifications.unshift({ ...message, receivedAt: new Date().toISOString() })
-    this.notifications = this.notifications.slice(0, 160)
+    this.recordNotification({ ...message, receivedAt: new Date().toISOString() })
   }
 
   request(method, params = {}) {
@@ -827,7 +867,7 @@ async function readAppState() {
     return normalizeAppState(JSON.parse(await readFile(STATE_PATH, 'utf8')))
   } catch (error) {
     if (error.code !== 'ENOENT') {
-      codex.notifications.unshift({
+      codex.recordNotification({
         method: 'app-state/read-error',
         receivedAt: new Date().toISOString(),
         params: { message: error.message },
