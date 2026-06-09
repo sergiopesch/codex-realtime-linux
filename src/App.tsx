@@ -220,6 +220,11 @@ type GeneratedArtifact = {
   size: number
 }
 
+type ArtifactPreviewLease = {
+  url: string
+  workspacePath: string
+}
+
 type ArtifactPlan = {
   directoryName: string
   relativeDir: string
@@ -648,6 +653,7 @@ function App() {
   const [visualContextLabel, setVisualContextLabel] = useState<string | null>(null)
   const [, setArtifacts] = useState<GeneratedArtifact[]>([])
   const [selectedArtifact, setSelectedArtifact] = useState<GeneratedArtifact | null>(null)
+  const [artifactPreviewLease, setArtifactPreviewLease] = useState<ArtifactPreviewLease | null>(null)
   const [dismissedArtifact, setDismissedArtifact] = useState<{ url: string; updatedAt: string; workspacePath: string } | null>(null)
   const [pendingArtifact, setPendingArtifact] = useState<ArtifactPlan | null>(null)
   const [routingActivity, setRoutingActivity] = useState<string[]>(['Voice router idle'])
@@ -736,7 +742,10 @@ function App() {
   const codexTurnInProgress = Boolean(activeTurnId)
   const artifactPreview =
     selectedArtifact &&
+    artifactPreviewLease &&
     selectedArtifact.workspacePath === selectedWorkspace &&
+    selectedArtifact.workspacePath === artifactPreviewLease.workspacePath &&
+    selectedArtifact.url === artifactPreviewLease.url &&
     !artifactMatchesDismissal(selectedArtifact, dismissedArtifact)
       ? selectedArtifact
       : null
@@ -1103,14 +1112,16 @@ function App() {
 
   const refreshOpenArtifact = useCallback((artifactData: GeneratedArtifact[]) => {
     setSelectedArtifact((current) => {
+      if (!artifactPreviewLease) return null
       if (!current) return null
+      if (current.workspacePath !== artifactPreviewLease.workspacePath || current.url !== artifactPreviewLease.url) return null
       const refreshedCurrent = current
         ? artifactData.find((artifact) => artifact.workspacePath === current.workspacePath && artifact.url === current.url)
         : null
       if (refreshedCurrent && !artifactMatchesDismissal(refreshedCurrent, dismissedArtifact)) return refreshedCurrent
       return null
     })
-  }, [dismissedArtifact])
+  }, [artifactPreviewLease, dismissedArtifact])
 
   const requestWeather = async (event?: FormEvent<HTMLFormElement>) => {
     event?.preventDefault()
@@ -1173,6 +1184,7 @@ function App() {
     setSelectedConversationId(conversationId)
     setActiveSystemScreen(null)
     setSelectedArtifact(null)
+    setArtifactPreviewLease(null)
     setNotice(null)
     setLastError(null)
     if (mobileSidebarShouldCollapse()) setSidebarCollapsed(true)
@@ -1228,6 +1240,7 @@ function App() {
     setSelectedConversationId('')
     setActiveSystemScreen(null)
     setSelectedArtifact(null)
+    setArtifactPreviewLease(null)
     showNotice(`${name} added as a workspace. Create a new agent conversation when you are ready.`)
 
     try {
@@ -1340,6 +1353,7 @@ function App() {
         setActiveSystemScreen('settings')
       }
       setSelectedArtifact(null)
+      setArtifactPreviewLease(null)
     }
 
     showNotice('Workspace removed from this app. The local folder was not deleted.')
@@ -1363,6 +1377,7 @@ function App() {
     setSelectedWorkspace(workspacePath)
     setActiveSystemScreen(null)
     setSelectedArtifact(null)
+    setArtifactPreviewLease(null)
     if (firstConversation) {
       setSelectedConversationId(firstConversation.id)
     } else {
@@ -1377,6 +1392,7 @@ function App() {
   const openSystemScreen = (screen: SystemScreen) => {
     setActiveSystemScreen(screen)
     setSelectedArtifact(null)
+    setArtifactPreviewLease(null)
     setNotice(null)
     setLastError(null)
     if (mobileSidebarShouldCollapse()) setSidebarCollapsed(true)
@@ -1472,6 +1488,7 @@ function App() {
               if (!effectActive) return
               setArtifacts(artifactData.data)
               setSelectedArtifact(null)
+              setArtifactPreviewLease(null)
             })
             .catch(() => undefined)
         }
@@ -1562,6 +1579,10 @@ function App() {
             const completedArtifact = artifactData.find((artifact) => artifact.url === pendingArtifactForTurn.url)
             if (completedArtifact) {
               setSelectedArtifact(completedArtifact)
+              setArtifactPreviewLease({
+                url: completedArtifact.url,
+                workspacePath: completedArtifact.workspacePath,
+              })
               setDismissedArtifact(null)
               setActivity('Artifact ready', completedArtifact.title)
               showNotice(`Preview ready: ${completedArtifact.relativePath}`)
@@ -1625,6 +1646,10 @@ function App() {
         if (!completed) return
 
         setSelectedArtifact(completed)
+        setArtifactPreviewLease({
+          url: completed.url,
+          workspacePath: completed.workspacePath,
+        })
         setDismissedArtifact(null)
         setPendingArtifact(null)
         setActiveCodexTurn(activeThreadIdRef.current, null)
@@ -1773,6 +1798,8 @@ function App() {
         const goal = requireRealtimeToolText(payload.goal, 'A concrete Codex goal')
         const workspacePath = selectedRoutableWorkspacePath(payload.cwd)
         setDismissedArtifact(null)
+        setSelectedArtifact(null)
+        setArtifactPreviewLease(null)
         result = await api('/api/codex/task', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -2654,6 +2681,7 @@ function App() {
                             workspacePath: artifactPreview.workspacePath,
                           })
                           setSelectedArtifact(null)
+                          setArtifactPreviewLease(null)
                         }}
                       >
                         <X size={14} />
