@@ -204,6 +204,8 @@ type ArduinoUploadResponse = {
   summary: string
 }
 
+type ArduinoUploadAction = ArduinoUploadResponse['action']
+
 type GeneratedArtifact = {
   id: string
   title: string
@@ -256,6 +258,14 @@ const MAX_UI_EVENT_DEPTH = 6
 const MAX_SEEN_USB_EVENT_IDS = 240
 const MAX_VISUAL_CONTEXT_IMAGE_FILE_BYTES = 12 * 1024 * 1024
 const SUPPORTED_VISUAL_CONTEXT_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
+const ARDUINO_UPLOAD_ACTIONS = new Set<ArduinoUploadAction>([
+  'onboard_led_on',
+  'onboard_led_blink',
+  'custom_sketch',
+])
+
+const isArduinoUploadAction = (value: string): value is ArduinoUploadAction =>
+  ARDUINO_UPLOAD_ACTIONS.has(value as ArduinoUploadAction)
 
 const boundedApiErrorText = (value: unknown, fallback = '') => {
   const text = typeof value === 'string' && value ? value : fallback
@@ -1668,7 +1678,10 @@ function App() {
 
       if (item.name === 'arduino_upload_sketch') {
         setActivity('Arduino upload', 'Compiling sketch')
-        const action = typeof payload.action === 'string' ? payload.action : undefined
+        const action = typeof payload.action === 'string' ? payload.action.trim() : ''
+        if (!isArduinoUploadAction(action)) {
+          throw new Error('A supported Arduino action is required before uploading a sketch.')
+        }
         result = await uploadArduinoSketch({
           action,
           port: typeof payload.port === 'string' ? payload.port : undefined,

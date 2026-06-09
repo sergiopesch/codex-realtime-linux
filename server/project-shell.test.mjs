@@ -505,8 +505,14 @@ test('Arduino explicit-port uploads do not borrow unrelated detected board metad
   assert.match(arduinoSource, /const autoDetectedBoard = request\.port \? null : boards\[0\]/)
   assert.match(arduinoSource, /const detectedBoard = matchingBoard \?\? autoDetectedBoard/)
   assert.doesNotMatch(arduinoSource, /boards\.find\(\(board\) => board\.address === request\.port\) \?\? boards\[0\]/)
-  assert.match(appSource, /const action = typeof payload\.action === 'string' \? payload\.action : undefined/)
+  assert.match(appSource, /type ArduinoUploadAction = ArduinoUploadResponse\['action'\]/)
+  assert.match(appSource, /const ARDUINO_UPLOAD_ACTIONS = new Set<ArduinoUploadAction>/)
+  assert.match(appSource, /const isArduinoUploadAction = \(value: string\): value is ArduinoUploadAction =>\s+ARDUINO_UPLOAD_ACTIONS\.has\(value as ArduinoUploadAction\)/)
+  assert.match(appSource, /const action = typeof payload\.action === 'string' \? payload\.action\.trim\(\) : ''/)
+  assert.match(appSource, /if \(!isArduinoUploadAction\(action\)\) \{\s+throw new Error\('A supported Arduino action is required before uploading a sketch\.'\)/)
+  assert.match(appSource, /action,\s+port: typeof payload\.port === 'string'/)
   assert.doesNotMatch(appSource, /payload\.action === 'onboard_led_blink' \|\| payload\.action === 'custom_sketch'[\s\S]{0,120}: 'onboard_led_on'/)
+  assert.doesNotMatch(appSource, /action: typeof payload\.action === 'string' \? payload\.action : undefined/)
 })
 
 test('electron shell keeps renderer isolation and external navigation guarded', async () => {
