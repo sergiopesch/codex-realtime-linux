@@ -468,7 +468,7 @@ function goalForWorkspace(cwd, goal, artifactPlan = artifactPlanForWorkspace(cwd
   return goalWithWorkspaceGuard(goal, artifactPlan)
 }
 
-async function listGeneratedArtifacts(workspacePath = REPO_ROOT) {
+async function listGeneratedArtifacts(workspacePath) {
   const resolvedWorkspacePath = path.resolve(workspacePath)
   const artifactsDir = path.join(resolvedWorkspacePath, GENERATED_ARTIFACT_DIR)
   const token = workspaceToken(resolvedWorkspacePath)

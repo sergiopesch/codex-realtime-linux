@@ -94,6 +94,8 @@ test('artifact previews are served through workspace-scoped routes only', async 
   assert.match(serverSource, /directory = await opendir\(artifactsDir\)/)
   assert.match(serverSource, /scannedEntries > MAX_ARTIFACT_DIRECTORY_SCAN_ENTRIES/)
   assert.match(serverSource, /await directory\.close\(\)\.catch\(\(\) => \{\}\)/)
+  assert.match(serverSource, /async function listGeneratedArtifacts\(workspacePath\)/)
+  assert.doesNotMatch(serverSource, /async function listGeneratedArtifacts\(workspacePath = REPO_ROOT\)/)
   assert.match(serverSource, /if \(!isSafeArtifactName\(entry\.name\)\) continue/)
   assert.match(serverSource, /title: normalizeBoundedString\(title, entry\.name, MAX_ARTIFACT_TITLE_LENGTH\)/)
   assert.match(serverSource, /size: finiteNumber\(details\.size\)/)

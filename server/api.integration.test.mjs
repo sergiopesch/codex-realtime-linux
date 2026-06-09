@@ -109,6 +109,11 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   assert.equal(artifactBody.data.some((artifact) => artifact.relativePath.includes('unsafe report')), false)
   assert.equal(artifactBody.data.some((artifact) => artifact.id === 'escaped-index'), false)
 
+  const artifactListWithoutWorkspace = await fetch(`${baseUrl}/api/artifacts`)
+  assert.equal(artifactListWithoutWorkspace.status, 400)
+  const missingWorkspaceBody = await readJson(artifactListWithoutWorkspace)
+  assert.equal(missingWorkspaceBody.code, 'invalid_workspace_path')
+
   for (let index = 0; index < 45; index += 1) {
     const extraArtifactDir = path.join(workspacePath, 'public', 'agent-files', `extra-report-${String(index).padStart(2, '0')}`)
     await mkdir(extraArtifactDir, { recursive: true })
