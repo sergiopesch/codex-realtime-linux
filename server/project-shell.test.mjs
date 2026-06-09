@@ -375,6 +375,7 @@ test('persisted workspaces and conversations require absolute workspace paths', 
 
 test('Codex task routes require explicit user goals and IDs before app-server calls', async () => {
   const serverSource = await readFile(path.join(repoRoot, 'server', 'index.mjs'), 'utf8')
+  const policySource = await readFile(path.join(repoRoot, 'server', 'codexPolicy.mjs'), 'utf8')
   const appSource = await readFile(path.join(repoRoot, 'src', 'App.tsx'), 'utf8')
 
   assert.match(serverSource, /function requireText/)
@@ -384,6 +385,9 @@ test('Codex task routes require explicit user goals and IDs before app-server ca
   assert.match(serverSource, /code: 'codex_invalid_response'/)
   assert.match(serverSource, /async function artifactPlanForWorkspace\(cwd, goal\)/)
   assert.match(serverSource, /artifactPlanForGoal\(goal, new Date\(\), randomUUID\(\)\.slice\(0, 8\)\)/)
+  assert.match(policySource, /const STRONG_ARTIFACT_OUTPUT_TERMS = \[/)
+  assert.match(policySource, /const DESIRED_ARTIFACT_PATTERN =/)
+  assert.match(policySource, /const desiredArtifact = DESIRED_ARTIFACT_PATTERN\.test\(goal\) && containsTerm\(goal, STRONG_ARTIFACT_OUTPUT_TERMS\)/)
   assert.match(serverSource, /const \[realRepoRoot, realWorkspacePath\] = await Promise\.all\(\[realpath\(REPO_ROOT\), realpath\(workspacePath\)\]\)/)
   assert.match(serverSource, /isPathInside\(REPO_ROOT, workspacePath\)/)
   assert.match(serverSource, /isPathInside\(realRepoRoot, realWorkspacePath\)/)

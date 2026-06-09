@@ -64,11 +64,41 @@ const ARTIFACT_OUTPUT_TERMS = [
   'website',
 ]
 
+const STRONG_ARTIFACT_OUTPUT_TERMS = [
+  'browser preview',
+  'clickable',
+  'deck',
+  'gallery',
+  'html',
+  'index.html',
+  'infographic',
+  'interactive',
+  'landing page',
+  'microsite',
+  'one pager',
+  'one-pager',
+  'portfolio',
+  'poster',
+  'presentation',
+  'report',
+  'site',
+  'slide',
+  'slides',
+  'slideshow',
+  'web page',
+  'web app',
+  'webpage',
+  'website',
+]
+
 const EXPLICIT_APP_EDIT_PATTERN =
   /\b(edit|change|modify|update|fix|refactor|redesign|alter|touch)\b[\s\S]{0,100}\b(app source|application source|app shell|this app|the app|ui source|electron app|react app|src\/|server\/|electron\/|index\.html)\b/i
 
 const EXPLICIT_APP_CREATION_PATTERN =
   /\b(add|build|create|make|implement|develop)\b[\s\S]{0,120}\b(to|in|inside|within|into)\s+(this app|the app|the electron app|the react app|codex realtime linux)\b/i
+
+const DESIRED_ARTIFACT_PATTERN =
+  /\b(i\s+need|i\s+want|i\s+would\s+like|we\s+need|we\s+want|let'?s\s+have|can\s+i\s+have|please\s+give\s+me)\b/i
 
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
@@ -84,7 +114,9 @@ const slug = (value) =>
     .slice(0, 52) || 'artifact'
 
 export function isArtifactRequest(goal) {
-  return containsTerm(goal, ARTIFACT_ACTION_TERMS) && containsTerm(goal, ARTIFACT_OUTPUT_TERMS)
+  const explicitCreation = containsTerm(goal, ARTIFACT_ACTION_TERMS) && containsTerm(goal, ARTIFACT_OUTPUT_TERMS)
+  const desiredArtifact = DESIRED_ARTIFACT_PATTERN.test(goal) && containsTerm(goal, STRONG_ARTIFACT_OUTPUT_TERMS)
+  return explicitCreation || desiredArtifact
 }
 
 export function hasExplicitAppEditIntent(goal) {
