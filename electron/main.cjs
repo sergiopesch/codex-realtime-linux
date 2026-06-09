@@ -2,7 +2,7 @@ require('dotenv/config')
 
 const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron')
 const { spawn } = require('node:child_process')
-const { closeSync, mkdirSync, openSync, renameSync, statSync, writeSync } = require('node:fs')
+const { closeSync, mkdirSync, openSync, readFileSync, renameSync, statSync, writeSync } = require('node:fs')
 const http = require('node:http')
 const os = require('node:os')
 const path = require('node:path')
@@ -51,6 +51,7 @@ const stateDir = path.join(stateHome, 'codex-realtime-linux')
 const apiLogPath = path.join(stateDir, 'api-server.log')
 const maxLogBytes = 1024 * 1024
 const maxElectronErrorDetailLength = 500
+const maxApiLogErrorTailLength = 2000
 const maxApiProbeBytes = 64 * 1024
 let apiProcess = null
 let apiLogFd = null
@@ -71,6 +72,21 @@ const boundedErrorDetail = (error, fallback = 'Unexpected desktop startup error.
   return message.length > maxElectronErrorDetailLength
     ? `${message.slice(0, maxElectronErrorDetailLength - 3)}...`
     : message
+}
+
+const recentApiLogTail = () => {
+  try {
+    const text = readFileSync(apiLogPath, 'utf8')
+    return text.slice(-maxApiLogErrorTailLength).trim()
+  } catch {
+    return ''
+  }
+}
+
+const startupErrorDetail = (error) => {
+  const detail = boundedErrorDetail(error)
+  const logTail = recentApiLogTail()
+  return logTail ? `${detail}\n\nRecent API server log:\n${logTail}` : detail
 }
 
 const readJson = (url) =>
@@ -276,7 +292,7 @@ const createWindow = async () => {
       type: 'error',
       title: 'Codex failed to start',
       message: 'Codex could not start the local desktop server.',
-      detail: boundedErrorDetail(error),
+      detail: startupErrorDetail(error),
     })
     app.quit()
   }
