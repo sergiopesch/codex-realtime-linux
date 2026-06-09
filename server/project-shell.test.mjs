@@ -916,6 +916,7 @@ test('realtime voice sessions reset transcript state and clean up media resource
   assert.match(appSource, /URL\.revokeObjectURL\(objectUrl\)/)
   assert.doesNotMatch(appSource, /new FileReader\(\)/)
   assert.doesNotMatch(appSource, /readAsDataURL\(file\)/)
+  assert.match(appSource, /await analyzeAndAttachVisualContext\(imageDataUrl, file\.name\)\s+setAttachedImageName\(file\.name\)/)
   assert.match(appSource, /const fetchWithTimeout = async/)
   assert.match(appSource, /Request timed out after/)
   assert.match(appSource, /const getUserMediaWithTimeout = async \(constraints: MediaStreamConstraints, timeoutMs = REALTIME_CONNECTION_TIMEOUT_MS\) =>/)

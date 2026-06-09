@@ -2051,10 +2051,10 @@ function App() {
     setLastError(null)
     try {
       validateVisualContextImageFile(file)
-      setAttachedImageName(file.name)
       appendEvent('context/image-attached', { name: file.name, size: file.size, type: file.type })
       const imageDataUrl = await dataUrlFromFile(file)
       await analyzeAndAttachVisualContext(imageDataUrl, file.name)
+      setAttachedImageName(file.name)
     } catch (error) {
       setLastError(displayErrorMessage(error, 'Image analysis failed'))
     } finally {
