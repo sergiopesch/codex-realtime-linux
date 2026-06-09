@@ -2329,6 +2329,7 @@ function App() {
         if (!effectActive) return
         setEvents((current) => mergeEvents(current, data.data))
         if (activeTurnIdRef.current && data.data.some((event) => eventCompletesActiveCodexTurn(event, activeTurnIdRef.current))) {
+          const completedTurnId = activeTurnIdRef.current
           const completedThreadId = activeThreadIdRef.current
           const pendingArtifactForTurn = pendingArtifactRef.current
 
@@ -2337,6 +2338,15 @@ function App() {
               signal: controller.signal,
             })
             if (!effectActive) return
+            const currentPendingArtifact = pendingArtifactRef.current
+            if (
+              activeTurnIdRef.current !== completedTurnId ||
+              !currentPendingArtifact ||
+              currentPendingArtifact.workspacePath !== pendingArtifactForTurn.workspacePath ||
+              currentPendingArtifact.url !== pendingArtifactForTurn.url
+            ) {
+              return
+            }
             const completedArtifact = artifactData.find((artifact) => artifact.url === pendingArtifactForTurn.url)
             if (completedArtifact) {
               if (openArtifactPreview(completedArtifact)) {
