@@ -703,6 +703,7 @@ test('renderer loads Codex thread history only for explicit saved workspaces', a
 
 test('upstream OpenAI and usage fetches are timeout bounded', async () => {
   const serverSource = await readFile(path.join(repoRoot, 'server', 'index.mjs'), 'utf8')
+  const appSource = await readFile(path.join(repoRoot, 'src', 'App.tsx'), 'utf8')
 
   assert.match(serverSource, /import \{ createHash, randomUUID \} from 'node:crypto'/)
   assert.match(serverSource, /const DEFAULT_UPSTREAM_FETCH_TIMEOUT_MS = 20_000/)
@@ -852,7 +853,10 @@ test('upstream OpenAI and usage fetches are timeout bounded', async () => {
   assert.match(serverSource, /const REALTIME_TRANSCRIPTION_MODEL = configuredRuntimeString\(process\.env\.REALTIME_TRANSCRIPTION_MODEL, 'gpt-4o-mini-transcribe'\)/)
   assert.match(serverSource, /const REALTIME_PERSONA = configuredRuntimeString\(process\.env\.REALTIME_PERSONA, DEFAULT_REALTIME_PERSONA, MAX_RUNTIME_PERSONA_LENGTH\)/)
   assert.match(serverSource, /const VISION_MODEL = configuredRuntimeString\(process\.env\.VISION_MODEL, CODEX_MODEL\)/)
+  assert.match(serverSource, /realtimeTranscriptionModel: REALTIME_TRANSCRIPTION_MODEL/)
   assert.match(serverSource, /model: REALTIME_TRANSCRIPTION_MODEL/)
+  assert.match(appSource, /realtimeTranscriptionModel\?: string/)
+  assert.match(appSource, /<strong>Voice transcription<\/strong>[\s\S]*status\?\.realtimeTranscriptionModel \?\? 'Loading'/)
   assert.doesNotMatch(serverSource, /const CODEX_MODEL = process\.env\.CODEX_MODEL \?\? 'gpt-5\.4'/)
   assert.doesNotMatch(serverSource, /model: process\.env\.REALTIME_TRANSCRIPTION_MODEL \?\? 'gpt-4o-mini-transcribe'/)
 })
@@ -1185,6 +1189,8 @@ test('README documents live release verification for non-automated capabilities'
   assert.match(readme, /CODEX_APPROVAL_POLICY=never/)
   assert.match(readme, /invalid values fall back to `on-request`/)
   assert.match(readme, /OPENAI_SAFETY_IDENTIFIER=/)
+  assert.match(readme, /REALTIME_MODEL=gpt-realtime-2/)
+  assert.match(readme, /REALTIME_TRANSCRIPTION_MODEL=gpt-4o-mini-transcribe/)
   assert.match(readme, /stable anonymized value from this local installation/)
   assert.match(readme, /runtime strings are trimmed, whitespace-normalized, and bounded/)
   assert.match(readme, /Allowed browser origins receive CORS response and preflight headers for `\/api\/\*`/)
@@ -1235,6 +1241,7 @@ test('environment example matches runtime configuration validation', async () =>
 
   assert.match(envExample, /CODEX_BIN=codex/)
   assert.match(envExample, /CODEX_APPROVAL_POLICY=on-request/)
+  assert.match(envExample, /REALTIME_TRANSCRIPTION_MODEL=gpt-4o-mini-transcribe/)
   assert.match(envExample, /use never only for trusted non-interactive workspaces/)
   assert.match(envExample, /CODEX_REALTIME_NODE_BIN=\/absolute\/path\/to\/node/)
   assert.match(envExample, /Blank or relative values are ignored/)

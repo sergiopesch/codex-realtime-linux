@@ -1740,6 +1740,7 @@ app.get('/api/status', async (_req, res) => {
       codexAuthPreference: codexApiKey ? 'api-key' : 'existing-codex-auth',
       codexBin: CODEX_BIN,
       realtimeModel: REALTIME_MODEL,
+      realtimeTranscriptionModel: REALTIME_TRANSCRIPTION_MODEL,
       codexModel: CODEX_MODEL,
       codexApprovalPolicy: CODEX_APPROVAL_POLICY,
       visionModel: VISION_MODEL,

@@ -30,6 +30,7 @@ type Status = {
   codexApprovalPolicy?: string
   openAiKeySource?: 'env' | 'settings' | 'missing'
   realtimeModel: string
+  realtimeTranscriptionModel?: string
   realtimeVoice?: string
   appRoot?: string
   appName?: string
@@ -2692,6 +2693,13 @@ function App() {
               <div>
                 <strong>Vision context</strong>
                 <span>{status?.visionModel ?? status?.codexModel ?? 'Loading'}</span>
+              </div>
+            </article>
+            <article>
+              <Captions size={18} />
+              <div>
+                <strong>Voice transcription</strong>
+                <span>{status?.realtimeTranscriptionModel ?? 'Loading'}</span>
               </div>
             </article>
             <article>

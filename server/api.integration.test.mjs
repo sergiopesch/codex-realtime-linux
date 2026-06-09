@@ -559,6 +559,7 @@ test('server exposes desktop launch metadata when managed by Electron', async (t
     CODEX_DESKTOP_SERVER_TOKEN: 'test-desktop-token',
     CODEX_BIN: './relative-codex',
     CODEX_APPROVAL_POLICY: 'danger',
+    REALTIME_TRANSCRIPTION_MODEL: 'test-transcribe-model',
   })
 
   const status = await fetch(`${baseUrl}/api/status`)
@@ -569,6 +570,7 @@ test('server exposes desktop launch metadata when managed by Electron', async (t
   assert.equal(Number.isInteger(body.desktopServer.pid), true)
   assert.equal(body.codexBin, 'codex')
   assert.equal(body.codexApprovalPolicy, 'on-request')
+  assert.equal(body.realtimeTranscriptionModel, 'test-transcribe-model')
 })
 
 test('usage route surfaces malformed OpenAI admin JSON as a clean error', async (t) => {

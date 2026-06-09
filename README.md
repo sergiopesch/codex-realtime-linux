@@ -143,7 +143,9 @@ VISION_MODEL=gpt-5.4
 Realtime voice defaults to the configured Realtime model and voice, and its persona/user context is controlled by environment variables. These runtime strings are trimmed, whitespace-normalized, and bounded before they are exposed through status or sent to Realtime. If `REALTIME_USER_NAME` is not set, the server uses the OS username; location is omitted unless you set it.
 
 ```bash
+REALTIME_MODEL=gpt-realtime-2
 REALTIME_VOICE=cedar
+REALTIME_TRANSCRIPTION_MODEL=gpt-4o-mini-transcribe
 REALTIME_USER_NAME=
 REALTIME_USER_LOCATION=
 REALTIME_PERSONA=
