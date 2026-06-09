@@ -506,12 +506,21 @@ test('server bounds persisted app state loaded from disk', async (t) => {
     codexThreadId: null,
   }))
   const emptyVoiceDraftWorkspace = path.join('/tmp', 'codex-realtime-empty-voice-drafts')
+  const invalidConversationBuckets = Object.fromEntries(
+    Array.from({ length: 50 }, (_, index) => [`relative-invalid-workspace-${index}`, []]),
+  )
   await writeFile(
     statePath,
     JSON.stringify({
       workspaces: manyWorkspaces,
-      hiddenWorkspacePaths: manyWorkspaces.map((workspace) => workspace.id),
+      hiddenWorkspacePaths: [
+        manyWorkspaces[0].id,
+        manyWorkspaces[0].id,
+        'relative-hidden-workspace',
+        ...manyWorkspaces.map((workspace) => workspace.id),
+      ],
       conversationsByWorkspace: {
+        ...invalidConversationBuckets,
         ...Object.fromEntries(manyWorkspaces.map((workspace) => [workspace.id, conversations])),
         [emptyVoiceDraftWorkspace]: emptyVoiceDrafts,
       },
@@ -526,6 +535,8 @@ test('server bounds persisted app state loaded from disk', async (t) => {
 
   assert.equal(state.workspaces.length, 40)
   assert.equal(state.hiddenWorkspacePaths.length, 80)
+  assert.equal(state.hiddenWorkspacePaths.filter((workspacePath) => workspacePath === manyWorkspaces[0].id).length, 1)
+  assert.equal(state.hiddenWorkspacePaths.includes('relative-hidden-workspace'), false)
   assert.equal(Object.keys(state.conversationsByWorkspace).length, 40)
   assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id].length, 80)
   assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id].some((conversation) => conversation.title === 'Voice conversation 7'), false)

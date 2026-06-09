@@ -1157,6 +1157,11 @@ function normalizeStringList(values, maxItems, maxLength) {
     .slice(0, maxItems)
 }
 
+function normalizeWorkspacePathList(values, maxItems) {
+  if (!Array.isArray(values)) return []
+  return [...new Set(values.map(normalizeWorkspacePath).filter(Boolean))].slice(0, maxItems)
+}
+
 function normalizeTranscript(input) {
   if (!Array.isArray(input)) return []
   return input
@@ -1247,14 +1252,14 @@ function normalizeAppState(input) {
   state.workspaces = Array.isArray(input?.workspaces)
     ? input.workspaces.map(normalizeWorkspace).filter(Boolean).slice(0, MAX_LOCAL_WORKSPACES)
     : []
-  state.hiddenWorkspacePaths = Array.isArray(input?.hiddenWorkspacePaths)
-    ? input.hiddenWorkspacePaths.map(normalizeWorkspacePath).filter(Boolean).slice(0, MAX_LOCAL_HIDDEN_WORKSPACES)
-    : []
+  state.hiddenWorkspacePaths = normalizeWorkspacePathList(input?.hiddenWorkspacePaths, MAX_LOCAL_HIDDEN_WORKSPACES)
 
   if (input?.conversationsByWorkspace && typeof input.conversationsByWorkspace === 'object') {
-    for (const [workspacePath, conversations] of Object.entries(input.conversationsByWorkspace).slice(0, MAX_LOCAL_WORKSPACE_BUCKETS)) {
+    let normalizedWorkspaceBuckets = 0
+    for (const [workspacePath, conversations] of Object.entries(input.conversationsByWorkspace)) {
+      if (normalizedWorkspaceBuckets >= MAX_LOCAL_WORKSPACE_BUCKETS) break
       const normalizedWorkspacePath = normalizeWorkspacePath(workspacePath)
-      if (!normalizedWorkspacePath) continue
+      if (!normalizedWorkspacePath || state.conversationsByWorkspace[normalizedWorkspacePath]) continue
       if (Array.isArray(conversations)) {
         const normalizedConversations = conversations
           .map((conversation) => normalizeConversation(conversation, normalizedWorkspacePath))
@@ -1262,6 +1267,7 @@ function normalizeAppState(input) {
           .slice(0, MAX_LOCAL_CONVERSATIONS_PER_WORKSPACE)
         if (normalizedConversations.length > 0) {
           state.conversationsByWorkspace[normalizedWorkspacePath] = normalizedConversations
+          normalizedWorkspaceBuckets += 1
         }
       }
     }
