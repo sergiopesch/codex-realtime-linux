@@ -1103,7 +1103,15 @@ class CodexRpc {
 
   notify(method, params = {}) {
     if (!this.proc?.stdin?.writable) return
-    this.proc.stdin.write(`${JSON.stringify({ method, params })}\n`)
+    try {
+      this.proc.stdin.write(`${JSON.stringify({ method, params })}\n`)
+    } catch (error) {
+      this.recordNotification({
+        method: 'app-server/notify-failed',
+        params: { method, message: responseErrorMessage(error, 'Codex app-server notification failed.') },
+      })
+      this.#resetProcessState(error)
+    }
   }
 
   dispose(reason = 'codex app-server stopped.') {
