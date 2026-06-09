@@ -94,4 +94,10 @@ if [ "$renderer_build_stale" = "1" ]; then
   npm run build
 fi
 
-exec env NODE_ENV=production "$electron_bin" electron/main.cjs
+if [ "${CODEX_REALTIME_PTY_WRAPPED:-}" != "1" ] && command -v script >/dev/null 2>&1; then
+  printf '[%s] Launching Electron with a PTY wrapper\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  launch_cmd="$(printf 'cd %q && exec env CODEX_REALTIME_PTY_WRAPPED=1 NODE_ENV=production %q electron/main.cjs' "$repo_root" "$electron_bin")"
+  exec env CODEX_REALTIME_PTY_WRAPPED=1 script -q -f -c "$launch_cmd" /dev/null
+fi
+
+exec env CODEX_REALTIME_PTY_WRAPPED=1 NODE_ENV=production "$electron_bin" electron/main.cjs
