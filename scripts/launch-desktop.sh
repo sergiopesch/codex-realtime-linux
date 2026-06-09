@@ -63,12 +63,22 @@ renderer_build_inputs=(
   "./src"
   "./public"
 )
+generated_artifact_dir="./public/agent-files"
+
+renderer_input_newer_than_build() {
+  local build_input="$1"
+  if [ "$build_input" = "./public" ]; then
+    find "$build_input" -path "$generated_artifact_dir" -prune -o -type f -newer "$renderer_build_stamp" -print -quit
+    return
+  fi
+  find "$build_input" -newer "$renderer_build_stamp" -print -quit
+}
 
 if [ ! -f "$renderer_build_stamp" ]; then
   renderer_build_stale=1
 else
   for build_input in "${renderer_build_inputs[@]}"; do
-    if [ -e "$build_input" ] && find "$build_input" -newer "$renderer_build_stamp" -print -quit | grep -q .; then
+    if [ -e "$build_input" ] && renderer_input_newer_than_build "$build_input" | grep -q .; then
       renderer_build_stale=1
       break
     fi
