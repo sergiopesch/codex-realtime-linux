@@ -40,7 +40,7 @@ async function waitForServer(baseUrl, proc) {
   throw lastError ?? new Error('Server did not become ready.')
 }
 
-async function startTestServer(t) {
+async function startTestServer(t, extraEnv = {}) {
   const port = await getAvailablePort()
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-api-test-'))
   const proc = spawn(process.execPath, ['server/index.mjs'], {
@@ -51,6 +51,7 @@ async function startTestServer(t) {
       CODEX_REALTIME_STATE_PATH: path.join(tempDir, 'state.json'),
       CODEX_REALTIME_SECRETS_PATH: path.join(tempDir, 'secrets.json'),
       CODEX_RPC_TIMEOUT_MS: '5000',
+      ...extraEnv,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
@@ -124,6 +125,14 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   assert.equal(formUpload.status, 415)
   assert.equal((await readJson(formUpload)).code, 'json_required')
 
+  const malformedJson = await fetch(`${baseUrl}/api/app-state/conversations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{"workspacePath":',
+  })
+  assert.equal(malformedJson.status, 400)
+  assert.equal((await readJson(malformedJson)).code, 'invalid_json')
+
   const missingTaskWorkspace = await fetch(`${baseUrl}/api/codex/task`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -155,4 +164,16 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   const validBody = await validSave.json()
   assert.equal(validBody.conversation.id, 'ok')
   assert.equal(validBody.state.conversationsByWorkspace[workspacePath].length, 1)
+})
+
+test('server returns json errors for oversized API request bodies', async (t) => {
+  const { baseUrl } = await startTestServer(t, { CODEX_REALTIME_JSON_LIMIT: '64b' })
+
+  const oversizedJson = await fetch(`${baseUrl}/api/app-state/conversations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspacePath: '/tmp/codex-realtime-large-body', conversation: { title: 'Large body' } }),
+  })
+  assert.equal(oversizedJson.status, 413)
+  assert.equal((await readJson(oversizedJson)).code, 'payload_too_large')
 })

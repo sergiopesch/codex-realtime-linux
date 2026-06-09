@@ -107,11 +107,16 @@ test('local API rejects untrusted origins and non-json mutation bodies', async (
 
   assert.match(serverSource, /const ALLOWED_API_ORIGINS = new Set/)
   assert.match(serverSource, /CODEX_REALTIME_ALLOWED_ORIGINS/)
+  assert.match(serverSource, /const JSON_BODY_LIMIT = process\.env\.CODEX_REALTIME_JSON_LIMIT \?\? '25mb'/)
   assert.match(serverSource, /function guardLocalApiRequests/)
+  assert.match(serverSource, /function handleJsonBodyError/)
   assert.match(serverSource, /origin_not_allowed/)
   assert.match(serverSource, /Content-Type must be application\/json/)
   assert.match(serverSource, /json_required/)
+  assert.match(serverSource, /payload_too_large/)
+  assert.match(serverSource, /invalid_json/)
   assert.match(serverSource, /app\.use\(guardLocalApiRequests\)/)
+  assert.match(serverSource, /app\.use\(handleJsonBodyError\)/)
 })
 
 test('Codex app-server RPC bridge has bounded requests and single-flight initialization', async () => {

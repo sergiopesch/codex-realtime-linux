@@ -34,6 +34,7 @@ const UPSTREAM_FETCH_TIMEOUT_MS =
   Number.isFinite(CONFIGURED_UPSTREAM_FETCH_TIMEOUT_MS) && CONFIGURED_UPSTREAM_FETCH_TIMEOUT_MS > 0
     ? CONFIGURED_UPSTREAM_FETCH_TIMEOUT_MS
     : 20_000
+const JSON_BODY_LIMIT = process.env.CODEX_REALTIME_JSON_LIMIT ?? '25mb'
 const CONFIGURED_CODEX_RPC_TIMEOUT_MS = Number(process.env.CODEX_RPC_TIMEOUT_MS)
 const CODEX_RPC_TIMEOUT_MS =
   Number.isFinite(CONFIGURED_CODEX_RPC_TIMEOUT_MS) && CONFIGURED_CODEX_RPC_TIMEOUT_MS > 0
@@ -89,7 +90,28 @@ function guardLocalApiRequests(req, res, next) {
 }
 
 app.use(guardLocalApiRequests)
-app.use(express.json({ limit: '25mb' }))
+app.use(express.json({ limit: JSON_BODY_LIMIT }))
+
+function handleJsonBodyError(error, req, res, next) {
+  if (!req.path.startsWith('/api/')) {
+    next(error)
+    return
+  }
+
+  if (error?.type === 'entity.too.large') {
+    res.status(413).json({ error: 'JSON request body is too large.', code: 'payload_too_large' })
+    return
+  }
+
+  if (error?.type === 'entity.parse.failed') {
+    res.status(400).json({ error: 'Request body must be valid JSON.', code: 'invalid_json' })
+    return
+  }
+
+  next(error)
+}
+
+app.use(handleJsonBodyError)
 
 async function loadLocalSecrets() {
   try {
