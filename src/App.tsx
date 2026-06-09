@@ -1363,21 +1363,10 @@ function App() {
     const current = conversationsByWorkspace[workspacePath] ?? []
     const deleted = current.find((conversation) => conversation.id === conversationId)
     const next = current.filter((conversation) => conversation.id !== conversationId)
-    const fallback = next[0]
-
-    setConversationsByWorkspace((state) => ({ ...state, [workspacePath]: next }))
-
-    if (selectedConversationId === conversationId) {
-      if (fallback) {
-        openConversationWindow(workspacePath, fallback.id)
-      } else {
-        setActiveSystemScreen('settings')
-      }
-    }
-
-    showNotice('Agent conversation deleted from this workspace.')
+    if (!deleted) return
 
     try {
+      let confirmedConversations = next
       if (deleted?.source === 'codex' && deleted.codexThreadId) {
         await api('/api/codex/thread/archive', {
           method: 'POST',
@@ -1385,12 +1374,24 @@ function App() {
           body: JSON.stringify({ threadId: deleted.codexThreadId }),
         })
       } else if (deleted?.source === 'local') {
-        await api('/api/app-state/conversations/delete', {
+        const deleteResult = await api<{ state: AppStateResponse }>('/api/app-state/conversations/delete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ workspacePath, conversationId }),
         })
+        confirmedConversations = deleteResult.state.conversationsByWorkspace[workspacePath] ?? []
       }
+
+      setConversationsByWorkspace((state) => ({ ...state, [workspacePath]: confirmedConversations }))
+      if (selectedConversationId === conversationId) {
+        const fallback = confirmedConversations[0]
+        if (fallback) {
+          openConversationWindow(workspacePath, fallback.id)
+        } else {
+          setActiveSystemScreen('settings')
+        }
+      }
+      showNotice('Agent conversation deleted from this workspace.')
     } catch (error) {
       setLastError(displayErrorMessage(error, 'Failed to delete agent conversation'))
     }
@@ -1400,37 +1401,40 @@ function App() {
     const targetWorkspacePath = normalizeAbsoluteLocalWorkspacePath(workspacePath)
     const nextWorkspace = workspaceRoots.find((root) => root.workspacePath !== targetWorkspacePath)
 
-    setHiddenWorkspacePaths((current) => [...new Set([...current.map(normalizeAbsoluteLocalWorkspacePath), targetWorkspacePath])])
-    setUserWorkspaces((current) => current.filter((workspace) => workspacePathFor(workspace) !== targetWorkspacePath))
-    setCollapsedWorkspaces((current) => current.filter((item) => normalizeAbsoluteLocalWorkspacePath(item) !== targetWorkspacePath))
-    setConversationsByWorkspace((current) => {
-      const next = { ...current }
-      delete next[targetWorkspacePath]
-      return next
-    })
-
-    if (normalizeAbsoluteLocalWorkspacePath(selectedWorkspace) === targetWorkspacePath) {
-      if (nextWorkspace) {
-        setSelectedWorkspace(nextWorkspace.workspacePath)
-        setSelectedConversationId(nextWorkspace.conversations[0]?.id ?? '')
-        setActiveSystemScreen(null)
-      } else {
-        setSelectedWorkspace('')
-        setSelectedConversationId('')
-        setActiveSystemScreen('settings')
-      }
-      setSelectedArtifact(null)
-      setArtifactPreviewLease(null)
-    }
-
-    showNotice('Workspace removed from this app. The local folder was not deleted.')
-
     try {
-      await api('/api/app-state/workspaces/delete', {
+      const deleteResult = await api<{ state: AppStateResponse }>('/api/app-state/workspaces/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ workspacePath: targetWorkspacePath }),
       })
+
+      const savedWorkspaces = (deleteResult.state.workspaces ?? []).filter((workspace) =>
+        isAbsoluteLocalWorkspacePath(workspacePathFor(workspace)),
+      )
+      setHiddenWorkspacePaths((deleteResult.state.hiddenWorkspacePaths ?? []).map(normalizeAbsoluteLocalWorkspacePath))
+      setUserWorkspaces(savedWorkspaces)
+      setCollapsedWorkspaces((current) => current.filter((item) => normalizeAbsoluteLocalWorkspacePath(item) !== targetWorkspacePath))
+      setConversationsByWorkspace((current) => {
+        const confirmedConversations = deleteResult.state.conversationsByWorkspace ?? {}
+        const next = { ...current, ...confirmedConversations }
+        delete next[targetWorkspacePath]
+        return next
+      })
+
+      if (normalizeAbsoluteLocalWorkspacePath(selectedWorkspace) === targetWorkspacePath) {
+        if (nextWorkspace) {
+          setSelectedWorkspace(nextWorkspace.workspacePath)
+          setSelectedConversationId(nextWorkspace.conversations[0]?.id ?? '')
+          setActiveSystemScreen(null)
+        } else {
+          setSelectedWorkspace('')
+          setSelectedConversationId('')
+          setActiveSystemScreen('settings')
+        }
+        setSelectedArtifact(null)
+        setArtifactPreviewLease(null)
+      }
+      showNotice('Workspace removed from this app. The local folder was not deleted.')
     } catch (error) {
       setLastError(displayErrorMessage(error, 'Failed to remove workspace'))
     }
