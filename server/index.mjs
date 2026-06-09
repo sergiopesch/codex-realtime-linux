@@ -52,6 +52,7 @@ const MAX_VISUAL_CONTEXT_SOURCE_LENGTH = 160
 const MAX_VISUAL_CONTEXT_PROMPT_LENGTH = 1_500
 const MAX_VISUAL_CONTEXT_SUMMARY_LENGTH = 4_000
 const MAX_UPSTREAM_JSON_RESPONSE_BYTES = 1 * 1024 * 1024
+const SUPPORTED_VISUAL_CONTEXT_DATA_URL_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
 const DEFAULT_VISUAL_CONTEXT_PROMPT =
   'Focus on UI state, visible errors, design issues, code clues, and what Codex should know before acting.'
 const MAX_CONVERSATION_ID_LENGTH = 240
@@ -707,12 +708,19 @@ function normalizeCodexMetadataValue(value, depth = 0, seen = new WeakSet()) {
   return normalized
 }
 
+function visualContextDataUrlType(value) {
+  if (typeof value !== 'string') return ''
+  const match = /^data:([^;,]+)[;,]/i.exec(value)
+  return match ? match[1].toLowerCase() : ''
+}
+
 async function analyzeVisualContext({ imageDataUrl, source, prompt }) {
   const sourceLabel = normalizeBoundedString(source, 'attached image', MAX_VISUAL_CONTEXT_SOURCE_LENGTH)
   const promptText = normalizeBoundedString(prompt, DEFAULT_VISUAL_CONTEXT_PROMPT, MAX_VISUAL_CONTEXT_PROMPT_LENGTH)
+  const imageType = visualContextDataUrlType(imageDataUrl)
 
-  if (typeof imageDataUrl !== 'string' || !imageDataUrl.startsWith('data:image/')) {
-    throw httpError('imageDataUrl must be a data:image URL.', {
+  if (!SUPPORTED_VISUAL_CONTEXT_DATA_URL_TYPES.has(imageType)) {
+    throw httpError('imageDataUrl must be a JPEG, PNG, WebP, or GIF data URL.', {
       statusCode: 400,
       code: 'invalid_visual_context',
     })

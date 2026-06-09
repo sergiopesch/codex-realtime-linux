@@ -382,7 +382,9 @@ test('upstream OpenAI and usage fetches are timeout bounded', async () => {
   assert.match(serverSource, /const MAX_VISUAL_CONTEXT_SOURCE_LENGTH = 160/)
   assert.match(serverSource, /const MAX_VISUAL_CONTEXT_PROMPT_LENGTH = 1_500/)
   assert.match(serverSource, /const MAX_VISUAL_CONTEXT_SUMMARY_LENGTH = 4_000/)
+  assert.match(serverSource, /const SUPPORTED_VISUAL_CONTEXT_DATA_URL_TYPES = new Set\(\['image\/jpeg', 'image\/png', 'image\/webp', 'image\/gif'\]\)/)
   assert.match(serverSource, /function normalizeBoundedString\(value, fallback = '', maxLength = 1_000\)/)
+  assert.match(serverSource, /function visualContextDataUrlType\(value\)/)
   assert.match(
     serverSource,
     /const sourceLabel = normalizeBoundedString\(source, 'attached image', MAX_VISUAL_CONTEXT_SOURCE_LENGTH\)/,
@@ -391,6 +393,10 @@ test('upstream OpenAI and usage fetches are timeout bounded', async () => {
     serverSource,
     /const promptText = normalizeBoundedString\(prompt, DEFAULT_VISUAL_CONTEXT_PROMPT, MAX_VISUAL_CONTEXT_PROMPT_LENGTH\)/,
   )
+  assert.match(serverSource, /const imageType = visualContextDataUrlType\(imageDataUrl\)/)
+  assert.match(serverSource, /SUPPORTED_VISUAL_CONTEXT_DATA_URL_TYPES\.has\(imageType\)/)
+  assert.match(serverSource, /imageDataUrl must be a JPEG, PNG, WebP, or GIF data URL\./)
+  assert.doesNotMatch(serverSource, /imageDataUrl\.startsWith\('data:image\/'\)/)
   assert.match(
     serverSource,
     /summary: normalizeBoundedString\(\s*extractResponseText\(data\),\s*'Visual context was attached, but no summary was returned\.',\s*MAX_VISUAL_CONTEXT_SUMMARY_LENGTH,\s*\)/,
