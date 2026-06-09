@@ -29,6 +29,7 @@ const CODEX_MODEL = configuredRuntimeString(process.env.CODEX_MODEL, 'gpt-5.4')
 const DEFAULT_CODEX_APPROVAL_POLICY = 'on-request'
 const CODEX_APPROVAL_POLICIES = new Set(['untrusted', 'on-failure', 'on-request', 'never'])
 const CODEX_APPROVAL_POLICY = configuredCodexApprovalPolicy(process.env.CODEX_APPROVAL_POLICY)
+const CODEX_ALLOW_APP_SOURCE_TASKS = configuredBoolean(process.env.CODEX_ALLOW_APP_SOURCE_TASKS, false)
 const REALTIME_MODEL = configuredRuntimeString(process.env.REALTIME_MODEL, 'gpt-realtime-2')
 const REALTIME_VOICE = configuredRuntimeString(process.env.REALTIME_VOICE, 'cedar')
 const REALTIME_TRANSCRIPTION_MODEL = configuredRuntimeString(process.env.REALTIME_TRANSCRIPTION_MODEL, 'gpt-4o-mini-transcribe')
@@ -215,6 +216,12 @@ function configuredRuntimeString(value, fallback, maxLength = MAX_RUNTIME_CONFIG
 function configuredCodexApprovalPolicy(value, fallback = DEFAULT_CODEX_APPROVAL_POLICY) {
   const policy = typeof value === 'string' ? value.trim() : ''
   return CODEX_APPROVAL_POLICIES.has(policy) ? policy : fallback
+}
+
+function configuredBoolean(value, fallback = false) {
+  if (value === 'true') return true
+  if (value === 'false') return false
+  return fallback
 }
 
 function configuredAbsolutePath(value, fallback) {
@@ -585,8 +592,7 @@ async function artifactPlanForWorkspace(cwd, goal) {
   if (!basePlan) return null
 
   const workspacePath = path.resolve(cwd)
-  const [realRepoRoot, realWorkspacePath] = await Promise.all([realpath(REPO_ROOT), realpath(workspacePath)])
-  if (isPathInside(REPO_ROOT, workspacePath) || isPathInside(realRepoRoot, realWorkspacePath)) {
+  if (!CODEX_ALLOW_APP_SOURCE_TASKS && (await isProtectedAppWorkspace(workspacePath))) {
     throw httpError('Generated artifacts must be created in a selected workspace outside this app source tree.', {
       statusCode: 400,
       code: 'protected_app_workspace',
@@ -599,6 +605,22 @@ async function artifactPlanForWorkspace(cwd, goal) {
     absoluteDir: path.join(workspacePath, basePlan.relativeDir),
     absolutePath: path.join(workspacePath, basePlan.relativePath),
     url: `/workspace-artifacts/${token}/${basePlan.directoryName}/index.html`,
+  }
+}
+
+async function isProtectedAppWorkspace(cwd) {
+  const workspacePath = path.resolve(cwd)
+  const [realRepoRoot, realWorkspacePath] = await Promise.all([realpath(REPO_ROOT), realpath(workspacePath)])
+  return isPathInside(REPO_ROOT, workspacePath) || isPathInside(realRepoRoot, realWorkspacePath)
+}
+
+async function requireAllowedCodexTaskWorkspace(cwd) {
+  if (CODEX_ALLOW_APP_SOURCE_TASKS) return
+  if (await isProtectedAppWorkspace(cwd)) {
+    throw httpError('Codex tasks cannot run inside this app source tree unless CODEX_ALLOW_APP_SOURCE_TASKS=true.', {
+      statusCode: 400,
+      code: 'protected_app_workspace',
+    })
   }
 }
 
@@ -1817,6 +1839,7 @@ app.get('/api/status', async (_req, res) => {
       realtimeTranscriptionModel: REALTIME_TRANSCRIPTION_MODEL,
       codexModel: CODEX_MODEL,
       codexApprovalPolicy: CODEX_APPROVAL_POLICY,
+      codexAppSourceTasksAllowed: CODEX_ALLOW_APP_SOURCE_TASKS,
       visionModel: VISION_MODEL,
       realtimeVoice: REALTIME_VOICE,
       appRoot: REPO_ROOT,
@@ -2060,6 +2083,7 @@ app.post('/api/codex/task', async (req, res) => {
   try {
     const goal = requireText(req.body?.goal, 'goal')
     const cwd = await requireWorkspaceDirectory(req.body?.cwd, 'cwd')
+    await requireAllowedCodexTaskWorkspace(cwd)
     const artifactPlan = await artifactPlanForWorkspace(cwd, goal)
     if (artifactPlan) await mkdir(artifactPlan.absoluteDir, { recursive: true })
     await codex.ensure()

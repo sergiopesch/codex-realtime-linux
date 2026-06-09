@@ -392,6 +392,17 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   assert.equal(protectedAppNounPhraseArtifactTask.status, 400)
   assert.equal((await readJson(protectedAppNounPhraseArtifactTask)).code, 'protected_app_workspace')
 
+  const protectedAppNonArtifactTask = await fetch(`${baseUrl}/api/codex/task`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      cwd: repoRoot,
+      goal: 'Review this app source and summarize the current implementation.',
+    }),
+  })
+  assert.equal(protectedAppNonArtifactTask.status, 400)
+  assert.equal((await readJson(protectedAppNonArtifactTask)).code, 'protected_app_workspace')
+
   const protectedAppSubdirArtifactTask = await fetch(`${baseUrl}/api/codex/task`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -417,6 +428,17 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   })
   assert.equal(protectedSymlinkedAppArtifactTask.status, 400)
   assert.equal((await readJson(protectedSymlinkedAppArtifactTask)).code, 'protected_app_workspace')
+
+  const protectedSymlinkedAppNonArtifactTask = await fetch(`${baseUrl}/api/codex/task`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      cwd: symlinkedAppWorkspace,
+      goal: 'Inspect this project and summarize its structure.',
+    }),
+  })
+  assert.equal(protectedSymlinkedAppNonArtifactTask.status, 400)
+  assert.equal((await readJson(protectedSymlinkedAppNonArtifactTask)).code, 'protected_app_workspace')
 
   const missingArtifactWorkspace = await fetch(`${baseUrl}/api/artifacts?workspacePath=${encodeURIComponent(path.join(os.tmpdir(), 'missing-codex-realtime-artifacts'))}`)
   assert.equal(missingArtifactWorkspace.status, 404)
@@ -690,6 +712,44 @@ test('codex task returns public artifact metadata for external workspace artifac
   assert.equal(threadsBody.data[0].debugPayload.length, 1000)
 })
 
+test('codex app-source tasks require an explicit environment opt-in', async (t) => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-fake-codex-app-source-'))
+  t.after(() => rm(tempDir, { recursive: true, force: true }))
+  const { fakeCodexPath, logPath } = await writeFakeCodexAppServer(tempDir)
+  const { baseUrl } = await startTestServer(t, {
+    CODEX_ALLOW_APP_SOURCE_TASKS: 'true',
+    CODEX_BIN: fakeCodexPath,
+    CODEX_API_KEY: '',
+    CODEX_USE_OPENAI_API_KEY: 'false',
+    FAKE_CODEX_RPC_LOG: logPath,
+    FAKE_CODEX_THREAD_CWD: repoRoot,
+  })
+
+  const status = await (await fetch(`${baseUrl}/api/status`)).json()
+  assert.equal(status.codexAppSourceTasksAllowed, true)
+
+  const task = await fetch(`${baseUrl}/api/codex/task`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      cwd: repoRoot,
+      goal: 'Review this app source and summarize the current implementation.',
+    }),
+  })
+  assert.equal(task.status, 200)
+  const body = await task.json()
+  assert.equal(body.thread.id, 'thread-ok')
+  assert.equal(body.turn.id, 'turn-ok')
+  assert.equal(body.artifact, null)
+
+  const rpcMessages = (await readFile(logPath, 'utf8'))
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line))
+  const threadStart = rpcMessages.find((message) => message.method === 'thread/start')
+  assert.equal(threadStart?.params?.cwd, repoRoot)
+})
+
 test('server returns json errors for oversized API request bodies', async (t) => {
   const { baseUrl } = await startTestServer(t, { CODEX_REALTIME_JSON_LIMIT: '64b' })
 
@@ -718,6 +778,7 @@ test('server exposes desktop launch metadata when managed by Electron', async (t
   assert.equal(Number.isInteger(body.desktopServer.pid), true)
   assert.equal(body.codexBin, 'codex')
   assert.equal(body.codexApprovalPolicy, 'on-request')
+  assert.equal(body.codexAppSourceTasksAllowed, false)
   assert.equal(body.realtimeTranscriptionModel, 'test-transcribe-model')
 })
 

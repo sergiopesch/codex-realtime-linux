@@ -110,6 +110,12 @@ Codex task approval defaults to `on-request`. The desktop voice flow does not ye
 CODEX_APPROVAL_POLICY=never
 ```
 
+Desktop-routed Codex tasks are not allowed to run inside this app's own source tree by default, including symlinked paths into the repo. This keeps voice-created files and edits in the selected external workspace instead of changing the app shell. Developers who deliberately want the desktop route to self-edit this app can opt in:
+
+```bash
+CODEX_ALLOW_APP_SOURCE_TASKS=true
+```
+
 The desktop app starts the local API server through the Electron runtime by default. If you need to force a separate Node runtime, set it explicitly. The override must be an absolute path; blank or relative values are ignored so app-menu launches do not depend on a desktop shell `PATH`:
 
 ```bash
@@ -202,7 +208,7 @@ OPENAI_USAGE_GBP_RATE_API=https://api.frankfurter.app/latest?from=USD&to=GBP
 - `/api/usb/events` reports Linux USB serial add/remove events with bounded device metadata and bounded monitor status errors, and flags Arduino-like devices.
 - `/api/arduino/upload` compiles and uploads sketches with `arduino-cli`; `/api/arduino/status` returns bounded CLI and board metadata, non-object or missing-action upload bodies are rejected before compile/upload, and uploads ignore malformed detected FQBNs before falling back to `ARDUINO_DEFAULT_FQBN=arduino:avr:uno`.
 - `/api/vision/context` analyzes image and screen context with Responses vision, then the renderer sends the summary into the active Realtime data channel.
-- `/api/codex/task` requires an explicit existing workspace `cwd`; Realtime voice routing only accepts the workspace currently selected in the app.
+- `/api/codex/task` requires an explicit existing workspace `cwd`; Realtime voice routing only accepts the workspace currently selected in the app, and app-source workspaces are rejected unless `CODEX_ALLOW_APP_SOURCE_TASKS=true`.
 - `/api/codex/events` returns bounded, normalized Codex app-server notifications for lightweight UI activity tracking.
 - Realtime tool-call IDs, arguments, transcript text, final response transcript fallbacks, event records, and function outputs are bounded before they update the UI or travel back over the Realtime data channel.
 - Mutating `/api/*` routes reject untrusted browser origins, and routes with JSON payloads reject form-style, malformed, non-object, or oversized requests before they can touch state, Codex, or Arduino hardware.

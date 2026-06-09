@@ -28,6 +28,7 @@ type Status = {
   codexApiKey: boolean
   codexAuthPreference: string
   codexApprovalPolicy?: string
+  codexAppSourceTasksAllowed?: boolean
   openAiKeySource?: 'env' | 'settings' | 'missing'
   realtimeModel: string
   realtimeTranscriptionModel?: string
