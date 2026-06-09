@@ -1071,62 +1071,72 @@ function App() {
     }
   }
 
+  const sendRealtimeEvent = useCallback((dataChannel: RTCDataChannel | null, event: Record<string, unknown>) => {
+    if (!dataChannel || dataChannel.readyState !== 'open') return false
+    try {
+      dataChannel.send(JSON.stringify(event))
+      return true
+    } catch {
+      return false
+    }
+  }, [])
+
   const injectVisualContextIntoRealtime = (source: string, summary: string, respond = true) => {
     const dataChannel = dataChannelRef.current
-    if (!dataChannel || dataChannel.readyState !== 'open') return false
-    dataChannel.send(
-      JSON.stringify({
-        type: 'conversation.item.create',
-        item: {
-          type: 'message',
-          role: 'user',
-          content: [
-            {
-              type: 'input_text',
-              text: `[Visual context attached: ${source}] ${summary}`,
-            },
-          ],
-        },
-      }),
-    )
-    if (respond) dataChannel.send(JSON.stringify({ type: 'response.create' }))
+    const sentContext = sendRealtimeEvent(dataChannel, {
+      type: 'conversation.item.create',
+      item: {
+        type: 'message',
+        role: 'user',
+        content: [
+          {
+            type: 'input_text',
+            text: `[Visual context attached: ${source}] ${summary}`,
+          },
+        ],
+      },
+    })
+    if (!sentContext) return false
+    if (respond && !sendRealtimeEvent(dataChannel, { type: 'response.create' })) return false
     return true
   }
 
-  const injectUsbEventIntoRealtime = (event: UsbDeviceEvent) => {
+  const injectUsbEventIntoRealtime = useCallback((event: UsbDeviceEvent) => {
     const dataChannel = dataChannelRef.current
-    if (!dataChannel || dataChannel.readyState !== 'open') return false
-
-    dataChannel.send(JSON.stringify({ type: 'response.cancel' }))
-    dataChannel.send(JSON.stringify({ type: 'output_audio_buffer.clear' }))
-    dataChannel.send(
-      JSON.stringify({
-        type: 'conversation.item.create',
-        item: {
-          type: 'message',
-          role: 'user',
-          content: [
-            {
-              type: 'input_text',
-              text: [
-                `[Realtime interruption: USB device connected: ${event.summary}]`,
-                'The user just connected an Arduino or Arduino-like USB serial board while speaking.',
-                'Acknowledge the device connection briefly, then return to the user.',
-                'Do not claim you can read the board sketch or serial data yet; only react to the USB connection.',
-              ].join(' '),
-            },
-          ],
-        },
-      }),
-    )
-    dataChannel.send(JSON.stringify({ type: 'response.create' }))
-    return true
-  }
+    if (!sendRealtimeEvent(dataChannel, { type: 'response.cancel' })) return false
+    if (!sendRealtimeEvent(dataChannel, { type: 'output_audio_buffer.clear' })) return false
+    const injected = sendRealtimeEvent(dataChannel, {
+      type: 'conversation.item.create',
+      item: {
+        type: 'message',
+        role: 'user',
+        content: [
+          {
+            type: 'input_text',
+            text: [
+              `[Realtime interruption: USB device connected: ${event.summary}]`,
+              'The user just connected an Arduino or Arduino-like USB serial board while speaking.',
+              'Acknowledge the device connection briefly, then return to the user.',
+              'Do not claim you can read the board sketch or serial data yet; only react to the USB connection.',
+            ].join(' '),
+          },
+        ],
+      },
+    })
+    if (!injected) return false
+    return sendRealtimeEvent(dataChannel, { type: 'response.create' })
+  }, [sendRealtimeEvent])
 
   const flushPendingVisualContext = () => {
     const pending = pendingVisualContextRef.current.splice(0)
     if (pending.length === 0) return
-    const injected = pending.filter(({ source, summary }) => injectVisualContextIntoRealtime(source, summary, false))
+    const injected = []
+    const retained = []
+    for (const item of pending) {
+      if (injectVisualContextIntoRealtime(item.source, item.summary, false)) injected.push(item)
+      else retained.push(item)
+    }
+    pendingVisualContextRef.current = retained.slice(-4)
     if (injected.length > 0) {
       appendEvent('context/visual-flushed', { count: injected.length })
       setActivity('Voice router', 'Vision context', 'Realtime ready')
@@ -1831,7 +1841,7 @@ function App() {
       controller.abort()
       window.clearInterval(interval)
     }
-  }, [])
+  }, [injectUsbEventIntoRealtime])
 
   const handleRealtimeToolCall = async (message: Record<string, unknown>) => {
     const item = realtimeFunctionCallItem(message)
