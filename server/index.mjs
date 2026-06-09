@@ -261,6 +261,7 @@ async function listGeneratedArtifacts(workspacePath = REPO_ROOT) {
   const artifacts = []
   for (const entry of entries) {
     if (!entry.isDirectory()) continue
+    if (!isSafeArtifactName(entry.name)) continue
     const indexPath = path.join(artifactsDir, entry.name, 'index.html')
     try {
       const details = await stat(indexPath)

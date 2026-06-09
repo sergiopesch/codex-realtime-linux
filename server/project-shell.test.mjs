@@ -48,6 +48,7 @@ test('artifact previews are served through workspace-scoped routes only', async 
   assert.match(serverSource, /async function requireWorkspaceDirectory/)
   assert.match(serverSource, /must be an absolute local path/)
   assert.match(serverSource, /function isSafeArtifactName/)
+  assert.match(serverSource, /if \(!isSafeArtifactName\(entry\.name\)\) continue/)
   assert.match(serverSource, /Invalid artifact name/)
   assert.match(serverSource, /\/workspace-artifacts/)
   assert.match(serverSource, /await requireWorkspaceDirectory\(workspaceFromToken\(token\), 'workspace token'\)/)

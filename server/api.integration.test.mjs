@@ -92,12 +92,16 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   await mkdir(artifactDir, { recursive: true })
   await writeFile(path.join(artifactDir, 'index.html'), '<!doctype html><title>Sample report</title>')
   await writeFile(path.join(artifactDir, 'notes.txt'), 'workspace note')
+  const unsafeArtifactDir = path.join(workspacePath, 'public', 'agent-files', 'unsafe report')
+  await mkdir(unsafeArtifactDir, { recursive: true })
+  await writeFile(path.join(unsafeArtifactDir, 'index.html'), '<!doctype html><title>Unsafe report</title>')
 
   const artifactList = await fetch(`${baseUrl}/api/artifacts?workspacePath=${encodeURIComponent(workspacePath)}`)
   assert.equal(artifactList.status, 200)
   const artifactBody = await artifactList.json()
   assert.equal(artifactBody.data.length, 1)
   assert.equal(artifactBody.data[0].relativePath, 'public/agent-files/sample-report/index.html')
+  assert.equal(artifactBody.data.some((artifact) => artifact.relativePath.includes('unsafe report')), false)
 
   const token = Buffer.from(path.resolve(workspacePath), 'utf8').toString('base64url')
   const preview = await fetch(`${baseUrl}/workspace-artifacts/${token}/sample-report/index.html`)
