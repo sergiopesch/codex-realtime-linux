@@ -54,6 +54,10 @@ const MAX_USAGE_BUCKETS = 20
 const MAX_USAGE_BUCKET_LABEL_LENGTH = 120
 const MAX_ADMIN_WORKSPACES = 20
 const MAX_CODEX_NOTIFICATIONS = 160
+const MAX_CODEX_METADATA_STRING_LENGTH = 1_000
+const MAX_CODEX_METADATA_ARRAY_ITEMS = 50
+const MAX_CODEX_METADATA_OBJECT_KEYS = 40
+const MAX_CODEX_METADATA_DEPTH = 5
 const MAX_EVENT_METHOD_LENGTH = 160
 const MAX_EVENT_STRING_LENGTH = 2_000
 const MAX_EVENT_ARRAY_ITEMS = 20
@@ -547,6 +551,28 @@ function normalizeEventRecord(event, fallbackMethod = 'app-server/event') {
     receivedAt: typeof receivedAt === 'string' ? receivedAt : new Date().toISOString(),
     params: normalizeEventValue(eventParams) ?? {},
   }
+}
+
+function normalizeCodexMetadataValue(value, depth = 0, seen = new WeakSet()) {
+  if (value == null || typeof value === 'number' || typeof value === 'boolean') return value
+  if (typeof value === 'string') return normalizeBoundedString(value, '', MAX_CODEX_METADATA_STRING_LENGTH)
+  if (depth >= MAX_CODEX_METADATA_DEPTH) return '[truncated]'
+  if (Array.isArray(value)) {
+    return value
+      .slice(0, MAX_CODEX_METADATA_ARRAY_ITEMS)
+      .map((item) => normalizeCodexMetadataValue(item, depth + 1, seen))
+  }
+  if (typeof value !== 'object') return undefined
+  if (seen.has(value)) return '[circular]'
+  seen.add(value)
+
+  const normalized = {}
+  for (const [key, entryValue] of Object.entries(value).slice(0, MAX_CODEX_METADATA_OBJECT_KEYS)) {
+    const normalizedKey = normalizeBoundedString(key, 'field', MAX_EVENT_METHOD_LENGTH)
+    const normalizedValue = normalizeCodexMetadataValue(entryValue, depth + 1, seen)
+    if (normalizedKey && normalizedValue !== undefined) normalized[normalizedKey] = normalizedValue
+  }
+  return normalized
 }
 
 async function analyzeVisualContext({ imageDataUrl, source, prompt }) {
@@ -1324,7 +1350,7 @@ app.delete('/api/settings/openai-key', async (_req, res) => {
 app.get('/api/codex/account', async (_req, res) => {
   try {
     await codex.ensure()
-    res.json(await codex.request('account/read', { refreshToken: false }))
+    res.json(normalizeCodexMetadataValue(await codex.request('account/read', { refreshToken: false })))
   } catch (error) {
     sendJsonError(res, error, {
       fallbackStatus: 502,
@@ -1337,7 +1363,7 @@ app.get('/api/codex/account', async (_req, res) => {
 app.get('/api/codex/rate-limits', async (_req, res) => {
   try {
     await codex.ensure()
-    res.json(await codex.request('account/rateLimits/read'))
+    res.json(normalizeCodexMetadataValue(await codex.request('account/rateLimits/read')))
   } catch (error) {
     sendJsonError(res, error, {
       fallbackStatus: 502,
@@ -1350,7 +1376,7 @@ app.get('/api/codex/rate-limits', async (_req, res) => {
 app.get('/api/codex/models', async (_req, res) => {
   try {
     await codex.ensure()
-    res.json(await codex.request('model/list', { limit: 40, includeHidden: false }))
+    res.json(normalizeCodexMetadataValue(await codex.request('model/list', { limit: 40, includeHidden: false })))
   } catch (error) {
     sendJsonError(res, error, {
       fallbackStatus: 502,
@@ -1363,7 +1389,7 @@ app.get('/api/codex/models', async (_req, res) => {
 app.get('/api/codex/apps', async (_req, res) => {
   try {
     await codex.ensure()
-    res.json(await codex.request('app/list', { limit: 50, forceRefetch: false }))
+    res.json(normalizeCodexMetadataValue(await codex.request('app/list', { limit: 50, forceRefetch: false })))
   } catch (error) {
     sendJsonError(res, error, {
       fallbackStatus: 502,
