@@ -1,6 +1,7 @@
 import 'dotenv/config'
 import express from 'express'
 import { spawn } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import { chmod, mkdir, opendir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -248,7 +249,7 @@ async function writeJsonFileAtomic(filePath, value, { dirMode, fileMode } = {}) 
   await mkdir(path.dirname(filePath), { recursive: true, ...(dirMode ? { mode: dirMode } : {}) })
   const tempPath = path.join(
     path.dirname(filePath),
-    `.${path.basename(filePath)}.${process.pid}.${Date.now()}.tmp`,
+    `.${path.basename(filePath)}.${process.pid}.${randomUUID()}.tmp`,
   )
   try {
     await writeFile(tempPath, `${JSON.stringify(value, null, 2)}\n`, fileMode ? { mode: fileMode } : undefined)
