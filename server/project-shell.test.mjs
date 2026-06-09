@@ -110,6 +110,10 @@ test('persisted workspaces and conversations require absolute workspace paths', 
   assert.match(serverSource, /invalid_openai_api_key/)
   assert.match(serverSource, /fallbackCode: 'openai_key_save_failed'/)
   assert.match(serverSource, /fallbackCode: 'openai_key_remove_failed'/)
+  assert.match(serverSource, /fallbackCode: 'codex_account_failed'/)
+  assert.match(serverSource, /fallbackCode: 'codex_rate_limits_failed'/)
+  assert.match(serverSource, /fallbackCode: 'codex_models_failed'/)
+  assert.match(serverSource, /fallbackCode: 'codex_apps_failed'/)
   assert.match(serverSource, /function normalizeWorkspacePath/)
   assert.match(serverSource, /path\.isAbsolute\(workspacePath\)/)
   assert.match(serverSource, /input\.workspaces\.map\(normalizeWorkspace\)\.filter\(Boolean\)/)
@@ -123,6 +127,7 @@ test('persisted workspaces and conversations require absolute workspace paths', 
   assert.match(serverSource, /sendJsonError\(res, error, \{ fallbackStatus: 502, fallbackMessage: 'Failed to list generated artifacts\.' \}\)/)
   assert.doesNotMatch(serverSource, /res\.status\(error\.statusCode \|\| 400\)\.json\(\{ error: error\.message \}\)/)
   assert.doesNotMatch(serverSource, /res\.status\(error\.statusCode \|\| 502\)\.json\(\{ error: error instanceof Error/)
+  assert.doesNotMatch(serverSource, /res\.status\(502\)\.json\(\{ error: error\.message \}\)/)
   assert.doesNotMatch(serverSource, /workspace-\$\{Date\.now\(\)\}/)
 })
 

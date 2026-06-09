@@ -1263,7 +1263,11 @@ app.get('/api/codex/account', async (_req, res) => {
     await codex.ensure()
     res.json(await codex.request('account/read', { refreshToken: false }))
   } catch (error) {
-    res.status(502).json({ error: error.message })
+    sendJsonError(res, error, {
+      fallbackStatus: 502,
+      fallbackMessage: 'Failed to read Codex account.',
+      fallbackCode: 'codex_account_failed',
+    })
   }
 })
 
@@ -1272,7 +1276,11 @@ app.get('/api/codex/rate-limits', async (_req, res) => {
     await codex.ensure()
     res.json(await codex.request('account/rateLimits/read'))
   } catch (error) {
-    res.status(502).json({ error: error.message })
+    sendJsonError(res, error, {
+      fallbackStatus: 502,
+      fallbackMessage: 'Failed to read Codex rate limits.',
+      fallbackCode: 'codex_rate_limits_failed',
+    })
   }
 })
 
@@ -1281,7 +1289,11 @@ app.get('/api/codex/models', async (_req, res) => {
     await codex.ensure()
     res.json(await codex.request('model/list', { limit: 40, includeHidden: false }))
   } catch (error) {
-    res.status(502).json({ error: error.message })
+    sendJsonError(res, error, {
+      fallbackStatus: 502,
+      fallbackMessage: 'Failed to list Codex models.',
+      fallbackCode: 'codex_models_failed',
+    })
   }
 })
 
@@ -1290,7 +1302,11 @@ app.get('/api/codex/apps', async (_req, res) => {
     await codex.ensure()
     res.json(await codex.request('app/list', { limit: 50, forceRefetch: false }))
   } catch (error) {
-    res.status(502).json({ error: error.message })
+    sendJsonError(res, error, {
+      fallbackStatus: 502,
+      fallbackMessage: 'Failed to list Codex apps.',
+      fallbackCode: 'codex_apps_failed',
+    })
   }
 })
 
