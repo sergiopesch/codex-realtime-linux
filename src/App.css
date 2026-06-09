@@ -129,14 +129,6 @@ button:disabled {
   pointer-events: none;
 }
 
-.voice-controls button {
-  display: grid;
-  place-items: center;
-  border: 0;
-  background: transparent;
-  cursor: pointer;
-}
-
 .sidebar-nav button:hover,
 .thread-row:hover,
 .workspace-folder-header:hover,
@@ -145,8 +137,7 @@ button:disabled {
 .workspace-delete:hover,
 .empty-workspace button:hover,
 .utility-row:hover,
-.voice-composer-controls button:hover:not(:disabled),
-.voice-controls button:hover:not(:disabled) {
+.voice-composer-controls button:hover:not(:disabled) {
   background: var(--glass-hover);
 }
 
@@ -1398,155 +1389,6 @@ button:disabled {
   background: rgba(134, 168, 200, 0.82);
 }
 
-.voice-dock {
-  position: relative;
-  z-index: 4;
-  align-self: end;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  width: min(920px, calc(100% - 44px));
-  height: fit-content;
-  margin: 0 auto 18px;
-  border: 1px solid rgba(255, 255, 255, 0.085);
-  border-radius: 22px;
-  padding: 9px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.025)),
-    rgba(36, 36, 37, 0.9);
-  box-shadow: 0 -20px 70px rgba(0, 0, 0, 0.34), inset 0 1px rgba(255, 255, 255, 0.075);
-  backdrop-filter: blur(26px) saturate(120%);
-}
-
-.voice-dock.compact {
-  width: min(760px, calc(100% - 48px));
-  border-radius: 18px;
-  padding: 8px;
-}
-
-.voice-dock.compact .voice-status {
-  gap: 9px;
-}
-
-.voice-dock.compact .voice-pulse {
-  width: 34px;
-  height: 34px;
-}
-
-.voice-dock.compact .voice-status small {
-  display: none;
-}
-
-.voice-dock.compact .voice-controls button {
-  min-width: 32px;
-  height: 32px;
-}
-
-.voice-status {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  gap: 10px;
-}
-
-.voice-pulse {
-  display: grid;
-  flex: 0 0 auto;
-  place-items: center;
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  background:
-    radial-gradient(circle at 35% 20%, #ffffff, #dbe8f7 48%, #8190a5);
-  color: #0e0e10;
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28), inset 0 1px rgba(255, 255, 255, 0.55);
-}
-
-.voice-pulse.live {
-  animation: voicePulse 1.3s ease-in-out infinite;
-}
-
-.voice-status span,
-.voice-status small {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.voice-status span {
-  color: var(--ink);
-  font-size: 14px;
-}
-
-.voice-status small {
-  margin-top: 3px;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.voice-controls {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.voice-controls button {
-  min-width: 34px;
-  height: 34px;
-  border: 1px solid rgba(255, 255, 255, 0.105);
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.055);
-  color: var(--ink);
-  box-shadow: inset 0 1px rgba(255, 255, 255, 0.06);
-}
-
-.voice-controls button:disabled {
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.voice-controls .primary-voice,
-.voice-controls .danger-voice {
-  display: inline-flex;
-  width: auto;
-  min-width: 116px;
-  justify-content: center;
-  gap: 7px;
-  border-radius: 999px;
-  padding: 0 12px;
-  white-space: nowrap;
-}
-
-.voice-controls .primary-voice {
-  border-color: rgba(255, 255, 255, 0.58);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(219, 219, 221, 0.86));
-  color: #0b0b0c;
-}
-
-.voice-controls .primary-voice:disabled {
-  border-color: var(--line);
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--muted);
-  opacity: 0.72;
-}
-
-.voice-controls .danger-voice {
-  border-color: rgba(255, 139, 131, 0.35);
-  background: rgba(126, 45, 48, 0.72);
-}
-
-@keyframes voicePulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(240, 240, 243, 0.22);
-  }
-  50% {
-    box-shadow: 0 0 0 10px rgba(240, 240, 243, 0);
-  }
-}
-
 @keyframes agentBuild {
   0%,
   100% {
@@ -1606,12 +1448,6 @@ button:disabled {
     z-index: 9;
   }
 
-  .voice-dock {
-    align-items: stretch;
-    border-radius: 18px;
-    flex-direction: column;
-  }
-
   .voice-composer-controls {
     gap: 7px;
   }
@@ -1658,7 +1494,4 @@ button:disabled {
     justify-content: center;
   }
 
-  .voice-controls {
-    justify-content: space-between;
-  }
 }

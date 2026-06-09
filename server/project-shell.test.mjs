@@ -1291,6 +1291,7 @@ test('USB serial-by-id scans are bounded', async () => {
 
 test('realtime voice sessions reset transcript state and clean up media resources', async () => {
   const appSource = await readFile(path.join(repoRoot, 'src', 'App.tsx'), 'utf8')
+  const cssSource = await readFile(path.join(repoRoot, 'src', 'App.css'), 'utf8')
   const serverSource = await readFile(path.join(repoRoot, 'server', 'index.mjs'), 'utf8')
 
   assert.match(appSource, /const DEFAULT_API_TIMEOUT_MS = 130_000/)
@@ -1515,6 +1516,13 @@ test('realtime voice sessions reset transcript state and clean up media resource
   assert.doesNotMatch(appSource, /let result: unknown = \{ ignored: true \}[\s\S]*if \(item\.name ===/)
   assert.doesNotMatch(appSource, /dataChannelRef\.current\?\.send\(\s+JSON\.stringify\(\{\s+type: 'conversation\.item\.create'/)
   assert.match(appSource, /const functionCallItem = realtimeFunctionCallItem\(message\)/)
+  assert.doesNotMatch(cssSource, /\.voice-dock/)
+  assert.doesNotMatch(cssSource, /\.voice-controls/)
+  assert.doesNotMatch(cssSource, /\.voice-status/)
+  assert.doesNotMatch(cssSource, /\.voice-pulse/)
+  assert.doesNotMatch(cssSource, /\.primary-voice/)
+  assert.doesNotMatch(cssSource, /\.danger-voice/)
+  assert.doesNotMatch(cssSource, /@keyframes voicePulse/)
   assert.match(appSource, /const stopWaveform = useCallback\(\(\) =>/)
   assert.match(appSource, /const voiceSessionIdRef = useRef\(0\)/)
   assert.match(appSource, /const voiceAbortControllerRef = useRef<AbortController \| null>\(null\)/)
