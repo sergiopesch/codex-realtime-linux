@@ -2012,6 +2012,15 @@ function App() {
         ...state,
         [workspacePath]: conversationsAfterDelete(state[workspacePath] ?? current, confirmedConversations, conversationId),
       }))
+      const transcriptTarget = voiceTranscriptTargetRef.current
+      if (
+        transcriptTarget &&
+        sameWorkspacePath(transcriptTarget.workspacePath, workspacePath) &&
+        transcriptTarget.conversationId === conversationId
+      ) {
+        voiceTranscriptTargetRef.current = null
+        savedTranscriptSignatureRef.current = ''
+      }
       const deletedWorkspaceWasSelected = sameWorkspacePath(selectedWorkspace, workspacePath)
       const deletedActiveConversation = deletedWorkspaceWasSelected && selectedConversationId === conversationId
       const workspaceIsEmptyAfterDelete = visibleConversationsAfterDelete.length === 0
@@ -2145,6 +2154,18 @@ function App() {
     if (savedTranscriptSignatureRef.current === signature) return
 
     const timeout = window.setTimeout(() => {
+      const currentTranscriptTarget = voiceTranscriptTargetRef.current
+      if (
+        !currentTranscriptTarget ||
+        currentTranscriptTarget.workspacePath !== workspacePath ||
+        currentTranscriptTarget.conversationId !== conversationId
+      ) {
+        return
+      }
+      const targetStillPresent = (conversationsByWorkspaceRef.current[workspacePath] ?? [])
+        .some((conversation) => conversation.id === conversationId)
+      if (!targetStillPresent) return
+
       savedTranscriptSignatureRef.current = signature
       setConversationsByWorkspace((current) => {
         const conversations = current[workspacePath] ?? []
@@ -2162,10 +2183,14 @@ function App() {
       })
         .then((savedConversation) => {
           const conversation = requireSafeConversation(savedConversation.conversation, workspacePath)
-          setConversationsByWorkspace((current) => ({
-            ...current,
-            [workspacePath]: mergeConversations(current[workspacePath] ?? [], [conversation]),
-          }))
+          setConversationsByWorkspace((current) => {
+            const conversations = current[workspacePath] ?? []
+            if (!conversations.some((item) => item.id === conversationId)) return current
+            return {
+              ...current,
+              [workspacePath]: mergeConversations(conversations, [conversation]),
+            }
+          })
         })
         .catch((error: unknown) => {
           appendEvent('app-state/realtime-transcript-save-failed', {
