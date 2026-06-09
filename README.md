@@ -65,7 +65,7 @@ npm run install:desktop
 
 The installer builds the renderer, installs the desktop entry at `~/.local/share/applications/codex-realtime-linux.desktop`, installs hicolor app icons, and writes `scripts/launch-desktop.sh`. The launcher prefers Electron's packaged Linux executable instead of the Node-based Electron shim, and Electron starts the local API server through its own runtime so app-menu launches do not depend on a wide shell `PATH`.
 
-After installation, open the app menu and launch **Codex**. The launcher starts Electron directly; Electron starts the local API server and loads the built app from `http://127.0.0.1:3311`. Launcher failures are written to `~/.local/state/codex-realtime-linux/desktop-launch.log`; API server output from Electron-managed launches is written to `~/.local/state/codex-realtime-linux/api-server.log`. Desktop logs rotate at 1 MiB with a `.1` backup.
+After installation, open the app menu and launch **Codex**. The launcher starts Electron directly; Electron starts the local API server and loads the built app from `http://127.0.0.1:3311`. Launcher failures are written to `~/.local/state/codex-realtime-linux/desktop-launch.log`; API server output from Electron-managed launches is written to `~/.local/state/codex-realtime-linux/api-server.log`. If `XDG_STATE_HOME` is set to an absolute path, desktop logs use that state root; relative `XDG_STATE_HOME` values are ignored. Desktop logs rotate at 1 MiB with a `.1` backup.
 
 ## Generated HTML Previews
 

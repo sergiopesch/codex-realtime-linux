@@ -54,7 +54,11 @@ if [ -z "$home_dir" ]; then
   home_dir="$repo_root"
 fi
 
-state_dir="\${XDG_STATE_HOME:-$home_dir/.local/state}/codex-realtime-linux"
+xdg_state_home="\${XDG_STATE_HOME:-}"
+if [ -z "$xdg_state_home" ] || [ "\${xdg_state_home#/}" = "$xdg_state_home" ]; then
+  xdg_state_home="$home_dir/.local/state"
+fi
+state_dir="$xdg_state_home/codex-realtime-linux"
 mkdir -p "$state_dir"
 desktop_log="$state_dir/desktop-launch.log"
 max_log_bytes=1048576
