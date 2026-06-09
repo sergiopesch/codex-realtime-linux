@@ -608,9 +608,10 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ workspacePath: emptyStateWorkspacePath, conversationId: 'missing-conversation' }),
   })
-  assert.equal(missingConversationDelete.status, 200)
-  stateAfterMissingConversationMutation = await missingConversationDelete.json()
-  assert.equal(stateAfterMissingConversationMutation.state.conversationsByWorkspace[emptyStateWorkspacePath], undefined)
+  assert.equal(missingConversationDelete.status, 404)
+  assert.equal((await readJson(missingConversationDelete)).code, 'conversation_not_found')
+  stateAfterMissingConversationMutation = await (await fetch(`${baseUrl}/api/app-state`)).json()
+  assert.equal(stateAfterMissingConversationMutation.conversationsByWorkspace[emptyStateWorkspacePath], undefined)
 })
 
 test('codex task returns public artifact metadata for external workspace artifacts', async (t) => {

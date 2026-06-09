@@ -2293,8 +2293,14 @@ app.post('/api/app-state/conversations/delete', async (req, res) => {
   try {
     const { state } = await mutateAppState(async (state) => {
       const conversations = state.conversationsByWorkspace[workspacePath] ?? []
-      const next = conversations.filter((conversation) => conversation.id !== conversationId)
-      if (next.length === conversations.length) return
+      const index = conversations.findIndex((conversation) => conversation.id === conversationId)
+      if (index === -1) {
+        throw httpError('conversationId was not found in this workspace', {
+          statusCode: 404,
+          code: 'conversation_not_found',
+        })
+      }
+      const next = [...conversations.slice(0, index), ...conversations.slice(index + 1)]
       if (next.length > 0) {
         state.conversationsByWorkspace[workspacePath] = next
       } else {

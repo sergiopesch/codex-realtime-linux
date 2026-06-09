@@ -552,6 +552,17 @@ const mergeConversations = (current: AgentConversation[], incoming: AgentConvers
     .slice(0, MAX_UI_CONVERSATIONS_PER_WORKSPACE)
 }
 
+const removeFirstConversationById = (conversations: AgentConversation[], conversationId: string) => {
+  let removed = false
+  return conversations.filter((conversation) => {
+    if (!removed && conversation.id === conversationId) {
+      removed = true
+      return false
+    }
+    return true
+  })
+}
+
 const conversationsAfterDelete = (
   existing: AgentConversation[],
   confirmedConversations: AgentConversation[],
@@ -559,8 +570,8 @@ const conversationsAfterDelete = (
 ) => {
   const confirmedWithoutDeleted = confirmedConversations.filter((conversation) => conversation.id !== conversationId)
   const confirmedIds = new Set(confirmedWithoutDeleted.map((conversation) => conversation.id))
-  const retainedConversations = existing.filter(
-    (conversation) => conversation.id !== conversationId && !confirmedIds.has(conversation.id),
+  const retainedConversations = removeFirstConversationById(existing, conversationId).filter(
+    (conversation) => !confirmedIds.has(conversation.id),
   )
   return mergeConversations(retainedConversations, confirmedWithoutDeleted)
 }
@@ -1844,7 +1855,7 @@ function App() {
   const deleteConversation = async (workspacePath: string, conversationId: string) => {
     const current = conversationsByWorkspace[workspacePath] ?? []
     const deleted = current.find((conversation) => conversation.id === conversationId)
-    const next = current.filter((conversation) => conversation.id !== conversationId)
+    const next = removeFirstConversationById(current, conversationId)
     if (!deleted) return
 
     try {

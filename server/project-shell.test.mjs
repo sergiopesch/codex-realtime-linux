@@ -497,10 +497,15 @@ test('persisted workspaces and conversations require absolute workspace paths', 
     serverSource,
     /app\.post\('\/api\/app-state\/conversations\/delete'[\s\S]*const body = normalizeObject\(req\.body\)[\s\S]*workspacePath = await requireWorkspaceDirectory\(body\.workspacePath, 'workspacePath'\)/,
   )
+  assert.match(
+    serverSource,
+    /app\.post\('\/api\/app-state\/conversations\/delete'[\s\S]*const index = conversations\.findIndex\(\(conversation\) => conversation\.id === conversationId\)[\s\S]*const next = \[\.\.\.conversations\.slice\(0, index\), \.\.\.conversations\.slice\(index \+ 1\)\]/,
+  )
   assert.doesNotMatch(
     serverSource,
     /app\.post\('\/api\/app-state\/conversations\/delete'[\s\S]*const workspacePath = normalizeWorkspacePath\(req\.body\.workspacePath\)/,
   )
+  assert.doesNotMatch(serverSource, /const next = conversations\.filter\(\(conversation\) => conversation\.id !== conversationId\)/)
   assert.doesNotMatch(serverSource, /req\.body\.workspacePath/)
   assert.doesNotMatch(serverSource, /req\.body\.conversation/)
   assert.doesNotMatch(serverSource, /req\.body\.patch/)
@@ -610,10 +615,13 @@ test('Codex task routes require explicit user goals and IDs before app-server ca
   assert.match(appSource, /deleted\?\.source === 'codex' && deleted\.codexThreadId/)
   assert.match(appSource, /if \(deleted\.source === 'local'\) throw error/)
   assert.match(appSource, /app-state\/codex-conversation-delete-failed/)
-  assert.match(appSource, /const conversationsAfterDelete = \([\s\S]*confirmedWithoutDeleted[\s\S]*confirmedIds[\s\S]*retainedConversations[\s\S]*return mergeConversations\(retainedConversations, confirmedWithoutDeleted\)/)
+  assert.match(appSource, /const removeFirstConversationById = \(conversations: AgentConversation\[\], conversationId: string\) => \{[\s\S]*let removed = false[\s\S]*conversation\.id === conversationId[\s\S]*removed = true/)
+  assert.match(appSource, /const next = removeFirstConversationById\(current, conversationId\)/)
+  assert.match(appSource, /const conversationsAfterDelete = \([\s\S]*confirmedWithoutDeleted[\s\S]*confirmedIds[\s\S]*removeFirstConversationById\(existing, conversationId\)\.filter[\s\S]*return mergeConversations\(retainedConversations, confirmedWithoutDeleted\)/)
   assert.match(appSource, /const visibleConversationsAfterDelete = conversationsAfterDelete\(current, confirmedConversations, conversationId\)/)
   assert.match(appSource, /\[workspacePath\]: conversationsAfterDelete\(state\[workspacePath\] \?\? current, confirmedConversations, conversationId\)/)
   assert.doesNotMatch(appSource, /setConversationsByWorkspace\(\(state\) => \(\{ \.\.\.state, \[workspacePath\]: confirmedConversations \}\)\)/)
+  assert.doesNotMatch(appSource, /const next = current\.filter\(\(conversation\) => conversation\.id !== conversationId\)/)
   assert.match(appSource, /const deletedActiveConversation = selectedConversationId === conversationId/)
   assert.match(appSource, /const deletedWorkspaceWasSelected = normalizeAbsoluteLocalWorkspacePath\(selectedWorkspace\) === normalizeAbsoluteLocalWorkspacePath\(workspacePath\)/)
   assert.match(appSource, /const workspaceIsEmptyAfterDelete = visibleConversationsAfterDelete\.length === 0/)
