@@ -647,6 +647,10 @@ test('USB serial-by-id scans are bounded', async () => {
 
   assert.match(usbSource, /const MAX_SERIAL_BY_ID_SCAN_ENTRIES = 400/)
   assert.match(usbSource, /const MAX_SERIAL_BY_ID_DEVICES = 80/)
+  assert.match(usbSource, /const ARDUINO_VENDOR_IDS = new Set\(\['2341', '2a03', '1b4f'\]\)/)
+  assert.match(usbSource, /const SERIAL_ADAPTER_VENDOR_IDS = new Set\(\['1a86', '10c4', '0403'\]\)/)
+  assert.match(usbSource, /function textMatchesSerialAdapterHints\(text\)/)
+  assert.match(usbSource, /isSerialTty && \(hasKnownSerialAdapterVendor \|\| hasSerialAdapterHints\)/)
   assert.match(usbSource, /import \{ randomUUID \} from 'node:crypto'/)
   assert.match(usbSource, /id: randomUUID\(\)/)
   assert.match(usbSource, /directory = await opendir\(serialByIdDir\)/)

@@ -46,6 +46,29 @@ test('classifyUsbDevice identifies common CH340 Arduino clone adapters', () => {
   assert.equal(device.isArduinoLike, true)
 })
 
+test('classifyUsbDevice requires a serial tty for generic USB serial adapters', () => {
+  const nonTtyAdapter = classifyUsbDevice({
+    ACTION: 'add',
+    SUBSYSTEM: 'usb',
+    ID_VENDOR_ID: '10c4',
+    ID_VENDOR: 'Silicon Labs',
+    ID_MODEL: 'CP2102 USB to UART Bridge Controller',
+  })
+  const ttyAdapter = classifyUsbDevice({
+    ACTION: 'add',
+    SUBSYSTEM: 'tty',
+    DEVNAME: '/dev/ttyUSB1',
+    ID_VENDOR_ID: '10c4',
+    ID_VENDOR: 'Silicon Labs',
+    ID_MODEL: 'CP2102 USB to UART Bridge Controller',
+  })
+
+  assert.equal(nonTtyAdapter.isSerialTty, false)
+  assert.equal(nonTtyAdapter.isArduinoLike, false)
+  assert.equal(ttyAdapter.isSerialTty, true)
+  assert.equal(ttyAdapter.isArduinoLike, true)
+})
+
 test('classifyUsbDevice does not treat unrelated USB devices as Arduino boards', () => {
   const device = classifyUsbDevice({
     ACTION: 'add',

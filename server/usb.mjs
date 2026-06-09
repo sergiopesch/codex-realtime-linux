@@ -14,7 +14,8 @@ const MAX_USB_STATUS_ERROR_LENGTH = 500
 const MAX_SERIAL_BY_ID_SCAN_ENTRIES = 400
 const MAX_SERIAL_BY_ID_DEVICES = 80
 const SERIAL_TTY_PATTERN = /^\/dev\/tty(?:ACM|USB)\d+$/
-const ARDUINO_VENDOR_IDS = new Set(['2341', '2a03', '1a86', '10c4', '0403', '1b4f'])
+const ARDUINO_VENDOR_IDS = new Set(['2341', '2a03', '1b4f'])
+const SERIAL_ADAPTER_VENDOR_IDS = new Set(['1a86', '10c4', '0403'])
 const ARDUINO_TEXT_PATTERNS = [
   /arduino/i,
   /genuino/i,
@@ -25,6 +26,8 @@ const ARDUINO_TEXT_PATTERNS = [
   /micro\b/i,
   /sparkfun/i,
   /seeeduino/i,
+]
+const SERIAL_ADAPTER_TEXT_PATTERNS = [
   /wch|ch340|ch341/i,
   /cp210|silicon labs/i,
   /ftdi|ft232/i,
@@ -74,6 +77,10 @@ function textMatchesArduinoHints(text) {
   return ARDUINO_TEXT_PATTERNS.some((pattern) => pattern.test(text))
 }
 
+function textMatchesSerialAdapterHints(text) {
+  return SERIAL_ADAPTER_TEXT_PATTERNS.some((pattern) => pattern.test(text))
+}
+
 export function classifyUsbDevice(properties) {
   const action = normalizeString(properties.ACTION || properties.action || 'unknown')
   const subsystem = normalizeString(properties.SUBSYSTEM || properties.subsystem)
@@ -86,7 +93,11 @@ export function classifyUsbDevice(properties) {
   const driver = normalizeString(properties.ID_USB_DRIVER || properties.DRIVER || properties.driver)
   const text = [vendor, model, serial, driver, devname, properties.ID_PATH, properties.DEVPATH].filter(Boolean).join(' ')
   const isSerialTty = SERIAL_TTY_PATTERN.test(devname)
-  const hasArduinoHints = textMatchesArduinoHints(text) || ARDUINO_VENDOR_IDS.has(vendorId)
+  const hasKnownArduinoVendor = ARDUINO_VENDOR_IDS.has(vendorId)
+  const hasKnownSerialAdapterVendor = SERIAL_ADAPTER_VENDOR_IDS.has(vendorId)
+  const hasArduinoHints = textMatchesArduinoHints(text)
+  const hasSerialAdapterHints = textMatchesSerialAdapterHints(text)
+  const isArduinoLike = hasKnownArduinoVendor || hasArduinoHints || (isSerialTty && (hasKnownSerialAdapterVendor || hasSerialAdapterHints))
 
   return {
     action,
@@ -99,7 +110,7 @@ export function classifyUsbDevice(properties) {
     serial: serial || null,
     driver: driver || null,
     isSerialTty,
-    isArduinoLike: Boolean(hasArduinoHints && (isSerialTty || subsystem === 'tty' || subsystem === 'usb')),
+    isArduinoLike,
   }
 }
 
