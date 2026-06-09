@@ -102,6 +102,12 @@ The app starts Codex through `codex app-server` by default. If your standalone d
 CODEX_BIN=/absolute/path/to/codex
 ```
 
+The desktop app starts the local API server with `node` by default. If the app launches from an application menu with a narrower `PATH`, set the Node runtime explicitly:
+
+```bash
+CODEX_REALTIME_NODE_BIN=/absolute/path/to/node
+```
+
 Codex app-server RPC calls are bounded so the desktop app does not hang indefinitely if the local Codex bridge stalls. Override the timeout only when you have a known long-running local app-server operation:
 
 ```bash
