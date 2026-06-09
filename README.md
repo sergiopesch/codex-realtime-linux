@@ -63,7 +63,7 @@ npm install
 npm run install:desktop
 ```
 
-The installer builds the renderer, installs the desktop entry at `~/.local/share/applications/codex-realtime-linux.desktop`, installs hicolor app icons, and writes `scripts/launch-desktop.sh`.
+The installer builds the renderer, installs the desktop entry at `~/.local/share/applications/codex-realtime-linux.desktop`, installs hicolor app icons, and writes `scripts/launch-desktop.sh`. The launcher prefers Electron's packaged Linux executable instead of the Node-based Electron shim, and Electron starts the local API server through its own runtime so app-menu launches do not depend on a wide shell `PATH`.
 
 After installation, open the app menu and launch **Codex**. The launcher starts Electron directly; Electron starts the local API server and loads the built app from `http://127.0.0.1:3311`. Launcher failures are written to `~/.local/state/codex-realtime-linux/desktop-launch.log`; API server output from Electron-managed launches is written to `~/.local/state/codex-realtime-linux/api-server.log`.
 
@@ -102,7 +102,7 @@ The app starts Codex through `codex app-server` by default. If your standalone d
 CODEX_BIN=/absolute/path/to/codex
 ```
 
-The desktop app starts the local API server with `node` by default. If the app launches from an application menu with a narrower `PATH`, set the Node runtime explicitly:
+The desktop app starts the local API server through the Electron runtime by default. If you need to force a separate Node runtime, set it explicitly:
 
 ```bash
 CODEX_REALTIME_NODE_BIN=/absolute/path/to/node

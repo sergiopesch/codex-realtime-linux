@@ -16,7 +16,8 @@ if (process.platform === 'linux') {
 
 const apiPort = Number(process.env.PORT || 3311)
 const apiUrl = process.env.CODEX_DESKTOP_API_URL || `http://127.0.0.1:${apiPort}`
-const apiNodeBin = process.env.CODEX_REALTIME_NODE_BIN || 'node'
+const apiNodeBin = process.env.CODEX_REALTIME_NODE_BIN || process.execPath
+const apiNodeUsesElectronRuntime = !process.env.CODEX_REALTIME_NODE_BIN
 const repoRoot = path.join(__dirname, '..')
 const stateDir = path.join(process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local', 'state'), 'codex-realtime-linux')
 const apiLogPath = path.join(stateDir, 'api-server.log')
@@ -127,9 +128,15 @@ const ensureApiServer = async () => {
     return apiUrl
   } catch {
     apiLogFd = createApiLogFd()
+    const apiEnv = {
+      ...process.env,
+      PORT: String(apiPort),
+      NODE_ENV: process.env.NODE_ENV || 'production',
+      ...(apiNodeUsesElectronRuntime ? { ELECTRON_RUN_AS_NODE: '1' } : {}),
+    }
     apiProcess = spawn(apiNodeBin, ['server/index.mjs'], {
       cwd: repoRoot,
-      env: { ...process.env, PORT: String(apiPort), NODE_ENV: process.env.NODE_ENV || 'production' },
+      env: apiEnv,
       stdio: ['ignore', apiLogFd, apiLogFd],
     })
     apiProcess.once('error', (error) => {

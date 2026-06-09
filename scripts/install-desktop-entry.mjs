@@ -58,16 +58,25 @@ state_dir="\${XDG_STATE_HOME:-$home_dir/.local/state}/codex-realtime-linux"
 mkdir -p "$state_dir"
 exec >> "$state_dir/desktop-launch.log" 2>&1
 
-if [ ! -x ./node_modules/.bin/electron ]; then
+electron_bin="./node_modules/electron/dist/electron"
+if [ ! -x "$electron_bin" ]; then
+  electron_bin="./node_modules/.bin/electron"
+fi
+
+if [ ! -x "$electron_bin" ]; then
   echo "Electron is not installed. Run npm install in $repo_root."
   exit 1
 fi
 
 if [ ! -f ./dist/index.html ]; then
+  if ! command -v npm >/dev/null 2>&1; then
+    echo "Built renderer is missing and npm is not available. Run npm run build in $repo_root."
+    exit 1
+  fi
   npm run build
 fi
 
-exec env NODE_ENV=production ./node_modules/.bin/electron electron/main.cjs
+exec env NODE_ENV=production "$electron_bin" electron/main.cjs
 `,
 )
 await chmod(launcherPath, 0o755)
