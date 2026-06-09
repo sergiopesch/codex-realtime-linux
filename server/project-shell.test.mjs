@@ -51,6 +51,9 @@ test('renderer labels identity and voice context from runtime workspace state', 
     appSource,
     /const accountHandle = status\?\.realtimeUser\?\.name \|\| basenameFromWorkspacePath\(selectedWorkspace\) \|\| 'local'/,
   )
+  assert.match(appSource, /codexApprovalPolicy\?: string/)
+  assert.match(appSource, /<strong>Codex approvals<\/strong>/)
+  assert.match(appSource, /status\?\.codexApprovalPolicy \?\? 'Loading'/)
   assert.match(
     appSource,
     /const requestedWorkspacePath = normalizeAbsoluteLocalWorkspacePath\(targetWorkspacePath \?\? selectedWorkspace\)/,

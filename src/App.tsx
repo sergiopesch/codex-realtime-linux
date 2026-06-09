@@ -2684,6 +2684,13 @@ function App() {
               </div>
             </article>
             <article>
+              <ShieldCheck size={18} />
+              <div>
+                <strong>Codex approvals</strong>
+                <span>{status?.codexApprovalPolicy ?? 'Loading'}</span>
+              </div>
+            </article>
+            <article>
               <Database size={18} />
               <div>
                 <strong>USB monitor</strong>
