@@ -782,6 +782,7 @@ button:disabled {
 }
 
 .artifact-stage-building {
+  position: relative;
   grid-template-rows: 34px;
   width: min(460px, 100%);
   min-height: 34px;
@@ -802,7 +803,7 @@ button:disabled {
 
 .artifact-stage-building header {
   border-bottom: 0;
-  padding-right: 14px;
+  padding-right: 58px;
 }
 
 .artifact-stage header div {
@@ -905,6 +906,27 @@ button:disabled {
 
 .artifact-agents span:nth-child(3) {
   animation-delay: 240ms;
+}
+
+.artifact-stage-building .artifact-agents {
+  position: absolute;
+  top: 50%;
+  right: 16px;
+  display: flex;
+  min-height: 0;
+  gap: 5px;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.artifact-stage-building .artifact-agents span {
+  display: block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(134, 168, 200, 0.78);
+  box-shadow: none;
+  animation: agentBuild 1.15s ease-in-out infinite;
 }
 
 .transcript-panel {
