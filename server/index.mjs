@@ -1209,6 +1209,7 @@ function threadToConversation(thread) {
   const statusType = normalizeBoundedString(thread?.status?.type, 'ready', 40)
   const threadId = normalizeBoundedString(thread?.id, `codex-${updatedAt}`, MAX_CONVERSATION_ID_LENGTH)
   const workspacePath = normalizeBoundedString(normalizeWorkspacePath(thread?.cwd), '', MAX_CONVERSATION_TEXT_LENGTH)
+  const traces = [workspacePath ? `Workspace: ${workspacePath}` : '', statusType ? `Status: ${statusType}` : '']
 
   return {
     id: threadId,
@@ -1216,16 +1217,9 @@ function threadToConversation(thread) {
     age: 'codex',
     status,
     prompt: preview,
-    response: 'Persisted Codex app-server conversation. Build or voice controls can continue work from this workspace context.',
-    traces: normalizeStringList(
-      ['Loaded from Codex app-server', workspacePath ? `Workspace: ${workspacePath}` : 'Workspace: unavailable', `Status: ${statusType}`],
-      MAX_CONVERSATION_TRACES,
-      MAX_CONVERSATION_TRACE_LENGTH,
-    ),
-    transcript: [
-      { speaker: 'user', text: preview },
-      { speaker: 'codex', text: 'This thread is available from Codex app-server history.' },
-    ],
+    response: '',
+    traces: normalizeStringList(traces, MAX_CONVERSATION_TRACES, MAX_CONVERSATION_TRACE_LENGTH),
+    transcript: [],
     workspacePath,
     source: 'codex',
     codexThreadId: threadId,
