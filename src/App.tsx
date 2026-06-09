@@ -597,7 +597,16 @@ const completedCodexTurnWords = new Set(['complete', 'completed', 'done', 'finis
 const normalizeAbsoluteLocalWorkspacePath = (workspacePath: string) => {
   const trimmed = workspacePath.trim()
   if (!trimmed.startsWith('/')) return trimmed
-  return trimmed.replace(/\/+$/g, '') || '/'
+  const parts: string[] = []
+  for (const segment of trimmed.split('/')) {
+    if (!segment || segment === '.') continue
+    if (segment === '..') {
+      parts.pop()
+      continue
+    }
+    parts.push(segment)
+  }
+  return `/${parts.join('/')}`
 }
 const basenameFromWorkspacePath = (workspacePath: string) =>
   normalizeAbsoluteLocalWorkspacePath(workspacePath).split('/').filter(Boolean).at(-1) ?? ''
