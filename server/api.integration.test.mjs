@@ -1086,6 +1086,17 @@ test('server bounds persisted app state loaded from disk', async (t) => {
   ]
   const persistedConversations = [
     conversations[0],
+    {
+      id: 'current-empty-voice-draft',
+      title: 'Voice conversation 8',
+      status: 'draft',
+      source: 'local',
+      prompt: '',
+      response: '',
+      traces: [],
+      transcript: [],
+      codexThreadId: null,
+    },
     { title: 'Missing id should be ignored' },
     conversations[1],
     { ...conversations[1], title: 'Duplicate conversation 1' },
@@ -1138,15 +1149,57 @@ test('server bounds persisted app state loaded from disk', async (t) => {
   assert.equal(Object.keys(state.conversationsByWorkspace).length, 40)
   assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id].length, 80)
   assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id].some((conversation) => conversation.title === 'Voice conversation 7'), false)
+  assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id].some((conversation) => conversation.title === 'Voice conversation 8'), true)
   assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id].some((conversation) => conversation.title === 'Missing id should be ignored'), false)
-  assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id][0].title, 'Conversation 1')
+  assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id][0].title, 'Voice conversation 8')
   assert.equal(
     state.conversationsByWorkspace[manyWorkspaces[0].id].filter((conversation) => conversation.id === 'conversation-1').length,
     1,
   )
   assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id][0].workspacePath, manyWorkspaces[0].id)
-  assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id][0].transcript[0].text, 'hello')
+  assert.deepEqual(state.conversationsByWorkspace[manyWorkspaces[0].id][0].transcript, [])
+  assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id][1].transcript[0].text, 'hello')
   assert.equal(state.conversationsByWorkspace[emptyVoiceDraftWorkspace], undefined)
+})
+
+test('server preserves empty draft conversations when deleting one conversation', async (t) => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-empty-draft-delete-state-'))
+  t.after(() => rm(tempDir, { recursive: true, force: true }))
+  const statePath = path.join(tempDir, 'state.json')
+  const secretsPath = path.join(tempDir, 'secrets.json')
+  const workspacePath = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-empty-draft-delete-workspace-'))
+  t.after(() => rm(workspacePath, { recursive: true, force: true }))
+
+  await writeFile(
+    statePath,
+    JSON.stringify({
+      workspaces: [{ id: workspacePath, path: workspacePath, name: 'Draft delete workspace' }],
+      conversationsByWorkspace: {
+        [workspacePath]: [
+          { id: 'draft-1', title: 'Voice conversation 1', status: 'draft', source: 'local', prompt: '', response: '', traces: [], transcript: [] },
+          { id: 'draft-2', title: 'Voice conversation 2', status: 'draft', source: 'local', prompt: '', response: '', traces: [], transcript: [] },
+          { id: 'draft-3', title: 'Voice conversation 3', status: 'draft', source: 'local', prompt: '', response: '', traces: [], transcript: [] },
+        ],
+      },
+    }),
+  )
+
+  const { baseUrl } = await startTestServer(t, {
+    CODEX_REALTIME_STATE_PATH: statePath,
+    CODEX_REALTIME_SECRETS_PATH: secretsPath,
+  })
+
+  const response = await fetch(`${baseUrl}/api/app-state/conversations/delete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspacePath, conversationId: 'draft-2' }),
+  })
+  assert.equal(response.status, 200)
+  const body = await response.json()
+  assert.deepEqual(
+    body.state.conversationsByWorkspace[workspacePath].map((conversation) => conversation.id),
+    ['draft-1', 'draft-3'],
+  )
 })
 
 test('server returns normalized app state after mutations', async (t) => {

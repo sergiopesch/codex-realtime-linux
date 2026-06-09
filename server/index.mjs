@@ -1454,16 +1454,16 @@ function stripLegacyDraftScaffolding(conversation) {
   }
 }
 
-function isEmptyGeneratedVoiceDraft(conversation) {
+function isLegacyDraftScaffoldingInput(conversation) {
   return (
     conversation.source === 'local' &&
     conversation.status === 'draft' &&
     !conversation.codexThreadId &&
-    /^Voice conversation \d+$/i.test(conversation.title) &&
-    !conversation.prompt &&
-    !conversation.response &&
-    conversation.traces.length === 0 &&
-    conversation.transcript.length === 0
+    LEGACY_DRAFT_TITLE_PATTERN.test(normalizeString(conversation.title)) &&
+    conversation.prompt === LEGACY_DRAFT_PROMPT &&
+    conversation.response === LEGACY_DRAFT_RESPONSE &&
+    equalStringList(Array.isArray(conversation.traces) ? conversation.traces : [], LEGACY_DRAFT_TRACES) &&
+    equalTranscript(Array.isArray(conversation.transcript) ? conversation.transcript : [], LEGACY_DRAFT_TRANSCRIPT)
   )
 }
 
@@ -1508,9 +1508,9 @@ function normalizeAppState(input) {
       if (Array.isArray(conversations)) {
         const normalizedConversations = firstUniqueBy(
           conversations
+            .filter((conversation) => !isLegacyDraftScaffoldingInput(conversation))
             .map((conversation) => normalizeConversation(conversation, normalizedWorkspacePath))
-            .filter(Boolean)
-            .filter((conversation) => !isEmptyGeneratedVoiceDraft(conversation)),
+            .filter(Boolean),
           (conversation) => conversation.id,
         ).slice(0, MAX_LOCAL_CONVERSATIONS_PER_WORKSPACE)
         if (normalizedConversations.length > 0 || savedWorkspacePaths.has(normalizedWorkspacePath)) {
