@@ -75,6 +75,8 @@ test('artifact previews are served through workspace-scoped routes only', async 
   assert.match(serverSource, /Content-Security-Policy/)
   assert.match(serverSource, /frame-ancestors 'self'/)
   assert.match(serverSource, /object-src 'none'/)
+  assert.match(serverSource, /connect-src 'none'/)
+  assert.doesNotMatch(serverSource, /connect-src 'self'/)
   assert.match(serverSource, /Permissions-Policy/)
   assert.match(serverSource, /microphone=\(\)/)
   assert.match(serverSource, /X-Content-Type-Options/)

@@ -282,7 +282,7 @@ function setArtifactPreviewHeaders(res) {
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob:",
       "font-src 'self' data:",
-      "connect-src 'self' data: blob:",
+      "connect-src 'none'",
       "object-src 'none'",
       "base-uri 'none'",
       "form-action 'none'",

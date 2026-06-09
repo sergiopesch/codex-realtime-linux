@@ -129,6 +129,8 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   assert.match(preview.headers.get('permissions-policy') ?? '', /serial=\(\)/)
   assert.match(preview.headers.get('content-security-policy') ?? '', /frame-ancestors 'self'/)
   assert.match(preview.headers.get('content-security-policy') ?? '', /object-src 'none'/)
+  assert.match(preview.headers.get('content-security-policy') ?? '', /connect-src 'none'/)
+  assert.doesNotMatch(preview.headers.get('content-security-policy') ?? '', /connect-src 'self'/)
   assert.match(await preview.text(), /Sample report/)
 
   const traversal = await fetch(`${baseUrl}/workspace-artifacts/${token}/sample-report/..%2F..%2F..%2Fpackage.json`)
