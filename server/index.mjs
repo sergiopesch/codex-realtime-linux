@@ -328,6 +328,7 @@ function setArtifactPreviewHeaders(res) {
     'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), usb=(), serial=()',
     'Referrer-Policy': 'no-referrer',
     'X-Content-Type-Options': 'nosniff',
+    'Cache-Control': 'no-store',
   })
 }
 

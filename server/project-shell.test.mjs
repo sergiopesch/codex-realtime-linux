@@ -81,6 +81,7 @@ test('artifact previews are served through workspace-scoped routes only', async 
   assert.match(serverSource, /Permissions-Policy/)
   assert.match(serverSource, /microphone=\(\)/)
   assert.match(serverSource, /X-Content-Type-Options/)
+  assert.match(serverSource, /'Cache-Control': 'no-store'/)
   assert.match(serverSource, /\/workspace-artifacts/)
   assert.match(serverSource, /await requireWorkspaceDirectory\(workspaceFromToken\(token\), 'workspace token'\)/)
   assert.match(serverSource, /realpath\(artifactRoot\)/)

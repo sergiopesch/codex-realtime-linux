@@ -125,6 +125,7 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   assert.equal(preview.status, 200)
   assert.equal(preview.headers.get('x-content-type-options'), 'nosniff')
   assert.equal(preview.headers.get('referrer-policy'), 'no-referrer')
+  assert.equal(preview.headers.get('cache-control'), 'no-store')
   assert.match(preview.headers.get('permissions-policy') ?? '', /microphone=\(\)/)
   assert.match(preview.headers.get('permissions-policy') ?? '', /serial=\(\)/)
   assert.match(preview.headers.get('content-security-policy') ?? '', /frame-ancestors 'self'/)
