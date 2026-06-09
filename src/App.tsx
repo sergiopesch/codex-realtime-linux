@@ -488,6 +488,12 @@ const boundedRealtimeTranscriptId = (value: unknown) =>
 const boundedRealtimeTranscriptText = (value: unknown) =>
   boundedPlainString(value, '', MAX_REALTIME_TRANSCRIPT_TEXT_LENGTH)
 
+const realtimeTranscriptKeyPart = (value: unknown) => {
+  if (typeof value === 'string' && value.trim()) return value.trim()
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  return ''
+}
+
 const realtimeErrorMessage = (value: unknown, fallback: string) => {
   if (!value || typeof value !== 'object') return fallback
   const message = (value as UnknownRecord).message
@@ -824,46 +830,51 @@ function App() {
 
   const recordRealtimeTranscript = (message: Record<string, unknown>) => {
     const type = typeof message.type === 'string' ? message.type : ''
-    const itemId = typeof message.item_id === 'string'
-      ? message.item_id
-      : typeof message.response_id === 'string'
-        ? message.response_id
-        : typeof message.event_id === 'string'
-          ? message.event_id
-          : `${type}-${Date.now()}`
+    const item = message.item && typeof message.item === 'object' ? message.item as Record<string, unknown> : null
+    const itemId =
+      realtimeTranscriptKeyPart(message.item_id) ||
+      realtimeTranscriptKeyPart(item?.id) ||
+      realtimeTranscriptKeyPart(message.response_id) ||
+      realtimeTranscriptKeyPart(message.event_id) ||
+      `${type}-${Date.now()}`
+    const outputIndex = realtimeTranscriptKeyPart(message.output_index)
+    const contentIndex = realtimeTranscriptKeyPart(message.content_index)
+    const transcriptId = [itemId, outputIndex ? `output-${outputIndex}` : '', contentIndex ? `content-${contentIndex}` : '']
+      .filter(Boolean)
+      .join(':')
 
     if (type === 'conversation.item.input_audio_transcription.delta') {
-      updateTranscriptLine(`user-${itemId}`, 'user', typeof message.delta === 'string' ? message.delta : '', 'append', 'streaming')
+      updateTranscriptLine(`user-${transcriptId}`, 'user', typeof message.delta === 'string' ? message.delta : '', 'append', 'streaming')
       return
     }
 
     if (type === 'conversation.item.input_audio_transcription.completed') {
-      updateTranscriptLine(`user-${itemId}`, 'user', typeof message.transcript === 'string' ? message.transcript : '', 'replace', 'done')
+      updateTranscriptLine(`user-${transcriptId}`, 'user', typeof message.transcript === 'string' ? message.transcript : '', 'replace', 'done')
       return
     }
 
     if (type === 'conversation.item.input_audio_transcription.failed') {
-      updateTranscriptLine(`user-${itemId}`, 'user', realtimeErrorMessage(message.error, 'Input transcription failed'), 'replace', 'done')
+      updateTranscriptLine(`user-${transcriptId}`, 'user', realtimeErrorMessage(message.error, 'Input transcription failed'), 'replace', 'done')
       return
     }
 
     if (type === 'conversation.item.input_audio_transcription.segment') {
-      updateTranscriptLine(`user-${itemId}`, 'user', typeof message.text === 'string' ? message.text : '', 'replace', 'done')
+      updateTranscriptLine(`user-${transcriptId}`, 'user', typeof message.text === 'string' ? message.text : '', 'replace', 'done')
       return
     }
 
     if (type === 'response.output_audio_transcript.delta' || type === 'response.output_text.delta') {
-      updateTranscriptLine(`codex-${itemId}`, 'codex', typeof message.delta === 'string' ? message.delta : '', 'append', 'streaming')
+      updateTranscriptLine(`codex-${transcriptId}`, 'codex', typeof message.delta === 'string' ? message.delta : '', 'append', 'streaming')
       return
     }
 
     if (type === 'response.output_audio_transcript.done') {
-      updateTranscriptLine(`codex-${itemId}`, 'codex', typeof message.transcript === 'string' ? message.transcript : '', 'replace', 'done')
+      updateTranscriptLine(`codex-${transcriptId}`, 'codex', typeof message.transcript === 'string' ? message.transcript : '', 'replace', 'done')
       return
     }
 
     if (type === 'response.output_text.done') {
-      updateTranscriptLine(`codex-${itemId}`, 'codex', typeof message.text === 'string' ? message.text : '', 'replace', 'done')
+      updateTranscriptLine(`codex-${transcriptId}`, 'codex', typeof message.text === 'string' ? message.text : '', 'replace', 'done')
     }
   }
 
