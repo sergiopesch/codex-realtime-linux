@@ -275,6 +275,7 @@ const MAX_UI_USAGE_LABEL_LENGTH = 120
 const ARTIFACT_PREVIEW_SESSION_MS = 10 * 60 * 1000
 const MAX_SEEN_USB_EVENT_IDS = 240
 const MAX_VISUAL_CONTEXT_IMAGE_FILE_BYTES = 12 * 1024 * 1024
+const MAX_VISUAL_CONTEXT_DATA_URL_BYTES = 12 * 1024 * 1024
 const VISUAL_CONTEXT_CAPTURE_TIMEOUT_MS = 10_000
 const SUPPORTED_VISUAL_CONTEXT_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
 const ARDUINO_UPLOAD_ACTIONS = new Set<ArduinoUploadAction>([
@@ -408,6 +409,13 @@ const validateVisualContextImageFile = (file: File) => {
   if (!SUPPORTED_VISUAL_CONTEXT_IMAGE_TYPES.has(file.type.toLowerCase())) {
     throw new Error('Use a JPEG, PNG, WebP, or GIF image for visual context.')
   }
+}
+
+const validateVisualContextDataUrl = (dataUrl: string) => {
+  if (new TextEncoder().encode(dataUrl).byteLength > MAX_VISUAL_CONTEXT_DATA_URL_BYTES) {
+    throw new Error('Visual context image is too large after processing.')
+  }
+  return dataUrl
 }
 
 const api = async <T,>(path: string, init?: RequestInit, options?: { timeoutMs?: number }): Promise<T> => {
@@ -1100,7 +1108,7 @@ function App() {
     const context = canvas.getContext('2d')
     if (!context) throw new Error('Canvas is not available')
     context.drawImage(image, 0, 0, canvas.width, canvas.height)
-    return canvas.toDataURL('image/jpeg', 0.82)
+    return validateVisualContextDataUrl(canvas.toDataURL('image/jpeg', 0.82))
   }
 
   const dataUrlFromFile = async (file: File) => {
