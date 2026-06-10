@@ -560,6 +560,16 @@ export async function uploadArduinoSketch(
   }
   const fqbn = request.fqbn ?? detectedBoard?.fqbn ?? DEFAULT_FQBN
   const targetLabel = detectedBoard?.boardName ?? fqbn
+  const fallbackUploadPort =
+    SERIAL_BY_ID_PATTERN.test(port)
+      ? (
+          resolvedRequestedPortTarget && ports.includes(resolvedRequestedPortTarget)
+            ? resolvedRequestedPortTarget
+            : detectedPort && ports.includes(detectedPort)
+              ? detectedPort
+              : null
+        )
+      : null
 
   const sketchRoot = await mkdtemp(path.join(os.tmpdir(), 'codex-arduino-'))
   const sketchDir = path.join(sketchRoot, request.sketchName)
@@ -585,22 +595,47 @@ export async function uploadArduinoSketch(
     }
 
     let upload
+    let uploadPort = port
     try {
       upload = await run(['upload', '-p', port, '--fqbn', fqbn, sketchDir])
     } catch (error) {
-      throw commandPhaseError(error, 'upload', {
-        ...commandContext,
-        compile: {
-          stdout: limitDiagnosticString(compile.stdout ?? ''),
-          stderr: limitDiagnosticString(compile.stderr ?? ''),
-        },
-      })
+      const primaryUploadError = error
+      if (fallbackUploadPort && fallbackUploadPort !== port) {
+        try {
+          upload = await run(['upload', '-p', fallbackUploadPort, '--fqbn', fqbn, sketchDir])
+          uploadPort = fallbackUploadPort
+        } catch (fallbackError) {
+          throw commandPhaseError(fallbackError, 'upload', {
+            ...commandContext,
+            port: fallbackUploadPort,
+            attemptedPorts: [port, fallbackUploadPort],
+            primaryUploadError:
+              primaryUploadError instanceof ArduinoUploadError
+                ? primaryUploadError.details ?? primaryUploadError.message
+                : primaryUploadError instanceof Error
+                  ? primaryUploadError.message
+                  : String(primaryUploadError),
+            compile: {
+              stdout: limitDiagnosticString(compile.stdout ?? ''),
+              stderr: limitDiagnosticString(compile.stderr ?? ''),
+            },
+          })
+        }
+      } else {
+        throw commandPhaseError(error, 'upload', {
+          ...commandContext,
+          compile: {
+            stdout: limitDiagnosticString(compile.stdout ?? ''),
+            stderr: limitDiagnosticString(compile.stderr ?? ''),
+          },
+        })
+      }
     }
 
     return {
       action: request.action,
       fqbn,
-      port,
+      port: uploadPort,
       boardName: detectedBoard?.boardName ?? null,
       sketchName: request.sketchName,
       compile: {
@@ -610,13 +645,14 @@ export async function uploadArduinoSketch(
       upload: {
         stdout: limitDiagnosticString(upload.stdout),
         stderr: limitDiagnosticString(upload.stderr),
+        ...(uploadPort !== port ? { fallbackFromPort: port } : {}),
       },
       summary:
         request.action === 'onboard_led_on'
-          ? `Uploaded onboard LED on sketch to ${targetLabel} on ${port}.`
+          ? `Uploaded onboard LED on sketch to ${targetLabel} on ${uploadPort}.`
           : request.action === 'onboard_led_blink'
-            ? `Uploaded onboard LED blink sketch to ${targetLabel} on ${port}.`
-            : `Uploaded custom sketch to ${targetLabel} on ${port}.`,
+            ? `Uploaded onboard LED blink sketch to ${targetLabel} on ${uploadPort}.`
+            : `Uploaded custom sketch to ${targetLabel} on ${uploadPort}.`,
     }
   } finally {
     await rm(sketchRoot, { recursive: true, force: true })

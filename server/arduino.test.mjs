@@ -667,6 +667,77 @@ test('uploadArduinoSketch reports upload phase failures with compile diagnostics
   assert.deepEqual(commands.map((command) => command[0]), ['compile', 'upload'])
 })
 
+test('uploadArduinoSketch retries a stable by-id upload on the resolved tty target', async () => {
+  const commands = []
+  const run = async (args) => {
+    commands.push(args)
+    if (args[0] === 'upload' && args[2] === '/dev/serial/by-id/usb-Arduino_Uno-if00') {
+      throw new ArduinoUploadError('arduino-cli failed with exit code 1. Serial alias rejected.', {
+        code: 'arduino_cli_failed',
+        status: 502,
+        details: { stderr: 'port not found through by-id alias' },
+      })
+    }
+    return { stdout: `${args[0]} ok`, stderr: '' }
+  }
+
+  const result = await uploadArduinoSketch(
+    { action: 'onboard_led_blink' },
+    {
+      run,
+      listPorts: async () => ['/dev/serial/by-id/usb-Arduino_Uno-if00', '/dev/ttyACM0'],
+      listBoards: async () => [{ address: '/dev/ttyACM0', fqbn: 'arduino:avr:uno', boardName: 'Arduino Uno' }],
+    },
+  )
+
+  assert.equal(result.port, '/dev/ttyACM0')
+  assert.equal(result.upload.fallbackFromPort, '/dev/serial/by-id/usb-Arduino_Uno-if00')
+  assert.deepEqual(commands.map((command) => command[0]), ['compile', 'upload', 'upload'])
+  assert.deepEqual(commands[1].slice(0, 5), ['upload', '-p', '/dev/serial/by-id/usb-Arduino_Uno-if00', '--fqbn', 'arduino:avr:uno'])
+  assert.deepEqual(commands[2].slice(0, 5), ['upload', '-p', '/dev/ttyACM0', '--fqbn', 'arduino:avr:uno'])
+})
+
+test('uploadArduinoSketch reports both by-id and tty upload failures', async () => {
+  const run = async (args) => {
+    if (args[0] === 'upload' && args[2] === '/dev/serial/by-id/usb-Arduino_Nano-if00') {
+      throw new ArduinoUploadError('by-id upload failed', {
+        code: 'arduino_cli_failed',
+        status: 502,
+        details: { stderr: 'by-id unavailable' },
+      })
+    }
+    if (args[0] === 'upload') {
+      throw new ArduinoUploadError('tty upload failed', {
+        code: 'arduino_cli_failed',
+        status: 502,
+        details: { stderr: 'tty busy' },
+      })
+    }
+    return { stdout: 'compile ok', stderr: '' }
+  }
+
+  await assert.rejects(
+    () => uploadArduinoSketch(
+      { action: 'onboard_led_blink', port: '/dev/serial/by-id/usb-Arduino_Nano-if00' },
+      {
+        run,
+        listPorts: async () => ['/dev/serial/by-id/usb-Arduino_Nano-if00', '/dev/ttyUSB0'],
+        listBoards: async () => [{ address: '/dev/ttyUSB0', fqbn: 'arduino:avr:nano', boardName: 'Arduino Nano' }],
+        resolvePortAlias: async () => '/dev/ttyUSB0',
+      },
+    ),
+    (error) =>
+      error instanceof ArduinoUploadError &&
+      error.status === 502 &&
+      error.details.phase === 'upload' &&
+      error.details.port === '/dev/ttyUSB0' &&
+      error.details.attemptedPorts[0] === '/dev/serial/by-id/usb-Arduino_Nano-if00' &&
+      error.details.attemptedPorts[1] === '/dev/ttyUSB0' &&
+      error.details.primaryUploadError.stderr === 'by-id unavailable' &&
+      error.details.cause.stderr === 'tty busy',
+  )
+})
+
 test('uploadArduinoSketch uses detected board FQBN when no FQBN is supplied', async () => {
   const commands = []
   const run = async (args) => {

@@ -673,13 +673,59 @@ const conversationRowKey = (workspacePath: string, conversation: AgentConversati
     conversation.createdAt || conversation.updatedAt || index,
   ].join('::')
 
+const findConversationForDelete = (
+  conversations: AgentConversation[],
+  workspacePath: string,
+  conversationId: string,
+  conversationKey = '',
+  hiddenThreadIds = new Set<string>(),
+) => {
+  if (conversationKey) {
+    let visibleIndex = -1
+    const matched = conversations.find((conversation) => {
+      const hidden = hiddenCodexConversation(conversation, hiddenThreadIds)
+      if (!hidden) visibleIndex += 1
+      return !hidden && conversationRowKey(workspacePath, conversation, visibleIndex) === conversationKey
+    })
+    if (matched) return matched
+  }
+  return conversations.find((conversation) => conversation.id === conversationId) ?? null
+}
+
+const removeConversationForDelete = (
+  conversations: AgentConversation[],
+  workspacePath: string,
+  conversationId: string,
+  conversationKey = '',
+  hiddenThreadIds = new Set<string>(),
+) => {
+  if (conversationKey) {
+    let removedByKey = false
+    let visibleIndex = -1
+    const next = conversations.filter((conversation) => {
+      const hidden = hiddenCodexConversation(conversation, hiddenThreadIds)
+      if (!hidden) visibleIndex += 1
+      if (!removedByKey && !hidden && conversationRowKey(workspacePath, conversation, visibleIndex) === conversationKey) {
+        removedByKey = true
+        return false
+      }
+      return true
+    })
+    if (removedByKey) return next
+  }
+  return removeFirstConversationById(conversations, conversationId)
+}
+
 const conversationsAfterDelete = (
   existing: AgentConversation[],
   confirmedConversations: AgentConversation[],
+  workspacePath: string,
   conversationId: string,
+  conversationKey = '',
+  hiddenThreadIds = new Set<string>(),
 ) => {
   const confirmedIds = new Set(confirmedConversations.map((conversation) => conversation.id))
-  const retainedConversations = removeFirstConversationById(existing, conversationId).filter(
+  const retainedConversations = removeConversationForDelete(existing, workspacePath, conversationId, conversationKey, hiddenThreadIds).filter(
     (conversation) => !confirmedIds.has(conversation.id),
   )
   return [...confirmedConversations, ...retainedConversations].slice(0, MAX_UI_CONVERSATIONS_PER_WORKSPACE)
@@ -2086,12 +2132,13 @@ function App() {
     workspaceInputRef.current?.click()
   }
 
-  const deleteConversation = async (workspacePath: string, conversationId: string) => {
+  const deleteConversation = async (workspacePath: string, conversationId: string, conversationKey = '') => {
     const targetWorkspacePath = normalizeAbsoluteLocalWorkspacePath(workspacePath)
     if (!targetWorkspacePath || !conversationId) return
     const current = conversationsByWorkspaceRef.current[targetWorkspacePath] ?? conversationsByWorkspace[targetWorkspacePath] ?? []
-    const deleted = current.find((conversation) => conversation.id === conversationId)
-    const next = removeFirstConversationById(current, conversationId)
+    const hiddenThreadIds = new Set(hiddenCodexThreadIdsByWorkspace[targetWorkspacePath] ?? [])
+    const deleted = findConversationForDelete(current, targetWorkspacePath, conversationId, conversationKey, hiddenThreadIds)
+    const next = removeConversationForDelete(current, targetWorkspacePath, conversationId, conversationKey, hiddenThreadIds)
     if (!deleted) return
 
     try {
@@ -2125,10 +2172,24 @@ function App() {
         }
       }
 
-      const visibleConversationsAfterDelete = conversationsAfterDelete(current, confirmedConversations, conversationId)
+      const visibleConversationsAfterDelete = conversationsAfterDelete(
+        current,
+        confirmedConversations,
+        targetWorkspacePath,
+        conversationId,
+        conversationKey,
+        hiddenThreadIds,
+      )
       setConversationsByWorkspace((state) => ({
         ...state,
-        [targetWorkspacePath]: conversationsAfterDelete(state[targetWorkspacePath] ?? current, confirmedConversations, conversationId),
+        [targetWorkspacePath]: conversationsAfterDelete(
+          state[targetWorkspacePath] ?? current,
+          confirmedConversations,
+          targetWorkspacePath,
+          conversationId,
+          conversationKey,
+          hiddenThreadIds,
+        ),
       }))
       const transcriptTarget = voiceTranscriptTargetRef.current
       if (
@@ -3598,7 +3659,7 @@ function App() {
                               aria-label={`Delete ${conversation.title}`}
                               onClick={(event) => {
                                 event.stopPropagation()
-                                void deleteConversation(workspacePath, conversation.id)
+                                void deleteConversation(workspacePath, conversation.id, conversationRowKey(workspacePath, conversation, index))
                               }}
                             >
                               <Trash2 size={12} />
