@@ -361,6 +361,18 @@ const isAppShellNavigation = (url, appOrigin) => {
   }
 }
 
+const guardTopLevelNavigation = (event, url, appOrigin) => {
+  let sameAppOrigin = false
+  try {
+    sameAppOrigin = new URL(url).origin === appOrigin
+    if (isAppShellNavigation(url, appOrigin)) return
+  } catch {
+    // Invalid navigations are blocked below.
+  }
+  event.preventDefault()
+  if (!sameAppOrigin) openExternalIfAllowed(url)
+}
+
 const ensureApiServer = async () => {
   if (devServerUrl) return devServerUrl
 
@@ -436,17 +448,8 @@ const createWindow = async () => {
   try {
     const appUrl = await ensureApiServer()
     const appOrigin = new URL(appUrl).origin
-    win.webContents.on('will-navigate', (event, url) => {
-      let sameAppOrigin = false
-      try {
-        sameAppOrigin = new URL(url).origin === appOrigin
-        if (isAppShellNavigation(url, appOrigin)) return
-      } catch {
-        // Invalid navigations are blocked below.
-      }
-      event.preventDefault()
-      if (!sameAppOrigin) openExternalIfAllowed(url)
-    })
+    win.webContents.on('will-navigate', (event, url) => guardTopLevelNavigation(event, url, appOrigin))
+    win.webContents.on('will-redirect', (event, url) => guardTopLevelNavigation(event, url, appOrigin))
     await win.loadURL(appUrl)
   } catch (error) {
     await dialog.showMessageBox(win, {
