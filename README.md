@@ -234,13 +234,13 @@ Automated tests cover routing, persistence, preview policy, API guards, and buil
 5. Subagent activity: while Codex is working, confirm agent activity is subtle and local to the relevant selected workspace area of the app. It must not take over the full window or follow workspace navigation into unrelated contexts.
 6. Realtime voice and transcript: start voice with and without a selected thread, confirm the app binds the session to one local transcript thread, confirm the connecting state can be cancelled, speak, open the transcript, and verify both user and Codex transcript lines appear. Mute, unmute, and stop must work, user-initiated stop must show the normal stopped notice instead of a stale Realtime close error, GA `response.output_*` transcript events, compatible `response.audio_transcript.*`, `response.audio.transcript.*`, and `response.text.*` aliases, and final response payload fallbacks must not erase text that arrived as deltas, input transcription failures must appear as bounded transcript errors instead of an empty panel, switching threads during a live voice session must not move transcript saves to the newly selected thread, and reopening the bound thread must show the saved transcript when no live session transcript is active.
 7. Visual context: attach an image or share a screen frame while voice is active. Confirm the app reports context collection, sends the visual summary into the conversation, does not carry context captured during an ended voice session into a later session, and does not leave screen sharing stuck on.
-8. Weather: enter a real location in Settings or ask by voice, then confirm the result is live data for that location rather than a placeholder.
+8. Weather: enter a real location in Settings or ask by voice, then confirm the shared Settings weather result card updates with live data for that location rather than a placeholder.
 9. USB detection: with voice running, connect the board and run `curl "http://127.0.0.1:3311/api/usb/events?scan=true"`. The app should briefly acknowledge the detected board without pretending to read sketch or serial data.
 10. Arduino upload: run `curl -s http://127.0.0.1:3311/api/arduino/status`, confirm `arduino-cli` is available, then upload a safe onboard LED sketch with an explicit port if auto-detection is ambiguous. Verify the physical board LED changes as instructed.
 
 ## Weather Check
 
-Open `Settings` in the app, enter a location, and use `Get weather` to verify the feature in the UI.
+Open `Settings` in the app, enter a location, and use `Get weather` to verify the feature in the UI. A voice weather request updates the same Settings weather result card and clears stale loading or error state from earlier manual requests.
 Location queries are trimmed, internal whitespace-normalized, and bounded before the Open-Meteo lookup.
 
 You can also hit the local API directly after `npm run dev`:

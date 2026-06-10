@@ -2892,6 +2892,13 @@ function App() {
         const location = typeof payload.location === 'string' ? payload.location : ''
         const units = payload.units === 'imperial' || payload.units === 'metric' ? payload.units : weatherUnits
         const weather = await fetchWeather(location, units)
+        weatherRequestIdRef.current += 1
+        setWeatherLoading(false)
+        setWeatherError(null)
+        setWeatherUnits(units)
+        setWeatherLocationInput(weather.location.name)
+        setWeatherResult(weather)
+        setLastError(null)
         result = weather
         showNotice(weather.summary)
       }
@@ -2916,6 +2923,12 @@ function App() {
     } catch (error) {
       const message = displayErrorMessage(error, 'Realtime tool call failed')
       setLastError(message)
+      if (toolName === 'get_current_weather') {
+        weatherRequestIdRef.current += 1
+        setWeatherLoading(false)
+        setWeatherError(displayErrorMessage(error, 'Weather lookup failed'))
+        setWeatherResult(null)
+      }
       result = { error: message }
     }
 
