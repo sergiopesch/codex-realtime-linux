@@ -40,3 +40,19 @@ test('desktop installer writes launcher entry and icons under configured XDG dat
     true,
   )
 })
+
+test('desktop launcher validates configured state home before writing launch logs', async () => {
+  const launcherPath = path.join(repoRoot, 'scripts', 'launch-desktop.sh')
+  const syntax = spawnSync('bash', ['-n', launcherPath], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  })
+
+  assert.equal(syntax.status, 0, syntax.stderr || syntax.stdout)
+
+  const launcherSource = await readFile(launcherPath, 'utf8')
+  assert.match(launcherSource, /is_absolute_dir_without_control_chars\(\)/)
+  assert.match(launcherSource, /if ! is_absolute_dir_without_control_chars "\$xdg_state_home"; then/)
+  assert.equal(launcherSource.includes("*[$'\\001'-$'\\037'$'\\177']*"), true)
+  assert.doesNotMatch(launcherSource, /if \[ -z "\$xdg_state_home" \] \|\| \[ "\$\{xdg_state_home#\/\}" = "\$xdg_state_home" \]; then/)
+})

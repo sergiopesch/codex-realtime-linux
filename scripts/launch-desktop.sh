@@ -12,8 +12,19 @@ if [ -z "$home_dir" ]; then
   home_dir="$repo_root"
 fi
 
+is_absolute_dir_without_control_chars() {
+  local candidate="$1"
+  if [ -z "$candidate" ] || [ "${candidate#/}" = "$candidate" ]; then
+    return 1
+  fi
+  case "$candidate" in
+    *[$'\001'-$'\037'$'\177']*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
 xdg_state_home="${XDG_STATE_HOME:-}"
-if [ -z "$xdg_state_home" ] || [ "${xdg_state_home#/}" = "$xdg_state_home" ]; then
+if ! is_absolute_dir_without_control_chars "$xdg_state_home"; then
   xdg_state_home="$home_dir/.local/state"
 fi
 state_dir="$xdg_state_home/codex-realtime-linux"
