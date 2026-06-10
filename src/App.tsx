@@ -755,6 +755,25 @@ const resolvedRealtimeTranscriptText = (currentText: string, replacementText: st
   return replacement.length < current.length ? current : replacement
 }
 
+const REALTIME_ASSISTANT_TRANSCRIPT_DELTA_EVENTS = new Set([
+  'response.output_audio_transcript.delta',
+  'response.audio_transcript.delta',
+  'response.audio.transcript.delta',
+  'response.output_text.delta',
+  'response.text.delta',
+])
+
+const REALTIME_ASSISTANT_TRANSCRIPT_DONE_EVENTS = new Set([
+  'response.output_audio_transcript.done',
+  'response.audio_transcript.done',
+  'response.audio.transcript.done',
+])
+
+const REALTIME_ASSISTANT_TEXT_DONE_EVENTS = new Set([
+  'response.output_text.done',
+  'response.text.done',
+])
+
 const realtimeTranscriptKeyPart = (value: unknown) => {
   if (typeof value === 'string' && value.trim()) return value.trim()
   if (typeof value === 'number' && Number.isFinite(value)) return String(value)
@@ -1496,17 +1515,17 @@ function App() {
       return
     }
 
-    if (type === 'response.output_audio_transcript.delta' || type === 'response.output_text.delta') {
+    if (REALTIME_ASSISTANT_TRANSCRIPT_DELTA_EVENTS.has(type)) {
       updateTranscriptLine(`codex-${transcriptId}`, 'codex', typeof message.delta === 'string' ? message.delta : '', 'append', 'streaming')
       return
     }
 
-    if (type === 'response.output_audio_transcript.done') {
+    if (REALTIME_ASSISTANT_TRANSCRIPT_DONE_EVENTS.has(type)) {
       updateTranscriptLine(`codex-${transcriptId}`, 'codex', typeof message.transcript === 'string' ? message.transcript : '', 'replace', 'done')
       return
     }
 
-    if (type === 'response.output_text.done') {
+    if (REALTIME_ASSISTANT_TEXT_DONE_EVENTS.has(type)) {
       updateTranscriptLine(`codex-${transcriptId}`, 'codex', typeof message.text === 'string' ? message.text : '', 'replace', 'done')
       return
     }
