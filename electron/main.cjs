@@ -41,11 +41,11 @@ const configuredLocalHttpOrigin = (value, fallback) => {
 }
 const configuredAbsoluteDir = (value, fallback) => {
   const candidate = typeof value === 'string' && value.trim() ? value.trim() : fallback
-  return path.isAbsolute(candidate) ? path.resolve(candidate) : fallback
+  return path.isAbsolute(candidate) && !/[\u0000-\u001f\u007f]/.test(candidate) ? path.resolve(candidate) : fallback
 }
 const configuredAbsolutePath = (value, fallback) => {
   const candidate = typeof value === 'string' && value.trim() ? value.trim() : fallback
-  return path.isAbsolute(candidate) ? path.resolve(candidate) : fallback
+  return path.isAbsolute(candidate) && !/[\u0000-\u001f\u007f]/.test(candidate) ? path.resolve(candidate) : fallback
 }
 const apiPort = configuredPort(process.env.PORT)
 const apiUrl = configuredLocalHttpOrigin(process.env.CODEX_DESKTOP_API_URL, `http://127.0.0.1:${apiPort}`)

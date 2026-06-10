@@ -9,7 +9,7 @@ const appId = 'codex-realtime-linux'
 const desktopFileName = `${appId}.desktop`
 const configuredAbsoluteDir = (value, fallback) => {
   const candidate = typeof value === 'string' && value.trim() ? value.trim() : fallback
-  return path.isAbsolute(candidate) ? path.resolve(candidate) : fallback
+  return path.isAbsolute(candidate) && !/[\u0000-\u001f\u007f]/.test(candidate) ? path.resolve(candidate) : fallback
 }
 const xdgDataHome = configuredAbsoluteDir(process.env.XDG_DATA_HOME, path.join(os.homedir(), '.local', 'share'))
 const applicationsDir = path.join(xdgDataHome, 'applications')
