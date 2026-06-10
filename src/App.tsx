@@ -992,6 +992,9 @@ const displayErrorMessage = (error: unknown, fallback: string) => {
   return boundedPlainString(rawMessage, fallback, MAX_UI_ERROR_MESSAGE_LENGTH)
 }
 
+const isAbortError = (error: unknown) =>
+  error instanceof DOMException && error.name === 'AbortError'
+
 const displayNoticeMessage = (message: unknown) =>
   boundedPlainString(message, '', MAX_UI_NOTICE_LENGTH)
 
@@ -1912,20 +1915,22 @@ function App() {
     setStatus(await api<Status>('/api/status'))
   }
 
-  const fetchWeather = async (location: string, units: 'metric' | 'imperial' = weatherUnits) => {
+  const fetchWeather = async (location: string, units: 'metric' | 'imperial' = weatherUnits, signal?: AbortSignal) => {
     const weather = safeWeatherResponse(await api<unknown>('/api/weather/current', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal,
       body: JSON.stringify({ location, units }),
     }))
     if (!weather) throw new Error('Weather response did not include valid current conditions.')
     return weather
   }
 
-  const uploadArduinoSketch = async (payload: Record<string, unknown>) =>
+  const uploadArduinoSketch = async (payload: Record<string, unknown>, signal?: AbortSignal) =>
     api<ArduinoUploadResponse>('/api/arduino/upload', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal,
       body: JSON.stringify(payload),
     })
 
@@ -2864,6 +2869,20 @@ function App() {
       return
     }
 
+    const toolCallVoiceSessionId = voiceSessionIdRef.current
+    const toolCallAbortSignal = voiceAbortControllerRef.current?.signal
+    const toolCallStillCurrent = () =>
+      Boolean(
+        responseChannel &&
+          voiceSessionIdRef.current === toolCallVoiceSessionId &&
+          responseChannel === dataChannelRef.current &&
+          responseChannel.readyState === 'open' &&
+          !toolCallAbortSignal?.aborted,
+      )
+    const appendStaleToolCallEvent = () => {
+      appendEvent('realtime/function-call-stale-ignored', { name: toolName, callId })
+    }
+
     setActivity('Voice router', toolName || 'Tool call')
 
     const payload = normalizeRealtimeFunctionArguments(item.arguments)
@@ -2888,11 +2907,16 @@ function App() {
         const taskResult = await api<Record<string, unknown>>('/api/codex/task', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          signal: toolCallAbortSignal,
           body: JSON.stringify({
             cwd: workspacePath,
             goal,
           }),
         })
+        if (!toolCallStillCurrent()) {
+          appendStaleToolCallEvent()
+          return
+        }
         const taskThread = taskResult.thread && typeof taskResult.thread === 'object' && !Array.isArray(taskResult.thread)
           ? taskResult.thread as UnknownRecord
           : {}
@@ -2965,8 +2989,13 @@ function App() {
         result = await api('/api/codex/steer', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          signal: toolCallAbortSignal,
           body: JSON.stringify({ threadId: activeThreadIdRef.current, instruction }),
         })
+        if (!toolCallStillCurrent()) {
+          appendStaleToolCallEvent()
+          return
+        }
       } else if (toolName === 'codex_steer_task') {
         result = { error: 'No active Codex task is available to steer. Start a task first.' }
       }
@@ -2977,8 +3006,13 @@ function App() {
         result = await api('/api/codex/interrupt', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          signal: toolCallAbortSignal,
           body: JSON.stringify({ threadId: interruptedThreadId, turnId: activeTurnIdRef.current }),
         })
+        if (!toolCallStillCurrent()) {
+          appendStaleToolCallEvent()
+          return
+        }
         setActiveCodexTurn(interruptedThreadId, null)
         setPendingArtifact(null)
         markCodexConversationReady(interruptedThreadId)
@@ -2991,7 +3025,11 @@ function App() {
         setActivity('Voice router', 'Weather lookup')
         const location = typeof payload.location === 'string' ? payload.location : ''
         const units = payload.units === 'imperial' || payload.units === 'metric' ? payload.units : weatherUnits
-        const weather = await fetchWeather(location, units)
+        const weather = await fetchWeather(location, units, toolCallAbortSignal)
+        if (!toolCallStillCurrent()) {
+          appendStaleToolCallEvent()
+          return
+        }
         weatherRequestIdRef.current += 1
         setWeatherLoading(false)
         setWeatherError(null)
@@ -3014,13 +3052,21 @@ function App() {
           port: typeof payload.port === 'string' ? payload.port : undefined,
           fqbn: typeof payload.fqbn === 'string' ? payload.fqbn : undefined,
           sketch: typeof payload.sketch === 'string' ? payload.sketch : undefined,
-        })
+        }, toolCallAbortSignal)
+        if (!toolCallStillCurrent()) {
+          appendStaleToolCallEvent()
+          return
+        }
         const upload = result as ArduinoUploadResponse
         appendEvent('arduino/upload-completed', { action: upload.action, port: upload.port, fqbn: upload.fqbn })
         setActivity('Arduino upload', 'Sketch uploaded')
         showNotice(upload.summary)
       }
     } catch (error) {
+      if (!toolCallStillCurrent() || isAbortError(error)) {
+        appendStaleToolCallEvent()
+        return
+      }
       const message = displayErrorMessage(error, 'Realtime tool call failed')
       setLastError(message)
       if (toolName === 'get_current_weather') {
