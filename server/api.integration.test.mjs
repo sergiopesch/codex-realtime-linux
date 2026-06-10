@@ -1568,6 +1568,22 @@ test('realtime token route returns stable json errors when voice cannot start', 
     CODEX_USE_OPENAI_API_KEY: 'false',
   })
 
+  const formBody = await fetch(`${baseUrl}/api/realtime/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: 'unexpected=body',
+  })
+  assert.equal(formBody.status, 400)
+  assert.equal((await readJson(formBody)).code, 'body_not_allowed')
+
+  const jsonBody = await fetch(`${baseUrl}/api/realtime/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ unexpected: true }),
+  })
+  assert.equal(jsonBody.status, 400)
+  assert.equal((await readJson(jsonBody)).code, 'body_not_allowed')
+
   const missingKey = await fetch(`${baseUrl}/api/realtime/token`, {
     method: 'POST',
   })

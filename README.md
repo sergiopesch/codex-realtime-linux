@@ -158,7 +158,7 @@ REALTIME_PERSONA=
 OPENAI_SAFETY_IDENTIFIER=
 ```
 
-Realtime client-secret requests include an OpenAI safety identifier. If `OPENAI_SAFETY_IDENTIFIER` is unset, the server derives a stable anonymized value from this local installation instead of sending a fixed global identifier or the raw OS username.
+Realtime client-secret requests include an OpenAI safety identifier. If `OPENAI_SAFETY_IDENTIFIER` is unset, the server derives a stable anonymized value from this local installation instead of sending a fixed global identifier or the raw OS username. `/api/realtime/token` is a bodyless local POST endpoint; requests with form, JSON, or chunked bodies are rejected before token creation.
 
 The local API accepts app requests from the desktop origin and Vite dev origins only. To trust another local development origin, add it explicitly. Extra origins must be root `http://localhost`, `http://127.0.0.1`, or `http://[::1]` origins; non-loopback URLs, paths, credentials, query strings, and hashes are ignored. Allowed browser origins receive CORS response and preflight headers for `/api/*`; untrusted origins are rejected before they reach state, Codex, vision, weather, or hardware routes:
 

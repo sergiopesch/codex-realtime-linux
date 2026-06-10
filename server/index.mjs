@@ -181,6 +181,16 @@ function apiRouteRequiresJsonBody(req) {
   return true
 }
 
+function apiRouteRequiresEmptyBody(req) {
+  return req.method === 'POST' && req.path === '/api/realtime/token'
+}
+
+function requestHasBody(req) {
+  const contentLength = req.get('content-length')
+  if (contentLength && contentLength.trim() !== '0') return true
+  return Boolean(req.get('transfer-encoding'))
+}
+
 function configuredPort(value, fallback = DEFAULT_PORT) {
   const port = Number(value ?? fallback)
   return Number.isInteger(port) && port > 0 && port <= 65535 ? port : fallback
@@ -282,6 +292,11 @@ function guardLocalApiRequests(req, res, next) {
 
   if (req.method === 'OPTIONS') {
     res.status(204).end()
+    return
+  }
+
+  if (apiRouteRequiresEmptyBody(req) && requestHasBody(req)) {
+    res.status(400).json({ error: 'Request body is not accepted for this route.', code: 'body_not_allowed' })
     return
   }
 
