@@ -2790,6 +2790,10 @@ app.get(/^\/workspace-artifacts\/([^/]+)\/([^/]+)\/(.+)$/, async (req, res) => {
       res.status(404).send('Not found')
       return
     }
+    if (artifactIndexDetails.size > MAX_ARTIFACT_PREVIEW_FILE_BYTES) {
+      res.status(413).send('Artifact index file is too large')
+      return
+    }
     if (requestedDetails.size > MAX_ARTIFACT_PREVIEW_FILE_BYTES) {
       res.status(413).send('Artifact preview file is too large')
       return

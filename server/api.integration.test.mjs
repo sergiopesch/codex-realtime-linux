@@ -201,6 +201,7 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   await mkdir(oversizedIndexArtifactDir, { recursive: true })
   await writeFile(path.join(oversizedIndexArtifactDir, 'index.html'), '')
   await truncate(path.join(oversizedIndexArtifactDir, 'index.html'), 26 * 1024 * 1024)
+  await writeFile(path.join(oversizedIndexArtifactDir, 'notes.txt'), 'small asset inside invalid oversized artifact')
 
   const boundedArtifactList = await fetch(`${baseUrl}/api/artifacts?workspacePath=${encodeURIComponent(workspacePath)}`)
   assert.equal(boundedArtifactList.status, 200)
@@ -282,6 +283,10 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
 
   const oversizedIndexPreview = await fetch(`${baseUrl}/workspace-artifacts/${token}/oversized-index/index.html`)
   assert.equal(oversizedIndexPreview.status, 413)
+
+  const oversizedIndexAsset = await fetch(`${baseUrl}/workspace-artifacts/${token}/oversized-index/notes.txt`)
+  assert.equal(oversizedIndexAsset.status, 413)
+  assert.match(await oversizedIndexAsset.text(), /Artifact index file is too large/)
 
   const invalidToken = await fetch(`${baseUrl}/workspace-artifacts/not-a-workspace-token/sample-report/index.html`)
   assert.equal(invalidToken.status, 400)
