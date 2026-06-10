@@ -732,6 +732,21 @@ const conversationsAfterDelete = (
   return [...confirmedConversations, ...retainedConversations].slice(0, MAX_UI_CONVERSATIONS_PER_WORKSPACE)
 }
 
+const findConversationForSelection = (
+  conversations: AgentConversation[],
+  workspacePath: string,
+  conversationId: string,
+  conversationKey = '',
+) => {
+  if (conversationKey) {
+    const matched = conversations.find(
+      (conversation, index) => conversationRowKey(workspacePath, conversation, index) === conversationKey,
+    )
+    if (matched) return matched
+  }
+  return conversations.find((conversation) => conversation.id === conversationId) ?? null
+}
+
 const savedConversationPayload = (conversation: AgentConversation) => ({
   ...conversation,
   source: conversation.source === 'codex' ? 'codex' : 'local',
@@ -1256,6 +1271,7 @@ function App() {
   const [collapsedWorkspaces, setCollapsedWorkspaces] = useState<string[]>([])
   const [selectedWorkspace, setSelectedWorkspace] = useState(initialWorkspacePath)
   const [selectedConversationId, setSelectedConversationId] = useState('')
+  const [selectedConversationKey, setSelectedConversationKey] = useState('')
   const [activeSystemScreen, setActiveSystemScreen] = useState<SystemScreen | null>(null)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => mobileSidebarShouldCollapse())
   const [openAiApiKeyInput, setOpenAiApiKeyInput] = useState('')
@@ -1350,7 +1366,14 @@ function App() {
     return { workspace, workspacePath, conversations }
   })
   const selectedWorkspaceRoot = workspaceRoots.find(({ workspacePath }) => workspacePath === selectedWorkspace)
-  const selectedConversation = selectedWorkspaceRoot?.conversations.find((conversation) => conversation.id === selectedConversationId) ?? null
+  const selectedConversation = selectedWorkspaceRoot
+    ? findConversationForSelection(
+        selectedWorkspaceRoot.conversations,
+        selectedWorkspaceRoot.workspacePath,
+        selectedConversationId,
+        selectedConversationKey,
+      )
+    : null
   const savedTranscriptLines = (selectedConversation?.transcript ?? []).map((line, index) => ({
     id: `saved-${selectedWorkspace}-${selectedConversation?.id ?? 'conversation'}-${index}`,
     speaker: line.speaker,
@@ -1990,9 +2013,10 @@ function App() {
     }
   }
 
-  const openConversationWindow = (workspacePath: string, conversationId: string) => {
+  const openConversationWindow = (workspacePath: string, conversationId: string, conversationKey = '') => {
     setSelectedWorkspace(workspacePath)
     setSelectedConversationId(conversationId)
+    setSelectedConversationKey(conversationKey)
     setActiveSystemScreen(null)
     closeArtifactPreview()
     setNotice(null)
@@ -2047,12 +2071,13 @@ function App() {
     }
 
     const existing = conversationsByWorkspace[workspacePath] ?? []
-    const selectedConversation = existing.find((conversation) => conversation.id === selectedConversationId)
+    const selectedConversation = findConversationForSelection(existing, workspacePath, selectedConversationId, selectedConversationKey)
     if (selectedConversation) return { workspacePath, conversationId: selectedConversation.id }
 
     const created = await saveLocalDraftConversation(workspacePath, existing)
     setSelectedWorkspace(workspacePath)
     setSelectedConversationId(created.conversation.id)
+    setSelectedConversationKey('')
     setActiveSystemScreen(null)
     closeArtifactPreview()
     showNotice(`${created.title} opened as the voice transcript thread.`)
@@ -2095,6 +2120,7 @@ function App() {
       setCollapsedWorkspaces((current) => current.filter((item) => item !== savedWorkspacePath))
       setSelectedWorkspace(savedWorkspacePath)
       setSelectedConversationId('')
+      setSelectedConversationKey('')
       setActiveSystemScreen(null)
       closeArtifactPreview()
       showNotice(`${savedWorkspaceResponse?.name ?? name} added as a workspace. Create a new agent conversation when you are ready.`)
@@ -2210,21 +2236,25 @@ function App() {
         savedTranscriptSignatureRef.current = ''
       }
       const deletedWorkspaceWasSelected = sameWorkspacePath(selectedWorkspace, targetWorkspacePath)
-      const deletedActiveConversation = deletedWorkspaceWasSelected && selectedConversationId === conversationId
+      const deletedActiveConversation = deletedWorkspaceWasSelected && (
+        selectedConversationKey ? selectedConversationKey === conversationKey : selectedConversationId === conversationId
+      )
       const workspaceIsEmptyAfterDelete = visibleConversationsAfterDelete.length === 0
       if (deletedActiveConversation) {
         const fallback = visibleConversationsAfterDelete[0]
         if (fallback) {
-          openConversationWindow(targetWorkspacePath, fallback.id)
+          openConversationWindow(targetWorkspacePath, fallback.id, conversationRowKey(targetWorkspacePath, fallback, 0))
         } else {
           setSelectedWorkspace(targetWorkspacePath)
           setSelectedConversationId('')
+          setSelectedConversationKey('')
           setActiveSystemScreen(null)
           closeArtifactPreview()
         }
       } else if (deletedWorkspaceWasSelected && workspaceIsEmptyAfterDelete) {
         setSelectedWorkspace(targetWorkspacePath)
         setSelectedConversationId('')
+        setSelectedConversationKey('')
         setActiveSystemScreen(null)
         closeArtifactPreview()
       }
@@ -2259,12 +2289,15 @@ function App() {
 
       if (sameWorkspacePath(selectedWorkspace, targetWorkspacePath)) {
         if (nextWorkspace) {
+          const nextConversation = nextWorkspace.conversations[0] ?? null
           setSelectedWorkspace(nextWorkspace.workspacePath)
-          setSelectedConversationId(nextWorkspace.conversations[0]?.id ?? '')
+          setSelectedConversationId(nextConversation?.id ?? '')
+          setSelectedConversationKey(nextConversation ? conversationRowKey(nextWorkspace.workspacePath, nextConversation, 0) : '')
           setActiveSystemScreen(null)
         } else {
           setSelectedWorkspace('')
           setSelectedConversationId('')
+          setSelectedConversationKey('')
           setActiveSystemScreen(null)
         }
         closeArtifactPreview()
@@ -2276,17 +2309,18 @@ function App() {
   }
 
   const toggleWorkspace = (workspacePath: string) => {
-    const firstConversation =
-      conversationsByWorkspace[workspacePath]?.[0] ??
-      workspaceRoots.find((root) => root.workspacePath === workspacePath)?.conversations[0]
+    const workspaceRoot = workspaceRoots.find((root) => root.workspacePath === workspacePath)
+    const firstConversation = workspaceRoot?.conversations[0] ?? conversationsByWorkspace[workspacePath]?.[0] ?? null
 
     setSelectedWorkspace(workspacePath)
     setActiveSystemScreen(null)
     closeArtifactPreview()
     if (firstConversation) {
       setSelectedConversationId(firstConversation.id)
+      setSelectedConversationKey(conversationRowKey(workspacePath, firstConversation, 0))
     } else {
       setSelectedConversationId('')
+      setSelectedConversationKey('')
     }
     if (mobileSidebarShouldCollapse()) setSidebarCollapsed(true)
     setCollapsedWorkspaces((current) =>
@@ -2485,6 +2519,7 @@ function App() {
         })
         setSelectedWorkspace(preferredPath)
         setSelectedConversationId(firstConversation?.id ?? '')
+        setSelectedConversationKey(firstConversation && preferredPath ? conversationRowKey(preferredPath, firstConversation, 0) : '')
 
         if (shouldLoadCodexHistory) {
           api<CodexThreadsResponse>(
@@ -3655,21 +3690,26 @@ function App() {
                           </button>
                         </div>
                       ) : (
-                        conversations.map((conversation, index) => (
-                          <div
-                            className={
-                              sameWorkspacePath(selectedWorkspace, workspacePath) &&
-                                selectedConversationId === conversation.id &&
-                                !activeSystemScreen
-                                ? 'agent-thread-row active'
-                                : 'agent-thread-row'
-                            }
-                            key={conversationRowKey(workspacePath, conversation, index)}
-                          >
+                        conversations.map((conversation, index) => {
+                          const rowKey = conversationRowKey(workspacePath, conversation, index)
+                          const selectedRow = selectedConversationKey
+                            ? selectedConversationKey === rowKey
+                            : selectedConversationId === conversation.id
+                          return (
+                            <div
+                              className={
+                                sameWorkspacePath(selectedWorkspace, workspacePath) &&
+                                  selectedRow &&
+                                  !activeSystemScreen
+                                  ? 'agent-thread-row active'
+                                  : 'agent-thread-row'
+                              }
+                              key={rowKey}
+                            >
                             <button
                               type="button"
                               className="agent-thread-open"
-                              onClick={() => openConversationWindow(workspacePath, conversation.id)}
+                              onClick={() => openConversationWindow(workspacePath, conversation.id, rowKey)}
                               title={conversation.title}
                             >
                               <span>{briefThreadTitle(conversation.title)}</span>
@@ -3681,13 +3721,14 @@ function App() {
                               aria-label={`Delete ${conversation.title}`}
                               onClick={(event) => {
                                 event.stopPropagation()
-                                void deleteConversation(workspacePath, conversation.id, conversationRowKey(workspacePath, conversation, index))
+                                void deleteConversation(workspacePath, conversation.id, rowKey)
                               }}
                             >
                               <Trash2 size={12} />
                             </button>
-                          </div>
-                        ))
+                            </div>
+                          )
+                        })
                       )}
                     </div>
                   )}
