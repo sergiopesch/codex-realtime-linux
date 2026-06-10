@@ -3921,7 +3921,7 @@ function App() {
                     </div>
                   ) : artifactPreview ? (
                     <iframe
-                      key={artifactPreview.url}
+                      key={`${artifactPreview.url}::${artifactPreview.updatedAt}`}
                       src={artifactPreview.url}
                       title={artifactPreview.title}
                       sandbox="allow-scripts"
