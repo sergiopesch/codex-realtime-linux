@@ -1452,6 +1452,38 @@ test('server ignores oversized persisted app state and secrets files', async (t)
   assert.equal(status.openAiKeySource, 'missing')
 })
 
+test('server ignores malformed state and secrets path overrides', async (t) => {
+  const tempHome = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-malformed-path-home-'))
+  const workspacePath = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-malformed-path-workspace-'))
+  t.after(() => rm(tempHome, { recursive: true, force: true }))
+  t.after(() => rm(workspacePath, { recursive: true, force: true }))
+  const malformedStatePath = path.join(tempHome, 'state\ninvalid.json')
+  const malformedSecretsPath = path.join(tempHome, 'secrets\rinvalid.json')
+  const defaultStatePath = path.join(tempHome, '.local', 'state', 'codex-realtime-linux', 'app-state.json')
+  const defaultSecretsPath = path.join(tempHome, '.config', 'codex-realtime-linux', 'secrets.json')
+
+  const { baseUrl } = await startTestServer(t, {
+    HOME: tempHome,
+    CODEX_REALTIME_STATE_PATH: malformedStatePath,
+    CODEX_REALTIME_SECRETS_PATH: malformedSecretsPath,
+  })
+
+  const workspaceSave = await fetch(`${baseUrl}/api/app-state/workspaces`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspace: { path: workspacePath } }),
+  })
+  assert.equal(workspaceSave.status, 200)
+
+  const keyDelete = await fetch(`${baseUrl}/api/settings/openai-key`, { method: 'DELETE' })
+  assert.equal(keyDelete.status, 200)
+
+  assert.equal((await stat(defaultStatePath)).isFile(), true)
+  assert.equal((await stat(defaultSecretsPath)).isFile(), true)
+  await assert.rejects(() => stat(malformedStatePath), { code: 'ENOENT' })
+  await assert.rejects(() => stat(malformedSecretsPath), { code: 'ENOENT' })
+})
+
 test('server recovers app state from backup before mutating state', async (t) => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-state-backup-'))
   t.after(() => rm(tempDir, { recursive: true, force: true }))

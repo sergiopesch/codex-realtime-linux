@@ -401,6 +401,7 @@ test('renderer normalizes usage data before rendering charts', async () => {
 
 test('persisted workspaces and conversations require absolute workspace paths', async () => {
   const serverSource = await readFile(path.join(repoRoot, 'server', 'index.mjs'), 'utf8')
+  const configuredAbsolutePathSource = /function configuredAbsolutePath\(value, fallback\) \{[\s\S]*?\n\}/.exec(serverSource)?.[0] ?? ''
 
   assert.match(serverSource, /function httpError/)
   assert.match(serverSource, /function sendJsonError/)
@@ -414,8 +415,10 @@ test('persisted workspaces and conversations require absolute workspace paths', 
   assert.match(serverSource, /const STATE_PATH = configuredAbsolutePath\(process\.env\.CODEX_REALTIME_STATE_PATH, DEFAULT_STATE_PATH\)/)
   assert.match(serverSource, /const SECRETS_PATH = configuredAbsolutePath\(process\.env\.CODEX_REALTIME_SECRETS_PATH, DEFAULT_SECRETS_PATH\)/)
   assert.match(serverSource, /const STATE_BACKUP_PATH = `\$\{STATE_PATH\}\.bak`/)
+  assert.match(serverSource, /const MAX_CONFIGURED_PATH_LENGTH = 1_000/)
   assert.match(serverSource, /function configuredAbsolutePath\(value, fallback\)/)
-  assert.match(serverSource, /path\.isAbsolute\(candidate\) \? path\.resolve\(candidate\) : fallback/)
+  assert.match(configuredAbsolutePathSource, /path\.isAbsolute\(candidate\) &&[\s\S]*candidate\.length <= MAX_CONFIGURED_PATH_LENGTH &&[\s\S]*!\/\[\\u0000-\\u001f\\u007f\]\/\.test\(candidate\)/)
+  assert.doesNotMatch(configuredAbsolutePathSource, /path\.isAbsolute\(candidate\) \? path\.resolve\(candidate\) : fallback/)
   assert.match(serverSource, /import \{ createHash, randomUUID \} from 'node:crypto'/)
   assert.match(serverSource, /function isPlausibleOpenAiApiKey\(value\)/)
   assert.match(serverSource, /apiKey\.startsWith\('sk-'\) && apiKey\.length <= MAX_OPENAI_API_KEY_LENGTH/)
@@ -1609,6 +1612,9 @@ test('README documents live release verification for non-automated capabilities'
   assert.match(readme, /state directory is tightened to `0700`/)
   assert.match(readme, /Writes go through a temp file, file sync, and atomic rename/)
   assert.match(readme, /writes are synced before atomic rename/)
+  assert.match(readme, /Relative, overlong, or control-character state paths are ignored/)
+  assert.match(readme, /Relative, overlong, or control-character secret paths are ignored/)
+  assert.match(readme, /overrides must be absolute paths without control characters and within the configured path length cap/)
   assert.match(readme, /Settings responses do not expose the absolute secrets file path/)
   assert.match(readme, /before they can touch state, Settings, vision, weather, Codex, or Arduino hardware/)
   assert.match(readme, /single-chat deletes are reconciled against the clicked sidebar row so legacy duplicate IDs cannot clear the rest of a workspace/)
