@@ -664,6 +664,9 @@ const sameWorkspacePath = (left: string, right: string) =>
 const codexConversationThreadId = (conversation: AgentConversation) =>
   conversation.codexThreadId || conversation.id
 
+const conversationMatchesCodexThread = (conversation: AgentConversation, threadId: string) =>
+  conversation.source === 'codex' && codexConversationThreadId(conversation) === threadId
+
 const hiddenCodexConversation = (conversation: AgentConversation, hiddenThreadIds: Set<string>) =>
   conversation.source === 'codex' && hiddenThreadIds.has(codexConversationThreadId(conversation))
 
@@ -762,6 +765,28 @@ const conversationSelectionKey = (
   }
   const fallbackIndex = conversations.findIndex((conversation) => conversation.id === conversationId)
   return fallbackIndex === -1 ? '' : conversationRowKey(workspacePath, conversations[fallbackIndex], fallbackIndex)
+}
+
+const findCodexConversationForThread = (
+  conversationsByWorkspace: Record<string, AgentConversation[]>,
+  threadId: string,
+  preferredWorkspacePath = '',
+) => {
+  const entries = preferredWorkspacePath
+    ? [[preferredWorkspacePath, conversationsByWorkspace[preferredWorkspacePath] ?? []] as const]
+    : Object.entries(conversationsByWorkspace)
+  for (const [workspacePath, conversations] of entries) {
+    const index = conversations.findIndex((conversation) => conversationMatchesCodexThread(conversation, threadId))
+    if (index !== -1) {
+      return {
+        workspacePath,
+        conversation: conversations[index],
+        conversationKey: conversationRowKey(workspacePath, conversations[index], index),
+      }
+    }
+  }
+  if (preferredWorkspacePath) return findCodexConversationForThread(conversationsByWorkspace, threadId)
+  return null
 }
 
 const savedConversationPayload = (conversation: AgentConversation) => ({
@@ -1464,24 +1489,28 @@ function App() {
   const markCodexConversationReady = useCallback((threadId: string | null) => {
     if (!threadId) return
     const updatedAt = new Date().toISOString()
-    const workspacePath =
-      activeCodexWorkspaceRef.current ||
-      Object.entries(conversationsByWorkspaceRef.current).find(([, conversations]) =>
-        conversations.some((conversation) => conversation.id === threadId),
-      )?.[0] ||
-      ''
-    if (workspacePath) {
+    const target = findCodexConversationForThread(
+      conversationsByWorkspaceRef.current,
+      threadId,
+      activeCodexWorkspaceRef.current || '',
+    )
+    if (target) {
+      const { workspacePath, conversation, conversationKey } = target
       void api<{ conversation: AgentConversation }>('/api/app-state/conversations', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workspacePath, conversationId: threadId, patch: { status: 'ready' } }),
+        body: JSON.stringify({ workspacePath, conversationId: conversation.id, conversationKey, patch: { status: 'ready' } }),
       })
         .then((savedConversation) => {
           const conversation = requireSafeConversation(savedConversation.conversation, workspacePath)
-          setConversationsByWorkspace((current) => ({
-            ...current,
-            [workspacePath]: mergeConversations(current[workspacePath] ?? [], [conversation]),
-          }))
+          setConversationsByWorkspace((current) => {
+            const conversations = current[workspacePath] ?? []
+            const index = conversations.findIndex((item, itemIndex) => conversationRowKey(workspacePath, item, itemIndex) === conversationKey)
+            if (index === -1) return current
+            const next = [...conversations]
+            next[index] = conversation
+            return { ...current, [workspacePath]: next }
+          })
         })
         .catch((error: unknown) => {
           setEvents((current) =>
@@ -1492,28 +1521,28 @@ function App() {
             }]),
           )
         })
+      setConversationsByWorkspace((current) => {
+        const conversations = current[workspacePath] ?? []
+        const index = conversations.findIndex((conversation, itemIndex) => conversationRowKey(workspacePath, conversation, itemIndex) === conversationKey)
+        if (index === -1) return current
+        const next = [...conversations]
+        next[index] = { ...next[index], status: 'ready', updatedAt }
+        return { ...current, [workspacePath]: next }
+      })
+      return
     }
-    setConversationsByWorkspace((current) => {
-      if (workspacePath) {
-        return {
-          ...current,
-          [workspacePath]: (current[workspacePath] ?? []).map((conversation) =>
-            conversation.id === threadId
-              ? { ...conversation, status: 'ready', updatedAt }
-              : conversation,
-          ),
-        }
-      }
 
-      const next = { ...current }
-      for (const [workspacePath, conversations] of Object.entries(next)) {
-        next[workspacePath] = conversations.map((conversation) =>
-          conversation.id === threadId
-            ? { ...conversation, status: 'ready', updatedAt }
-            : conversation,
-        )
-      }
-      return next
+    setConversationsByWorkspace((current) => {
+      const fallbackTarget = findCodexConversationForThread(current, threadId, activeCodexWorkspaceRef.current || '')
+      if (!fallbackTarget) return current
+      const conversations = current[fallbackTarget.workspacePath] ?? []
+      const index = conversations.findIndex((conversation, itemIndex) =>
+        conversationRowKey(fallbackTarget.workspacePath, conversation, itemIndex) === fallbackTarget.conversationKey,
+      )
+      if (index === -1) return current
+      const next = [...conversations]
+      next[index] = { ...next[index], status: 'ready', updatedAt }
+      return { ...current, [fallbackTarget.workspacePath]: next }
     })
   }, [])
 
