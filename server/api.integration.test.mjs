@@ -1253,7 +1253,13 @@ test('server bounds persisted app state loaded from disk', async (t) => {
   assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id][0].title, 'Voice conversation 8')
   assert.equal(
     state.conversationsByWorkspace[manyWorkspaces[0].id].filter((conversation) => conversation.id === 'conversation-1').length,
-    1,
+    2,
+  )
+  assert.deepEqual(
+    state.conversationsByWorkspace[manyWorkspaces[0].id]
+      .filter((conversation) => conversation.id === 'conversation-1')
+      .map((conversation) => conversation.title),
+    ['Conversation 1', 'Duplicate conversation 1'],
   )
   assert.equal(state.conversationsByWorkspace[manyWorkspaces[0].id][0].workspacePath, manyWorkspaces[0].id)
   assert.deepEqual(state.conversationsByWorkspace[manyWorkspaces[0].id][0].transcript, [])
@@ -1298,6 +1304,65 @@ test('server preserves empty draft conversations when deleting one conversation'
   assert.deepEqual(
     body.state.conversationsByWorkspace[workspacePath].map((conversation) => conversation.id),
     ['draft-1', 'draft-3'],
+  )
+})
+
+test('server deletes only the clicked legacy duplicate conversation row', async (t) => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-duplicate-delete-'))
+  t.after(() => rm(tempDir, { recursive: true, force: true }))
+  const statePath = path.join(tempDir, 'state.json')
+  const secretsPath = path.join(tempDir, 'secrets.json')
+  const workspacePath = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-duplicate-workspace-'))
+  t.after(() => rm(workspacePath, { recursive: true, force: true }))
+  const duplicateRows = [
+    { id: 'legacy-duplicate', title: 'Keep first', createdAt: '2026-06-08T09:00:00.000Z' },
+    { id: 'legacy-duplicate', title: 'Delete middle', createdAt: '2026-06-08T10:00:00.000Z' },
+    { id: 'legacy-duplicate', title: 'Keep third', createdAt: '2026-06-08T11:00:00.000Z' },
+  ].map((conversation) => ({
+    ...conversation,
+    status: 'draft',
+    source: 'local',
+    prompt: '',
+    response: '',
+    traces: [],
+    transcript: [],
+  }))
+
+  await writeFile(
+    statePath,
+    JSON.stringify({
+      workspaces: [{ id: workspacePath, path: workspacePath, name: 'Duplicate delete workspace' }],
+      conversationsByWorkspace: {
+        [workspacePath]: duplicateRows,
+      },
+    }),
+  )
+
+  const { baseUrl } = await startTestServer(t, {
+    CODEX_REALTIME_STATE_PATH: statePath,
+    CODEX_REALTIME_SECRETS_PATH: secretsPath,
+  })
+
+  const loadedState = await (await fetch(`${baseUrl}/api/app-state`)).json()
+  assert.deepEqual(
+    loadedState.conversationsByWorkspace[workspacePath].map((conversation) => conversation.title),
+    ['Keep first', 'Delete middle', 'Keep third'],
+  )
+
+  const response = await fetch(`${baseUrl}/api/app-state/conversations/delete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      workspacePath,
+      conversationId: 'legacy-duplicate',
+      conversationKey: [workspacePath, 'legacy-duplicate', '2026-06-08T10:00:00.000Z', 1].join('::'),
+    }),
+  })
+  assert.equal(response.status, 200)
+  const body = await response.json()
+  assert.deepEqual(
+    body.state.conversationsByWorkspace[workspacePath].map((conversation) => conversation.title),
+    ['Keep first', 'Keep third'],
   )
 })
 

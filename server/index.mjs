@@ -72,6 +72,7 @@ const MAX_CONVERSATION_TRACE_LENGTH = 500
 const MAX_CONVERSATION_TRACES = 40
 const MAX_CONVERSATION_TRANSCRIPT_LINES = 200
 const MAX_CONVERSATION_TIMESTAMP_LENGTH = 80
+const MAX_CONVERSATION_DELETE_KEY_LENGTH = 2_000
 const MAX_LOCAL_WORKSPACES = 40
 const MAX_LOCAL_HIDDEN_WORKSPACES = 80
 const MAX_LOCAL_WORKSPACE_BUCKETS = 40
@@ -1562,6 +1563,25 @@ function normalizeConversation(input, workspacePath) {
   })
 }
 
+function conversationDeleteKey(workspacePath, conversation, index) {
+  return [
+    normalizeWorkspacePath(workspacePath) || workspacePath,
+    conversation.id,
+    conversation.createdAt || conversation.updatedAt || '',
+    index,
+  ].join('::')
+}
+
+function conversationDeleteIndex(conversations, workspacePath, conversationId, conversationKey = '') {
+  if (conversationKey) {
+    const matchedIndex = conversations.findIndex(
+      (conversation, index) => conversationDeleteKey(workspacePath, conversation, index) === conversationKey,
+    )
+    if (matchedIndex !== -1) return matchedIndex
+  }
+  return conversations.findIndex((conversation) => conversation.id === conversationId)
+}
+
 function normalizeAppState(input) {
   const state = emptyAppState()
   state.workspaces = Array.isArray(input?.workspaces)
@@ -1585,13 +1605,18 @@ function normalizeAppState(input) {
       const normalizedWorkspacePath = normalizeWorkspacePath(workspacePath)
       if (!normalizedWorkspacePath || state.conversationsByWorkspace[normalizedWorkspacePath]) continue
       if (Array.isArray(conversations)) {
-        const normalizedConversations = firstUniqueBy(
-          conversations
-            .filter((conversation) => !isLegacyDraftScaffoldingInput(conversation))
-            .map((conversation) => normalizeConversation(conversation, normalizedWorkspacePath))
-            .filter(Boolean),
-          (conversation) => conversation.id,
-        ).slice(0, MAX_LOCAL_CONVERSATIONS_PER_WORKSPACE)
+        const seenConversationKeys = new Set()
+        const normalizedConversations = conversations
+          .filter((conversation) => !isLegacyDraftScaffoldingInput(conversation))
+          .map((conversation) => normalizeConversation(conversation, normalizedWorkspacePath))
+          .filter(Boolean)
+          .filter((conversation, index) => {
+            const key = conversationDeleteKey(normalizedWorkspacePath, conversation, index)
+            if (seenConversationKeys.has(key)) return false
+            seenConversationKeys.add(key)
+            return true
+          })
+          .slice(0, MAX_LOCAL_CONVERSATIONS_PER_WORKSPACE)
         if (
           normalizedConversations.length > 0 ||
           savedWorkspacePaths.has(normalizedWorkspacePath) ||
@@ -2560,6 +2585,8 @@ app.post('/api/app-state/conversations/delete', async (req, res) => {
     return
   }
   const conversationId = normalizeString(body.conversationId)
+  const rawConversationKey = normalizeString(body.conversationKey)
+  const conversationKey = rawConversationKey.length <= MAX_CONVERSATION_DELETE_KEY_LENGTH ? rawConversationKey : ''
   if (!conversationId) {
     sendJsonError(
       res,
@@ -2583,7 +2610,7 @@ app.post('/api/app-state/conversations/delete', async (req, res) => {
   try {
     const { state } = await mutateAppState(async (state) => {
       const conversations = state.conversationsByWorkspace[workspacePath] ?? []
-      const index = conversations.findIndex((conversation) => conversation.id === conversationId)
+      const index = conversationDeleteIndex(conversations, workspacePath, conversationId, conversationKey)
       if (index === -1) {
         throw httpError('conversationId was not found in this workspace', {
           statusCode: 404,

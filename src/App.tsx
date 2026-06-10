@@ -670,7 +670,8 @@ const conversationRowKey = (workspacePath: string, conversation: AgentConversati
   [
     normalizeAbsoluteLocalWorkspacePath(workspacePath) || workspacePath,
     conversation.id,
-    conversation.createdAt || conversation.updatedAt || index,
+    conversation.createdAt || conversation.updatedAt || '',
+    index,
   ].join('::')
 
 const findConversationForDelete = (
@@ -724,9 +725,9 @@ const conversationsAfterDelete = (
   conversationKey = '',
   hiddenThreadIds = new Set<string>(),
 ) => {
-  const confirmedIds = new Set(confirmedConversations.map((conversation) => conversation.id))
+  const confirmedKeys = new Set(confirmedConversations.map((conversation, index) => conversationRowKey(workspacePath, conversation, index)))
   const retainedConversations = removeConversationForDelete(existing, workspacePath, conversationId, conversationKey, hiddenThreadIds).filter(
-    (conversation) => !confirmedIds.has(conversation.id),
+    (conversation, index) => !confirmedKeys.has(conversationRowKey(workspacePath, conversation, index)),
   )
   return [...confirmedConversations, ...retainedConversations].slice(0, MAX_UI_CONVERSATIONS_PER_WORKSPACE)
 }
@@ -1073,7 +1074,15 @@ const safeConversationsByWorkspace = (value: unknown) => {
       .map((conversation) => safeConversation(conversation, workspacePath))
       .filter((conversation): conversation is AgentConversation => Boolean(conversation))
     if (conversations.length > 0 || rawConversations.length === 0) {
-      groups[workspacePath] = mergeConversations([], conversations)
+      const seen = new Set<string>()
+      groups[workspacePath] = conversations
+        .filter((conversation, index) => {
+          const key = conversationRowKey(workspacePath, conversation, index)
+          if (seen.has(key)) return false
+          seen.add(key)
+          return true
+        })
+        .slice(0, MAX_UI_CONVERSATIONS_PER_WORKSPACE)
       normalizedWorkspaceBuckets += 1
       if (normalizedWorkspaceBuckets >= MAX_UI_WORKSPACE_BUCKETS) break
     }
@@ -2158,7 +2167,7 @@ function App() {
           const deleteResult = await api<{ state: AppStateResponse }>('/api/app-state/conversations/delete', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ workspacePath: targetWorkspacePath, conversationId }),
+            body: JSON.stringify({ workspacePath: targetWorkspacePath, conversationId, conversationKey }),
           })
           const confirmedConversationState = safeConversationsByWorkspace(deleteResult.state.conversationsByWorkspace)
           serverConfirmedWorkspace = Object.prototype.hasOwnProperty.call(confirmedConversationState, targetWorkspacePath)

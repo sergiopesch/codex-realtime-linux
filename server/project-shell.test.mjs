@@ -561,7 +561,12 @@ test('persisted workspaces and conversations require absolute workspace paths', 
   assert.match(serverSource, /if \(normalizedWorkspaceBuckets >= MAX_LOCAL_WORKSPACE_BUCKETS\) break/)
   assert.match(serverSource, /if \(!normalizedWorkspacePath \|\| state\.conversationsByWorkspace\[normalizedWorkspacePath\]\) continue/)
   assert.match(serverSource, /normalizedWorkspaceBuckets \+= 1/)
-  assert.match(serverSource, /firstUniqueBy\([\s\S]*\(conversation\) => conversation\.id,[\s\S]*\)\.slice\(0, MAX_LOCAL_CONVERSATIONS_PER_WORKSPACE\)/)
+  assert.match(serverSource, /const MAX_CONVERSATION_DELETE_KEY_LENGTH = 2_000/)
+  assert.match(serverSource, /function conversationDeleteKey\(workspacePath, conversation, index\)/)
+  assert.match(serverSource, /conversation\.createdAt \|\| conversation\.updatedAt \|\| '',\s+index/)
+  assert.match(serverSource, /const seenConversationKeys = new Set\(\)/)
+  assert.match(serverSource, /const key = conversationDeleteKey\(normalizedWorkspacePath, conversation, index\)/)
+  assert.doesNotMatch(serverSource, /firstUniqueBy\([\s\S]*\(conversation\) => conversation\.id,[\s\S]*\)\.slice\(0, MAX_LOCAL_CONVERSATIONS_PER_WORKSPACE\)/)
   assert.match(serverSource, /\.filter\(\(conversation\) => !isLegacyDraftScaffoldingInput\(conversation\)\)\s+\.map\(\(conversation\) => normalizeConversation\(conversation, normalizedWorkspacePath\)\)\s+\.filter\(Boolean\)/)
   assert.match(serverSource, /patch = body\.patch == null \? \{\} : requireObjectField\(body\.patch, 'patch'\)/)
   assert.match(serverSource, /next\[index\] = normalizeConversation\(\{[\s\S]*\.\.\.conversations\[index\],[\s\S]*\.\.\.patch,[\s\S]*id: conversations\[index\]\.id,[\s\S]*workspacePath,[\s\S]*updatedAt: new Date\(\)\.toISOString\(\),[\s\S]*\}, workspacePath\)/)
@@ -597,8 +602,9 @@ test('persisted workspaces and conversations require absolute workspace paths', 
   )
   assert.match(
     serverSource,
-    /app\.post\('\/api\/app-state\/conversations\/delete'[\s\S]*const index = conversations\.findIndex\(\(conversation\) => conversation\.id === conversationId\)[\s\S]*const next = \[\.\.\.conversations\.slice\(0, index\), \.\.\.conversations\.slice\(index \+ 1\)\]/,
+    /app\.post\('\/api\/app-state\/conversations\/delete'[\s\S]*const rawConversationKey = normalizeString\(body\.conversationKey\)[\s\S]*const conversationKey = rawConversationKey\.length <= MAX_CONVERSATION_DELETE_KEY_LENGTH \? rawConversationKey : ''[\s\S]*const index = conversationDeleteIndex\(conversations, workspacePath, conversationId, conversationKey\)[\s\S]*const next = \[\.\.\.conversations\.slice\(0, index\), \.\.\.conversations\.slice\(index \+ 1\)\]/,
   )
+  assert.doesNotMatch(serverSource, /app\.post\('\/api\/app-state\/conversations\/delete'[\s\S]*const index = conversations\.findIndex\(\(conversation\) => conversation\.id === conversationId\)/)
   assert.doesNotMatch(
     serverSource,
     /app\.post\('\/api\/app-state\/conversations\/delete'[\s\S]*const workspacePath = normalizeWorkspacePath\(req\.body\.workspacePath\)/,
@@ -757,7 +763,7 @@ test('Codex task routes require explicit user goals and IDs before app-server ca
   assert.match(appSource, /const hiddenThreadIds = new Set\(hiddenCodexThreadIdsByWorkspace\[targetWorkspacePath\] \?\? \[\]\)/)
   assert.match(appSource, /const deleted = findConversationForDelete\(current, targetWorkspacePath, conversationId, conversationKey, hiddenThreadIds\)/)
   assert.match(appSource, /const next = removeConversationForDelete\(current, targetWorkspacePath, conversationId, conversationKey, hiddenThreadIds\)/)
-  assert.match(appSource, /const conversationsAfterDelete = \([\s\S]*workspacePath: string,[\s\S]*conversationId: string,[\s\S]*conversationKey = '',[\s\S]*hiddenThreadIds = new Set<string>\(\),[\s\S]*confirmedIds = new Set\(confirmedConversations\.map\(\(conversation\) => conversation\.id\)\)[\s\S]*removeConversationForDelete\(existing, workspacePath, conversationId, conversationKey, hiddenThreadIds\)\.filter[\s\S]*return \[\.\.\.confirmedConversations, \.\.\.retainedConversations\]\.slice\(0, MAX_UI_CONVERSATIONS_PER_WORKSPACE\)/)
+  assert.match(appSource, /const conversationsAfterDelete = \([\s\S]*workspacePath: string,[\s\S]*conversationId: string,[\s\S]*conversationKey = '',[\s\S]*hiddenThreadIds = new Set<string>\(\),[\s\S]*confirmedKeys = new Set\(confirmedConversations\.map\(\(conversation, index\) => conversationRowKey\(workspacePath, conversation, index\)\)\)[\s\S]*removeConversationForDelete\(existing, workspacePath, conversationId, conversationKey, hiddenThreadIds\)\.filter[\s\S]*conversationRowKey\(workspacePath, conversation, index\)[\s\S]*return \[\.\.\.confirmedConversations, \.\.\.retainedConversations\]\.slice\(0, MAX_UI_CONVERSATIONS_PER_WORKSPACE\)/)
   assert.doesNotMatch(appSource, /confirmedConversations\.filter\(\(conversation\) => conversation\.id !== conversationId\)/)
   assert.doesNotMatch(appSource, /return mergeConversations\(retainedConversations, confirmed/)
   assert.match(appSource, /const visibleConversationsAfterDelete = conversationsAfterDelete\([\s\S]*current,[\s\S]*confirmedConversations,[\s\S]*targetWorkspacePath,[\s\S]*conversationId,[\s\S]*conversationKey,[\s\S]*hiddenThreadIds/)
@@ -767,7 +773,8 @@ test('Codex task routes require explicit user goals and IDs before app-server ca
   assert.doesNotMatch(appSource, /const next = current\.filter\(\(conversation\) => conversation\.id !== conversationId\)/)
   assert.match(appSource, /const sameWorkspacePath = \(left: string, right: string\) =>/)
   assert.match(appSource, /const conversationRowKey = \(workspacePath: string, conversation: AgentConversation, index: number\) =>/)
-  assert.match(appSource, /conversation\.createdAt \|\| conversation\.updatedAt \|\| index/)
+  assert.match(appSource, /conversation\.createdAt \|\| conversation\.updatedAt \|\| '',\s+index/)
+  assert.match(appSource, /body: JSON\.stringify\(\{ workspacePath: targetWorkspacePath, conversationId, conversationKey \}\)/)
   assert.match(appSource, /key=\{conversationRowKey\(workspacePath, conversation, index\)\}/)
   assert.match(appSource, /sameWorkspacePath\(selectedWorkspace, workspacePath\) &&[\s\S]*selectedConversationId === conversation\.id[\s\S]*!activeSystemScreen[\s\S]*\? 'agent-thread-row active'/)
   assert.match(appSource, /const deletedWorkspaceWasSelected = sameWorkspacePath\(selectedWorkspace, targetWorkspacePath\)/)
@@ -1617,7 +1624,7 @@ test('README documents live release verification for non-automated capabilities'
   assert.match(readme, /overrides must be absolute paths without control characters and within the configured path length cap/)
   assert.match(readme, /Settings responses do not expose the absolute secrets file path/)
   assert.match(readme, /before they can touch state, Settings, vision, weather, Codex, or Arduino hardware/)
-  assert.match(readme, /single-chat deletes are reconciled against the clicked sidebar row so legacy duplicate IDs cannot clear the rest of a workspace/)
+  assert.match(readme, /single-chat deletes send the clicked sidebar row key through the app-state API so legacy duplicate IDs cannot clear the rest of a workspace/)
   assert.match(readme, /Codex history refreshes are additive so partial thread-list responses cannot clear existing workspace chats/)
   assert.match(readme, /app-state write failures return bounded JSON errors/)
   assert.match(readme, /startup logs under `~\/\.local\/state\/codex-realtime-linux\/` with a user-only `0700` directory and `0600` log files/)
