@@ -3797,6 +3797,7 @@ function App() {
                       src={artifactPreview.url}
                       title={artifactPreview.title}
                       sandbox="allow-scripts"
+                      allow="camera 'none'; microphone 'none'; display-capture 'none'; geolocation 'none'; usb 'none'; serial 'none'"
                       referrerPolicy="no-referrer"
                       onFocus={engageArtifactPreview}
                       onBlur={() => setArtifactPreviewEngaged(false)}

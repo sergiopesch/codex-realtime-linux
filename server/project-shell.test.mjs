@@ -372,6 +372,8 @@ test('artifact previews are served through workspace-scoped routes only', async 
   assert.doesNotMatch(appSource, /const agentIsWorkingOnArtifact = Boolean\(pendingArtifact && activeThreadId\)/)
   assert.match(appSource, /sandbox="allow-scripts"/)
   assert.doesNotMatch(appSource, /sandbox="allow-scripts allow-same-origin"/)
+  assert.match(appSource, /allow="camera 'none'; microphone 'none'; display-capture 'none'; geolocation 'none'; usb 'none'; serial 'none'"/)
+  assert.match(appSource, /referrerPolicy="no-referrer"/)
 })
 
 test('renderer normalizes usage data before rendering charts', async () => {
@@ -1597,6 +1599,7 @@ test('README documents live release verification for non-automated capabilities'
   assert.match(readme, /symlink escapes and malformed preview folders are not surfaced to the UI/)
   assert.match(readme, /hidden dotfiles, hidden path segments, or backslash path segments inside artifact folders are not served/)
   assert.match(readme, /unsupported\/binary file extensions are rejected instead of being streamed from the preview route/)
+  assert.match(readme, /the iframe explicitly denies camera, microphone, display capture, geolocation, USB, and serial permissions/)
   assert.match(readme, /same-origin preview\/API routes are not allowed to replace the top-level Electron app shell/)
   assert.match(readme, /Electron IPC is accepted only from the top app frame/)
   assert.match(readme, /blocks top-level navigations or redirects away from the local app shell/)
