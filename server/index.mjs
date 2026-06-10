@@ -1527,9 +1527,13 @@ function normalizeAppState(input) {
     : []
   state.hiddenWorkspacePaths = normalizeWorkspacePathList(input?.hiddenWorkspacePaths, MAX_LOCAL_HIDDEN_WORKSPACES)
   const savedWorkspacePaths = new Set(state.workspaces.map((workspace) => workspace.path))
-  state.hiddenCodexThreadIdsByWorkspace = normalizeHiddenCodexThreadIdsByWorkspace(
-    input?.hiddenCodexThreadIdsByWorkspace,
-    savedWorkspacePaths,
+  const hiddenCodexThreadWorkspacePaths = new Set(
+    input?.hiddenCodexThreadIdsByWorkspace && typeof input.hiddenCodexThreadIdsByWorkspace === 'object' && !Array.isArray(input.hiddenCodexThreadIdsByWorkspace)
+      ? Object.entries(input.hiddenCodexThreadIdsByWorkspace)
+          .filter(([, threadIds]) => normalizeUniqueStringList(threadIds, 1, MAX_CONVERSATION_ID_LENGTH).length > 0)
+          .map(([workspacePath]) => normalizeWorkspacePath(workspacePath))
+          .filter(Boolean)
+      : [],
   )
   let normalizedWorkspaceBuckets = 0
 
@@ -1546,7 +1550,11 @@ function normalizeAppState(input) {
             .filter(Boolean),
           (conversation) => conversation.id,
         ).slice(0, MAX_LOCAL_CONVERSATIONS_PER_WORKSPACE)
-        if (normalizedConversations.length > 0 || savedWorkspacePaths.has(normalizedWorkspacePath)) {
+        if (
+          normalizedConversations.length > 0 ||
+          savedWorkspacePaths.has(normalizedWorkspacePath) ||
+          hiddenCodexThreadWorkspacePaths.has(normalizedWorkspacePath)
+        ) {
           state.conversationsByWorkspace[normalizedWorkspacePath] = normalizedConversations
           normalizedWorkspaceBuckets += 1
         }
@@ -1561,6 +1569,15 @@ function normalizeAppState(input) {
       normalizedWorkspaceBuckets += 1
     }
   }
+
+  const retainedWorkspacePaths = new Set([
+    ...savedWorkspacePaths,
+    ...Object.keys(state.conversationsByWorkspace),
+  ])
+  state.hiddenCodexThreadIdsByWorkspace = normalizeHiddenCodexThreadIdsByWorkspace(
+    input?.hiddenCodexThreadIdsByWorkspace,
+    retainedWorkspacePaths,
+  )
 
   return state
 }
@@ -2378,6 +2395,7 @@ app.post('/api/app-state/codex-threads/hide', async (req, res) => {
 
   try {
     const { state } = await mutateAppState(async (state) => {
+      state.conversationsByWorkspace[workspacePath] = state.conversationsByWorkspace[workspacePath] ?? []
       const current = state.hiddenCodexThreadIdsByWorkspace[workspacePath] ?? []
       state.hiddenCodexThreadIdsByWorkspace[workspacePath] = [threadId, ...current.filter((item) => item !== threadId)]
         .slice(0, MAX_HIDDEN_CODEX_THREADS_PER_WORKSPACE)

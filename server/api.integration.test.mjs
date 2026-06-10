@@ -1377,6 +1377,37 @@ test('server returns normalized app state after mutations', async (t) => {
   assert.deepEqual(restoredConversationDeleteBody.state.conversationsByWorkspace[workspacePath], [])
 })
 
+test('server persists hidden Codex threads for workspaces without saved chats', async (t) => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-hidden-thread-state-'))
+  const workspacePath = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-hidden-thread-workspace-'))
+  t.after(() => rm(tempDir, { recursive: true, force: true }))
+  t.after(() => rm(workspacePath, { recursive: true, force: true }))
+  const statePath = path.join(tempDir, 'state.json')
+  const secretsPath = path.join(tempDir, 'secrets.json')
+
+  const { baseUrl } = await startTestServer(t, {
+    CODEX_REALTIME_STATE_PATH: statePath,
+    CODEX_REALTIME_SECRETS_PATH: secretsPath,
+  })
+
+  const unsavedWorkspaceThreadHide = await fetch(`${baseUrl}/api/app-state/codex-threads/hide`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspacePath, threadId: 'codex-thread-to-hide' }),
+  })
+  assert.equal(unsavedWorkspaceThreadHide.status, 200)
+  const unsavedWorkspaceThreadHideBody = await unsavedWorkspaceThreadHide.json()
+  assert.deepEqual(
+    unsavedWorkspaceThreadHideBody.state.hiddenCodexThreadIdsByWorkspace[workspacePath],
+    ['codex-thread-to-hide'],
+  )
+  assert.deepEqual(unsavedWorkspaceThreadHideBody.state.conversationsByWorkspace[workspacePath], [])
+
+  const stateAfterThreadHide = await (await fetch(`${baseUrl}/api/app-state`)).json()
+  assert.deepEqual(stateAfterThreadHide.hiddenCodexThreadIdsByWorkspace[workspacePath], ['codex-thread-to-hide'])
+  assert.deepEqual(stateAfterThreadHide.conversationsByWorkspace[workspacePath], [])
+})
+
 test('server ignores oversized persisted app state and secrets files', async (t) => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-oversized-state-'))
   t.after(() => rm(tempDir, { recursive: true, force: true }))

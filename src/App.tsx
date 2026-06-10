@@ -2062,7 +2062,9 @@ function App() {
   }
 
   const deleteConversation = async (workspacePath: string, conversationId: string) => {
-    const current = conversationsByWorkspace[workspacePath] ?? []
+    const targetWorkspacePath = normalizeAbsoluteLocalWorkspacePath(workspacePath)
+    if (!targetWorkspacePath || !conversationId) return
+    const current = conversationsByWorkspaceRef.current[targetWorkspacePath] ?? conversationsByWorkspace[targetWorkspacePath] ?? []
     const deleted = current.find((conversation) => conversation.id === conversationId)
     const next = removeFirstConversationById(current, conversationId)
     if (!deleted) return
@@ -2075,7 +2077,7 @@ function App() {
         const hideResult = await api<{ state: AppStateResponse }>('/api/app-state/codex-threads/hide', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ workspacePath, threadId: deletedCodexThreadId }),
+          body: JSON.stringify({ workspacePath: targetWorkspacePath, threadId: deletedCodexThreadId }),
         })
         setHiddenCodexThreadIdsByWorkspace(safeHiddenCodexThreadIdsByWorkspace(hideResult.state.hiddenCodexThreadIdsByWorkspace))
       }
@@ -2084,11 +2086,11 @@ function App() {
           const deleteResult = await api<{ state: AppStateResponse }>('/api/app-state/conversations/delete', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ workspacePath, conversationId }),
+            body: JSON.stringify({ workspacePath: targetWorkspacePath, conversationId }),
           })
           const confirmedConversationState = safeConversationsByWorkspace(deleteResult.state.conversationsByWorkspace)
-          serverConfirmedWorkspace = Object.prototype.hasOwnProperty.call(confirmedConversationState, workspacePath)
-          confirmedConversations = serverConfirmedWorkspace ? confirmedConversationState[workspacePath] : next
+          serverConfirmedWorkspace = Object.prototype.hasOwnProperty.call(confirmedConversationState, targetWorkspacePath)
+          confirmedConversations = serverConfirmedWorkspace ? confirmedConversationState[targetWorkspacePath] : next
           setHiddenCodexThreadIdsByWorkspace(safeHiddenCodexThreadIdsByWorkspace(deleteResult.state.hiddenCodexThreadIdsByWorkspace))
         } catch (error) {
           if (deleted.source === 'local') throw error
@@ -2101,32 +2103,32 @@ function App() {
       const visibleConversationsAfterDelete = conversationsAfterDelete(current, confirmedConversations, conversationId)
       setConversationsByWorkspace((state) => ({
         ...state,
-        [workspacePath]: conversationsAfterDelete(state[workspacePath] ?? current, confirmedConversations, conversationId),
+        [targetWorkspacePath]: conversationsAfterDelete(state[targetWorkspacePath] ?? current, confirmedConversations, conversationId),
       }))
       const transcriptTarget = voiceTranscriptTargetRef.current
       if (
         transcriptTarget &&
-        sameWorkspacePath(transcriptTarget.workspacePath, workspacePath) &&
+        sameWorkspacePath(transcriptTarget.workspacePath, targetWorkspacePath) &&
         transcriptTarget.conversationId === conversationId
       ) {
         voiceTranscriptTargetRef.current = null
         savedTranscriptSignatureRef.current = ''
       }
-      const deletedWorkspaceWasSelected = sameWorkspacePath(selectedWorkspace, workspacePath)
+      const deletedWorkspaceWasSelected = sameWorkspacePath(selectedWorkspace, targetWorkspacePath)
       const deletedActiveConversation = deletedWorkspaceWasSelected && selectedConversationId === conversationId
       const workspaceIsEmptyAfterDelete = visibleConversationsAfterDelete.length === 0
       if (deletedActiveConversation) {
         const fallback = visibleConversationsAfterDelete[0]
         if (fallback) {
-          openConversationWindow(workspacePath, fallback.id)
+          openConversationWindow(targetWorkspacePath, fallback.id)
         } else {
-          setSelectedWorkspace(workspacePath)
+          setSelectedWorkspace(targetWorkspacePath)
           setSelectedConversationId('')
           setActiveSystemScreen(null)
           closeArtifactPreview()
         }
       } else if (deletedWorkspaceWasSelected && workspaceIsEmptyAfterDelete) {
-        setSelectedWorkspace(workspacePath)
+        setSelectedWorkspace(targetWorkspacePath)
         setSelectedConversationId('')
         setActiveSystemScreen(null)
         closeArtifactPreview()
