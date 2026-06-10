@@ -298,6 +298,11 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   assert.equal(relativeWorkspaceToken.status, 400)
   assert.match(await relativeWorkspaceToken.text(), /Invalid workspace token/)
 
+  const controlCharacterToken = Buffer.from(`${workspacePath}\0control`, 'utf8').toString('base64url')
+  const controlCharacterWorkspaceToken = await fetch(`${baseUrl}/workspace-artifacts/${controlCharacterToken}/sample-report/index.html`)
+  assert.equal(controlCharacterWorkspaceToken.status, 400)
+  assert.match(await controlCharacterWorkspaceToken.text(), /Invalid workspace token/)
+
   const missingWorkspaceToken = Buffer.from(path.join(os.tmpdir(), 'missing-codex-realtime-preview-workspace'), 'utf8').toString('base64url')
   const missingWorkspacePreview = await fetch(`${baseUrl}/workspace-artifacts/${missingWorkspaceToken}/sample-report/index.html`)
   assert.equal(missingWorkspacePreview.status, 404)

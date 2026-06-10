@@ -462,7 +462,11 @@ function workspaceFromToken(token) {
     throw httpError('Invalid workspace token.', { statusCode: 400, code: 'invalid_workspace_token' })
   }
   const workspacePath = Buffer.from(token, 'base64url').toString('utf8')
-  if (workspaceToken(workspacePath) !== token) {
+  if (
+    !path.isAbsolute(workspacePath) ||
+    /[\u0000-\u001f\u007f]/.test(workspacePath) ||
+    workspaceToken(workspacePath) !== token
+  ) {
     throw httpError('Invalid workspace token.', { statusCode: 400, code: 'invalid_workspace_token' })
   }
   return workspacePath
