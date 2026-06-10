@@ -692,7 +692,7 @@ const findConversationForDelete = (
       if (!hidden) visibleIndex += 1
       return !hidden && conversationRowKey(workspacePath, conversation, visibleIndex) === conversationKey
     })
-    if (matched) return matched
+    return matched ?? null
   }
   return conversations.find((conversation) => conversation.id === conversationId) ?? null
 }
@@ -716,7 +716,7 @@ const removeConversationForDelete = (
       }
       return true
     })
-    if (removedByKey) return next
+    return removedByKey ? next : conversations
   }
   return removeFirstConversationById(conversations, conversationId)
 }

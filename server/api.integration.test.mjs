@@ -1366,6 +1366,59 @@ test('server deletes only the clicked legacy duplicate conversation row', async 
   )
 })
 
+test('server rejects stale keyed conversation deletes without falling back to id', async (t) => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-stale-key-delete-'))
+  t.after(() => rm(tempDir, { recursive: true, force: true }))
+  const statePath = path.join(tempDir, 'state.json')
+  const secretsPath = path.join(tempDir, 'secrets.json')
+  const workspacePath = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-stale-key-workspace-'))
+  t.after(() => rm(workspacePath, { recursive: true, force: true }))
+
+  await writeFile(
+    statePath,
+    JSON.stringify({
+      workspaces: [{ id: workspacePath, path: workspacePath, name: 'Stale key delete workspace' }],
+      conversationsByWorkspace: {
+        [workspacePath]: [
+          { id: 'keep-one', title: 'Keep one', createdAt: '2026-06-08T09:00:00.000Z' },
+          { id: 'keep-two', title: 'Keep two', createdAt: '2026-06-08T10:00:00.000Z' },
+        ].map((conversation) => ({
+          ...conversation,
+          status: 'draft',
+          source: 'local',
+          prompt: '',
+          response: '',
+          traces: [],
+          transcript: [],
+        })),
+      },
+    }),
+  )
+
+  const { baseUrl } = await startTestServer(t, {
+    CODEX_REALTIME_STATE_PATH: statePath,
+    CODEX_REALTIME_SECRETS_PATH: secretsPath,
+  })
+
+  const response = await fetch(`${baseUrl}/api/app-state/conversations/delete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      workspacePath,
+      conversationId: 'keep-one',
+      conversationKey: [workspacePath, 'keep-one', '2026-06-08T09:00:00.000Z', 99].join('::'),
+    }),
+  })
+  assert.equal(response.status, 404)
+  assert.equal((await readJson(response)).code, 'conversation_not_found')
+
+  const state = await (await fetch(`${baseUrl}/api/app-state`)).json()
+  assert.deepEqual(
+    state.conversationsByWorkspace[workspacePath].map((conversation) => conversation.title),
+    ['Keep one', 'Keep two'],
+  )
+})
+
 test('server patches only the clicked legacy duplicate conversation row', async (t) => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-duplicate-patch-'))
   t.after(() => rm(tempDir, { recursive: true, force: true }))

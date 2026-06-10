@@ -1577,7 +1577,7 @@ function conversationRowIndex(conversations, workspacePath, conversationId, conv
     const matchedIndex = conversations.findIndex(
       (conversation, index) => conversationDeleteKey(workspacePath, conversation, index) === conversationKey,
     )
-    if (matchedIndex !== -1) return matchedIndex
+    return matchedIndex
   }
   return conversations.findIndex((conversation) => conversation.id === conversationId)
 }
