@@ -1082,9 +1082,12 @@ test('server only trusts configured loopback API origins', async (t) => {
       'http://127.0.0.1:6006',
       'http://localhost:6007',
       'http://[::1]:6008',
+      'http://127.0.0.1:6006',
       'https://example.invalid',
       'http://127.0.0.1:6009/path',
       'http://user:pass@127.0.0.1:6010',
+      `http://127.0.0.1:${'7'.repeat(320)}`,
+      ...Array.from({ length: 16 }, (_value, index) => `http://127.0.0.1:${6011 + index}`),
     ].join(','),
   })
 
@@ -1135,6 +1138,17 @@ test('server only trusts configured loopback API origins', async (t) => {
   })
   assert.equal(untrustedCredentialOrigin.status, 403)
   assert.equal((await readJson(untrustedCredentialOrigin)).code, 'origin_not_allowed')
+
+  const trustedLastCappedOrigin = await fetch(`${baseUrl}/api/status`, {
+    headers: { Origin: 'http://127.0.0.1:6022' },
+  })
+  assert.equal(trustedLastCappedOrigin.status, 200)
+
+  const untrustedBeyondCappedOrigins = await fetch(`${baseUrl}/api/status`, {
+    headers: { Origin: 'http://127.0.0.1:6023' },
+  })
+  assert.equal(untrustedBeyondCappedOrigins.status, 403)
+  assert.equal((await readJson(untrustedBeyondCappedOrigins)).code, 'origin_not_allowed')
 })
 
 test('server bounds persisted app state loaded from disk', async (t) => {

@@ -161,6 +161,9 @@ const app = express()
 app.disable('x-powered-by')
 const usbMonitor = new UsbDeviceMonitor()
 const localApiHostnames = new Set(['localhost', '127.0.0.1', '[::1]'])
+const MAX_ALLOWED_API_ORIGINS = 20
+const MAX_ALLOWED_API_ORIGINS_ENV_LENGTH = 4_000
+const MAX_API_ORIGIN_LENGTH = 300
 const DEFAULT_API_ORIGINS = [
   `http://127.0.0.1:${PORT}`,
   `http://localhost:${PORT}`,
@@ -251,8 +254,10 @@ function configuredExecutable(value, fallback) {
 
 function configuredLocalApiOrigin(value) {
   if (typeof value !== 'string' || !value.trim()) return ''
+  const text = value.trim()
+  if (text.length > MAX_API_ORIGIN_LENGTH) return ''
   try {
-    const parsed = new URL(value)
+    const parsed = new URL(text)
     const rootPath = parsed.pathname === '/' && !parsed.search && !parsed.hash
     const localHttp = parsed.protocol === 'http:' && localApiHostnames.has(parsed.hostname)
     if (!localHttp || !rootPath || parsed.username || parsed.password) return ''
@@ -263,10 +268,13 @@ function configuredLocalApiOrigin(value) {
 }
 
 function configuredAllowedApiOrigins(value) {
-  return normalizeString(value)
+  const text = normalizeString(value)
+  if (!text || text.length > MAX_ALLOWED_API_ORIGINS_ENV_LENGTH) return []
+  return [...new Set(text
     .split(',')
+    .slice(0, MAX_ALLOWED_API_ORIGINS)
     .map((origin) => configuredLocalApiOrigin(origin))
-    .filter(Boolean)
+    .filter(Boolean))]
 }
 
 function guardLocalApiRequests(req, res, next) {
