@@ -1572,7 +1572,7 @@ function conversationDeleteKey(workspacePath, conversation, index) {
   ].join('::')
 }
 
-function conversationDeleteIndex(conversations, workspacePath, conversationId, conversationKey = '') {
+function conversationRowIndex(conversations, workspacePath, conversationId, conversationKey = '') {
   if (conversationKey) {
     const matchedIndex = conversations.findIndex(
       (conversation, index) => conversationDeleteKey(workspacePath, conversation, index) === conversationKey,
@@ -2522,6 +2522,8 @@ app.patch('/api/app-state/conversations', async (req, res) => {
     return
   }
   const conversationId = normalizeString(body.conversationId)
+  const rawConversationKey = normalizeString(body.conversationKey)
+  const conversationKey = rawConversationKey.length <= MAX_CONVERSATION_DELETE_KEY_LENGTH ? rawConversationKey : ''
   if (!conversationId) {
     sendJsonError(
       res,
@@ -2546,7 +2548,7 @@ app.patch('/api/app-state/conversations', async (req, res) => {
   try {
     mutation = await mutateAppState(async (state) => {
       const conversations = state.conversationsByWorkspace[workspacePath] ?? []
-      const index = conversations.findIndex((conversation) => conversation.id === conversationId)
+      const index = conversationRowIndex(conversations, workspacePath, conversationId, conversationKey)
       if (index === -1) {
         throw httpError('conversationId was not found in this workspace', {
           statusCode: 404,
@@ -2610,7 +2612,7 @@ app.post('/api/app-state/conversations/delete', async (req, res) => {
   try {
     const { state } = await mutateAppState(async (state) => {
       const conversations = state.conversationsByWorkspace[workspacePath] ?? []
-      const index = conversationDeleteIndex(conversations, workspacePath, conversationId, conversationKey)
+      const index = conversationRowIndex(conversations, workspacePath, conversationId, conversationKey)
       if (index === -1) {
         throw httpError('conversationId was not found in this workspace', {
           statusCode: 404,

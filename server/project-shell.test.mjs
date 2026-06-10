@@ -602,9 +602,14 @@ test('persisted workspaces and conversations require absolute workspace paths', 
   )
   assert.match(
     serverSource,
-    /app\.post\('\/api\/app-state\/conversations\/delete'[\s\S]*const rawConversationKey = normalizeString\(body\.conversationKey\)[\s\S]*const conversationKey = rawConversationKey\.length <= MAX_CONVERSATION_DELETE_KEY_LENGTH \? rawConversationKey : ''[\s\S]*const index = conversationDeleteIndex\(conversations, workspacePath, conversationId, conversationKey\)[\s\S]*const next = \[\.\.\.conversations\.slice\(0, index\), \.\.\.conversations\.slice\(index \+ 1\)\]/,
+    /app\.post\('\/api\/app-state\/conversations\/delete'[\s\S]*const rawConversationKey = normalizeString\(body\.conversationKey\)[\s\S]*const conversationKey = rawConversationKey\.length <= MAX_CONVERSATION_DELETE_KEY_LENGTH \? rawConversationKey : ''[\s\S]*const index = conversationRowIndex\(conversations, workspacePath, conversationId, conversationKey\)[\s\S]*const next = \[\.\.\.conversations\.slice\(0, index\), \.\.\.conversations\.slice\(index \+ 1\)\]/,
+  )
+  assert.match(
+    serverSource,
+    /app\.patch\('\/api\/app-state\/conversations'[\s\S]*const rawConversationKey = normalizeString\(body\.conversationKey\)[\s\S]*const conversationKey = rawConversationKey\.length <= MAX_CONVERSATION_DELETE_KEY_LENGTH \? rawConversationKey : ''[\s\S]*const index = conversationRowIndex\(conversations, workspacePath, conversationId, conversationKey\)[\s\S]*next\[index\] = normalizeConversation/,
   )
   assert.doesNotMatch(serverSource, /app\.post\('\/api\/app-state\/conversations\/delete'[\s\S]*const index = conversations\.findIndex\(\(conversation\) => conversation\.id === conversationId\)/)
+  assert.doesNotMatch(serverSource, /app\.patch\('\/api\/app-state\/conversations'[\s\S]*const index = conversations\.findIndex\(\(conversation\) => conversation\.id === conversationId\)/)
   assert.doesNotMatch(
     serverSource,
     /app\.post\('\/api\/app-state\/conversations\/delete'[\s\S]*const workspacePath = normalizeWorkspacePath\(req\.body\.workspacePath\)/,
@@ -1629,7 +1634,7 @@ test('README documents live release verification for non-automated capabilities'
   assert.match(readme, /overrides must be absolute paths without control characters and within the configured path length cap/)
   assert.match(readme, /Settings responses do not expose the absolute secrets file path/)
   assert.match(readme, /before they can touch state, Settings, vision, weather, Codex, or Arduino hardware/)
-  assert.match(readme, /sidebar selection and single-chat deletes use the clicked row key so legacy duplicate IDs cannot open or remove the wrong workspace thread/)
+  assert.match(readme, /sidebar selection, voice transcript saves, and single-chat deletes use the clicked row key so legacy duplicate IDs cannot open, mutate, or remove the wrong workspace thread/)
   assert.match(readme, /Codex history refreshes are additive so partial thread-list responses cannot clear existing workspace chats/)
   assert.match(readme, /app-state write failures return bounded JSON errors/)
   assert.match(readme, /startup logs under `~\/\.local\/state\/codex-realtime-linux\/` with a user-only `0700` directory and `0600` log files/)
@@ -2083,12 +2088,13 @@ test('realtime voice sessions reset transcript state and clean up media resource
   assert.match(appSource, /const stream = await getUserMediaWithTimeout\(\{ audio: true \}\)/)
   assert.doesNotMatch(appSource, /await navigator\.mediaDevices\.getUserMedia\(\{ audio: true \}\)/)
   assert.match(appSource, /const realtimeErrorMessage = \(value: unknown, fallback: string\) =>/)
-  assert.match(appSource, /type VoiceTranscriptTarget = \{[\s\S]*workspacePath: string[\s\S]*conversationId: string[\s\S]*\}/)
+  assert.match(appSource, /type VoiceTranscriptTarget = \{[\s\S]*workspacePath: string[\s\S]*conversationId: string[\s\S]*conversationKey: string[\s\S]*\}/)
   assert.match(appSource, /const saveLocalDraftConversation = async \(workspacePath: string, existing: AgentConversation\[\]\) =>/)
   assert.match(appSource, /const ensureVoiceTranscriptTarget = async \(\): Promise<VoiceTranscriptTarget> =>/)
   assert.match(appSource, /if \(!workspaceRoots\.some\(\(root\) => root\.workspacePath === workspacePath\)\)/)
   assert.match(appSource, /const selectedConversation = findConversationForSelection\(existing, workspacePath, selectedConversationId, selectedConversationKey\)/)
-  assert.match(appSource, /if \(selectedConversation\) return \{ workspacePath, conversationId: selectedConversation\.id \}/)
+  assert.match(appSource, /conversationKey: conversationSelectionKey\(existing, workspacePath, selectedConversation\.id, selectedConversationKey\)/)
+  assert.match(appSource, /return \{ workspacePath, conversationId: created\.conversation\.id, conversationKey: '' \}/)
   assert.match(appSource, /showNotice\(`\$\{created\.title\} opened as the voice transcript thread\.`\)/)
   assert.match(appSource, /const savedRealtimeTranscriptLines = \(lines: TranscriptLine\[\]\) =>/)
   assert.match(appSource, /safeConversationTranscript\(lines\.map\(\(line\) => \(\{ speaker: line\.speaker, text: line\.text \}\)\)\)/)
@@ -2101,20 +2107,23 @@ test('realtime voice sessions reset transcript state and clean up media resource
   assert.match(appSource, /const transcriptTarget = voiceTranscriptTargetRef\.current/)
   assert.match(appSource, /if \(!transcriptTarget \|\| realtimeTranscript\.length === 0\) return/)
   assert.match(appSource, /const transcript = savedRealtimeTranscriptLines\(realtimeTranscript\)/)
-  assert.match(appSource, /const \{ workspacePath, conversationId \} = transcriptTarget/)
-  assert.match(appSource, /const signature = JSON\.stringify\(\{ workspacePath, conversationId, transcript \}\)/)
+  assert.match(appSource, /const \{ workspacePath, conversationId, conversationKey \} = transcriptTarget/)
+  assert.match(appSource, /const signature = JSON\.stringify\(\{ workspacePath, conversationId, conversationKey, transcript \}\)/)
   assert.match(appSource, /savedTranscriptSignatureRef\.current === signature/)
   assert.match(appSource, /const currentTranscriptTarget = voiceTranscriptTargetRef\.current/)
   assert.match(appSource, /currentTranscriptTarget\.workspacePath !== workspacePath/)
   assert.match(appSource, /currentTranscriptTarget\.conversationId !== conversationId/)
-  assert.match(appSource, /const targetStillPresent = \(conversationsByWorkspaceRef\.current\[workspacePath\] \?\? \[\]\)/)
+  assert.match(appSource, /currentTranscriptTarget\.conversationKey !== conversationKey/)
+  assert.match(appSource, /const targetStillPresent = Boolean\(findConversationForSelection\(targetConversations, workspacePath, conversationId, conversationKey\)\)/)
   assert.match(appSource, /if \(!targetStillPresent\) return/)
   assert.match(appSource, /window\.setTimeout\(\(\) => \{[\s\S]*REALTIME_TRANSCRIPT_SAVE_DEBOUNCE_MS/)
-  assert.match(appSource, /body: JSON\.stringify\(\{ workspacePath, conversationId, patch: \{ transcript \} \}\)/)
-  assert.match(appSource, /if \(!conversations\.some\(\(item\) => item\.id === conversationId\)\) return current/)
-  assert.match(appSource, /mergeConversations\(conversations, \[conversation\]\)/)
+  assert.match(appSource, /conversationKey[\s\S]*\? conversationRowKey\(workspacePath, conversation, itemIndex\) === conversationKey[\s\S]*: conversation\.id === conversationId/)
+  assert.match(appSource, /body: JSON\.stringify\(\{ workspacePath, conversationId, conversationKey, patch: \{ transcript \} \}\)/)
+  assert.match(appSource, /conversationKey[\s\S]*\? conversationRowKey\(workspacePath, item, itemIndex\) === conversationKey[\s\S]*: item\.id === conversationId/)
+  assert.match(appSource, /next\[index\] = conversation/)
+  assert.doesNotMatch(appSource, /mergeConversations\(conversations, \[conversation\]\)/)
   assert.match(appSource, /app-state\/realtime-transcript-save-failed/)
-  assert.match(appSource, /const transcriptTarget = voiceTranscriptTargetRef\.current[\s\S]*transcriptTarget\.conversationId === conversationId[\s\S]*voiceTranscriptTargetRef\.current = null[\s\S]*savedTranscriptSignatureRef\.current = ''/)
+  assert.match(appSource, /const transcriptTarget = voiceTranscriptTargetRef\.current[\s\S]*transcriptTarget\.conversationId === conversationId[\s\S]*transcriptTarget\.conversationKey \? transcriptTarget\.conversationKey === conversationKey : true[\s\S]*voiceTranscriptTargetRef\.current = null[\s\S]*savedTranscriptSignatureRef\.current = ''/)
   assert.match(appSource, /const realtimeTranscriptKeyPart = \(value: unknown\) =>/)
   assert.match(appSource, /typeof value === 'number' && Number\.isFinite\(value\)/)
   assert.match(appSource, /const resolvedRealtimeTranscriptText = \(currentText: string, replacementText: string\) =>/)

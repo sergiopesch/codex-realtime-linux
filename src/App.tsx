@@ -247,6 +247,7 @@ type PendingVisualContext = {
 type VoiceTranscriptTarget = {
   workspacePath: string
   conversationId: string
+  conversationKey: string
 }
 
 type DirectoryPickerWindow = Window & {
@@ -745,6 +746,22 @@ const findConversationForSelection = (
     if (matched) return matched
   }
   return conversations.find((conversation) => conversation.id === conversationId) ?? null
+}
+
+const conversationSelectionKey = (
+  conversations: AgentConversation[],
+  workspacePath: string,
+  conversationId: string,
+  conversationKey = '',
+) => {
+  if (conversationKey) {
+    const matchedIndex = conversations.findIndex(
+      (conversation, index) => conversationRowKey(workspacePath, conversation, index) === conversationKey,
+    )
+    if (matchedIndex !== -1) return conversationKey
+  }
+  const fallbackIndex = conversations.findIndex((conversation) => conversation.id === conversationId)
+  return fallbackIndex === -1 ? '' : conversationRowKey(workspacePath, conversations[fallbackIndex], fallbackIndex)
 }
 
 const savedConversationPayload = (conversation: AgentConversation) => ({
@@ -2072,7 +2089,13 @@ function App() {
 
     const existing = conversationsByWorkspace[workspacePath] ?? []
     const selectedConversation = findConversationForSelection(existing, workspacePath, selectedConversationId, selectedConversationKey)
-    if (selectedConversation) return { workspacePath, conversationId: selectedConversation.id }
+    if (selectedConversation) {
+      return {
+        workspacePath,
+        conversationId: selectedConversation.id,
+        conversationKey: conversationSelectionKey(existing, workspacePath, selectedConversation.id, selectedConversationKey),
+      }
+    }
 
     const created = await saveLocalDraftConversation(workspacePath, existing)
     setSelectedWorkspace(workspacePath)
@@ -2081,7 +2104,7 @@ function App() {
     setActiveSystemScreen(null)
     closeArtifactPreview()
     showNotice(`${created.title} opened as the voice transcript thread.`)
-    return { workspacePath, conversationId: created.conversation.id }
+    return { workspacePath, conversationId: created.conversation.id, conversationKey: '' }
   }
 
   const addWorkspaceFromFolder = async ({ name: rawName, path: rawPath }: { name: string; path?: string }) => {
@@ -2230,7 +2253,8 @@ function App() {
       if (
         transcriptTarget &&
         sameWorkspacePath(transcriptTarget.workspacePath, targetWorkspacePath) &&
-        transcriptTarget.conversationId === conversationId
+        transcriptTarget.conversationId === conversationId &&
+        (transcriptTarget.conversationKey ? transcriptTarget.conversationKey === conversationKey : true)
       ) {
         voiceTranscriptTargetRef.current = null
         savedTranscriptSignatureRef.current = ''
@@ -2372,8 +2396,8 @@ function App() {
     const transcript = savedRealtimeTranscriptLines(realtimeTranscript)
     if (transcript.length === 0) return
 
-    const { workspacePath, conversationId } = transcriptTarget
-    const signature = JSON.stringify({ workspacePath, conversationId, transcript })
+    const { workspacePath, conversationId, conversationKey } = transcriptTarget
+    const signature = JSON.stringify({ workspacePath, conversationId, conversationKey, transcript })
     if (savedTranscriptSignatureRef.current === signature) return
 
     const timeout = window.setTimeout(() => {
@@ -2381,18 +2405,23 @@ function App() {
       if (
         !currentTranscriptTarget ||
         currentTranscriptTarget.workspacePath !== workspacePath ||
-        currentTranscriptTarget.conversationId !== conversationId
+        currentTranscriptTarget.conversationId !== conversationId ||
+        currentTranscriptTarget.conversationKey !== conversationKey
       ) {
         return
       }
-      const targetStillPresent = (conversationsByWorkspaceRef.current[workspacePath] ?? [])
-        .some((conversation) => conversation.id === conversationId)
+      const targetConversations = conversationsByWorkspaceRef.current[workspacePath] ?? []
+      const targetStillPresent = Boolean(findConversationForSelection(targetConversations, workspacePath, conversationId, conversationKey))
       if (!targetStillPresent) return
 
       savedTranscriptSignatureRef.current = signature
       setConversationsByWorkspace((current) => {
         const conversations = current[workspacePath] ?? []
-        const index = conversations.findIndex((conversation) => conversation.id === conversationId)
+        const index = conversations.findIndex((conversation, itemIndex) =>
+          conversationKey
+            ? conversationRowKey(workspacePath, conversation, itemIndex) === conversationKey
+            : conversation.id === conversationId,
+        )
         if (index === -1) return current
         const next = [...conversations]
         next[index] = { ...next[index], transcript, updatedAt: new Date().toISOString() }
@@ -2402,16 +2431,23 @@ function App() {
       void api<{ conversation: AgentConversation }>('/api/app-state/conversations', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workspacePath, conversationId, patch: { transcript } }),
+        body: JSON.stringify({ workspacePath, conversationId, conversationKey, patch: { transcript } }),
       })
         .then((savedConversation) => {
           const conversation = requireSafeConversation(savedConversation.conversation, workspacePath)
           setConversationsByWorkspace((current) => {
             const conversations = current[workspacePath] ?? []
-            if (!conversations.some((item) => item.id === conversationId)) return current
+            const index = conversations.findIndex((item, itemIndex) =>
+              conversationKey
+                ? conversationRowKey(workspacePath, item, itemIndex) === conversationKey
+                : item.id === conversationId,
+            )
+            if (index === -1) return current
+            const next = [...conversations]
+            next[index] = conversation
             return {
               ...current,
-              [workspacePath]: mergeConversations(conversations, [conversation]),
+              [workspacePath]: next,
             }
           })
         })

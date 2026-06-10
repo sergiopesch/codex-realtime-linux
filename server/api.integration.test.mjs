@@ -1366,6 +1366,60 @@ test('server deletes only the clicked legacy duplicate conversation row', async 
   )
 })
 
+test('server patches only the clicked legacy duplicate conversation row', async (t) => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-duplicate-patch-'))
+  t.after(() => rm(tempDir, { recursive: true, force: true }))
+  const statePath = path.join(tempDir, 'state.json')
+  const secretsPath = path.join(tempDir, 'secrets.json')
+  const workspacePath = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-duplicate-patch-workspace-'))
+  t.after(() => rm(workspacePath, { recursive: true, force: true }))
+  const duplicateRows = [
+    { id: 'legacy-duplicate', title: 'Keep first', createdAt: '2026-06-08T09:00:00.000Z' },
+    { id: 'legacy-duplicate', title: 'Patch middle', createdAt: '2026-06-08T10:00:00.000Z' },
+    { id: 'legacy-duplicate', title: 'Keep third', createdAt: '2026-06-08T11:00:00.000Z' },
+  ].map((conversation) => ({
+    ...conversation,
+    status: 'draft',
+    source: 'local',
+    prompt: '',
+    response: '',
+    traces: [],
+    transcript: [],
+  }))
+
+  await writeFile(
+    statePath,
+    JSON.stringify({
+      workspaces: [{ id: workspacePath, path: workspacePath, name: 'Duplicate patch workspace' }],
+      conversationsByWorkspace: {
+        [workspacePath]: duplicateRows,
+      },
+    }),
+  )
+
+  const { baseUrl } = await startTestServer(t, {
+    CODEX_REALTIME_STATE_PATH: statePath,
+    CODEX_REALTIME_SECRETS_PATH: secretsPath,
+  })
+
+  const response = await fetch(`${baseUrl}/api/app-state/conversations`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      workspacePath,
+      conversationId: 'legacy-duplicate',
+      conversationKey: [workspacePath, 'legacy-duplicate', '2026-06-08T10:00:00.000Z', 1].join('::'),
+      patch: { transcript: [{ speaker: 'user', text: 'bound voice transcript' }] },
+    }),
+  })
+  assert.equal(response.status, 200)
+  const body = await response.json()
+  assert.deepEqual(
+    body.state.conversationsByWorkspace[workspacePath].map((conversation) => conversation.transcript.map((line) => line.text)),
+    [[], ['bound voice transcript'], []],
+  )
+})
+
 test('server returns normalized app state after mutations', async (t) => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-mutation-state-'))
   t.after(() => rm(tempDir, { recursive: true, force: true }))
