@@ -149,6 +149,7 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   await mkdir(artifactDir, { recursive: true })
   await writeFile(path.join(artifactDir, 'index.html'), '<!doctype html><title>Sample report</title>')
   await writeFile(path.join(artifactDir, 'notes.txt'), 'workspace note')
+  await writeFile(path.join(artifactDir, 'assets\\secret.txt'), 'backslash path should not be served')
   await writeFile(path.join(artifactDir, '.env'), 'OPENAI_API_KEY=secret')
   await mkdir(path.join(artifactDir, 'assets', '.private'), { recursive: true })
   await writeFile(path.join(artifactDir, 'assets', '.private', 'secret.txt'), 'hidden generated file')
@@ -239,6 +240,9 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
 
   const traversal = await fetch(`${baseUrl}/workspace-artifacts/${token}/sample-report/..%2F..%2F..%2Fpackage.json`)
   assert.equal(traversal.status, 404)
+
+  const encodedBackslash = await fetch(`${baseUrl}/workspace-artifacts/${token}/sample-report/assets%5Csecret.txt`)
+  assert.equal(encodedBackslash.status, 404)
 
   const outsidePreviewFile = path.join(workspacePath, 'outside-preview-secret.txt')
   await writeFile(outsidePreviewFile, 'outside artifact root')

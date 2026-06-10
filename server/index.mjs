@@ -463,7 +463,15 @@ function isSafeArtifactName(value) {
 }
 
 function isSafeArtifactPreviewPath(value) {
-  if (typeof value !== 'string' || !value || value.length > MAX_ARTIFACT_PREVIEW_PATH_LENGTH || value.includes('\0')) return false
+  if (
+    typeof value !== 'string' ||
+    !value ||
+    value.length > MAX_ARTIFACT_PREVIEW_PATH_LENGTH ||
+    value.includes('\0') ||
+    value.includes('\\')
+  ) {
+    return false
+  }
   return value.split('/').every((segment) => segment && segment !== '.' && segment !== '..' && !segment.startsWith('.'))
 }
 
