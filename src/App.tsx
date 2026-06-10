@@ -660,6 +660,12 @@ const removeFirstConversationById = (conversations: AgentConversation[], convers
 const sameWorkspacePath = (left: string, right: string) =>
   normalizeAbsoluteLocalWorkspacePath(left) === normalizeAbsoluteLocalWorkspacePath(right)
 
+const codexConversationThreadId = (conversation: AgentConversation) =>
+  conversation.codexThreadId || conversation.id
+
+const hiddenCodexConversation = (conversation: AgentConversation, hiddenThreadIds: Set<string>) =>
+  conversation.source === 'codex' && hiddenThreadIds.has(codexConversationThreadId(conversation))
+
 const conversationRowKey = (workspacePath: string, conversation: AgentConversation, index: number) =>
   [
     normalizeAbsoluteLocalWorkspacePath(workspacePath) || workspacePath,
@@ -1284,7 +1290,7 @@ function App() {
     const workspacePath = workspacePathFor(workspace)
     const hiddenCodexThreadIds = new Set(hiddenCodexThreadIdsByWorkspace[workspacePath] ?? [])
     const conversations = (conversationsByWorkspace[workspacePath] ?? []).filter((conversation) => (
-      conversation.source !== 'codex' || !hiddenCodexThreadIds.has(conversation.codexThreadId || conversation.id)
+      !hiddenCodexConversation(conversation, hiddenCodexThreadIds)
     ))
     return { workspace, workspacePath, conversations }
   })
@@ -2433,8 +2439,12 @@ function App() {
               setConversationsByWorkspace((current) => {
                 const next = { ...current }
                 Object.entries(codexConversationsByWorkspace).forEach(([workspacePath, codexConversations]) => {
+                  const hiddenThreadIds = new Set(hiddenCodexThreadIds[workspacePath] ?? [])
+                  const retainedConversations = (next[workspacePath] ?? []).filter(
+                    (conversation) => !hiddenCodexConversation(conversation, hiddenThreadIds),
+                  )
                   next[workspacePath] = mergeConversations(
-                    (next[workspacePath] ?? []).filter((conversation) => conversation.source !== 'codex'),
+                    retainedConversations,
                     codexConversations,
                   )
                 })
