@@ -291,6 +291,14 @@ npm run verify:manual
 
 The manual recorder prompts for each live-only check, writes a Markdown result file, and marks the checklist incomplete until every row is recorded as `pass` with evidence.
 
+Before tagging or describing a build as MVP-ready, run:
+
+```bash
+npm run verify:mvp
+```
+
+The readiness checker writes `docs/mvp-readiness-report.md` and exits non-zero until automated evidence, the live probe, and the manual checklist are all complete. During development, use `npm run verify:mvp -- --allow-incomplete` to write the report without treating the expected manual gap as a command failure.
+
 ## Weather Check
 
 Open `Settings` in the app, enter a location, and use `Get weather` to verify the feature in the UI. A voice weather request updates the same Settings weather result card and clears stale loading or error state from earlier manual requests.

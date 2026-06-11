@@ -1,6 +1,6 @@
 # MVP Live Environment Probe
 
-Generated: 2026-06-11T09:42:55.870Z
+Generated: 2026-06-11T09:47:50.576Z
 API: http://127.0.0.1:3311
 Status: usable
 
@@ -8,12 +8,12 @@ Summary: 11 passed, 3 warnings, 0 failed.
 
 | Probe | Status | Evidence |
 | --- | --- | --- |
-| Git state | warn | branch=main; commit=8c30db8; dirty=true. |
+| Git state | warn | branch=main; commit=f9b8711; dirty=true. |
 | Desktop service | pass | codex-realtime-linux-app.service is active. |
 | Desktop entry | pass | /home/sergiopesch/.local/share/applications/codex-realtime-linux.desktop; mode 755; size 391 bytes. |
 | Desktop icon | pass | /home/sergiopesch/.local/share/icons/hicolor/512x512/apps/codex-realtime-linux.png; mode 664; size 194668 bytes. |
-| Desktop launch log | pass | /home/sergiopesch/.local/state/codex-realtime-linux/desktop-launch.log; mode 600; size 108046 bytes. |
-| API server log | pass | /home/sergiopesch/.local/state/codex-realtime-linux/api-server.log; mode 600; size 76725 bytes. |
+| Desktop launch log | pass | /home/sergiopesch/.local/state/codex-realtime-linux/desktop-launch.log; mode 600; size 108491 bytes. |
+| API server log | pass | /home/sergiopesch/.local/state/codex-realtime-linux/api-server.log; mode 600; size 76927 bytes. |
 | Desktop entry contents | pass | Name, launcher, and terminal mode are correct. |
 | API status | pass | HTTP 200; appRoot=/home/sergiopesch/codex-realtime-linux; realtime=true; openAiKeySource=settings; usb.active=true; arduino.available=true. |
 | Realtime token endpoint | pass | HTTP 200; response bytes 6062; token body intentionally not recorded. |

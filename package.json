@@ -20,6 +20,7 @@
     "smoke:renderer": "node scripts/smoke-renderer.mjs",
     "verify:live": "node scripts/probe-mvp-live-environment.mjs",
     "verify:manual": "node scripts/record-mvp-manual-checklist.mjs",
+    "verify:mvp": "node scripts/check-mvp-readiness.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

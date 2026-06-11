@@ -106,6 +106,7 @@ Every MVP candidate must record:
 - `npm run smoke:renderer` result.
 - `npm run verify:live` result in `docs/mvp-live-probe-result.md`.
 - `npm run verify:manual` result in `docs/mvp-live-checklist-result.md`.
+- `npm run verify:mvp` result in `docs/mvp-readiness-report.md`.
 - `npm audit --omit=dev` result.
 - Desktop app restart/status result from `systemctl --user restart codex-realtime-linux-app.service` and `/api/status`.
 - Manual Live Verification Checklist result.
