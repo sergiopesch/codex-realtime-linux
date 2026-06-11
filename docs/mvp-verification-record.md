@@ -3,6 +3,7 @@
 Date: 2026-06-11
 
 Status: automated release gates passed; MVP is not complete until the manual live checklist below is run and recorded on the target desktop.
+Machine-observable desktop evidence should be captured with `npm run verify:live`, which writes `docs/mvp-live-probe-result.md`.
 Manual checklist evidence should be captured with `npm run verify:manual`, which writes `docs/mvp-live-checklist-result.md`.
 
 ## Automated Evidence
