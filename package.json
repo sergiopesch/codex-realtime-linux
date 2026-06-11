@@ -15,6 +15,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "test": "node --test server/*.test.mjs",
+    "smoke:degraded": "node scripts/smoke-degraded.mjs",
     "smoke:desktop": "node scripts/smoke-desktop-release.mjs",
     "smoke:renderer": "node scripts/smoke-renderer.mjs",
     "preview": "vite preview"

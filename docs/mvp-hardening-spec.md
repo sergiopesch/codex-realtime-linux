@@ -22,6 +22,7 @@ MVP-ready does not mean feature-complete with the public Codex app. It means the
 - Weather, USB, and Arduino integrations validate inputs, bound diagnostics, avoid fake data, and surface hardware ambiguity instead of guessing.
 - Automated validation currently covers API routing, persistence, preview policy, app-source guards, renderer invariants, Arduino/USB/weather modules, desktop install behavior, linting, and production build correctness.
 - Browser-driven renderer smoke coverage now exercises the voice surface, Settings/Usage/Profile navigation, empty workspace state, transcript toggle, and generated preview open/close behavior against a real Chromium instance.
+- Degraded-mode smoke coverage now exercises first-run empty state, corrupted primary state recovery from backup, malformed saved secrets, missing Realtime key handling, missing Codex CLI behavior, unexpected Codex app-server payload handling, unauthenticated Codex account state, and slow Codex app-server timeout behavior.
 - Production dependency audit currently reports no vulnerabilities with `npm audit --omit=dev`.
 
 ## MVP Acceptance Criteria
@@ -56,9 +57,7 @@ MVP-ready does not mean feature-complete with the public Codex app. It means the
   - status appRoot matches the repo
   - startup logs are created under the expected state directory
 - Manually run and record the Live Verification Checklist on the target Linux desktop, including microphone, speaker, screen capture, app-menu launch, and physical Arduino upload.
-- Confirm first-run behavior with no existing state/secrets files and no saved workspaces.
-- Confirm recovery behavior with intentionally corrupted state/secrets files.
-- Confirm the app remains usable when Codex CLI is unavailable, unauthenticated, slow, or returns malformed app-server responses.
+- Maintain degraded-mode smoke coverage for first-run behavior, corrupted state/secrets recovery, missing Realtime credentials, missing Codex CLI behavior, unexpected Codex app-server responses, slow Codex app-server responses, and unauthenticated Codex account states.
 - Confirm Realtime voice failure modes with missing key, invalid key, denied microphone permission, and network timeout.
 
 ### P1 Immediately After MVP
@@ -101,6 +100,7 @@ Every MVP candidate must record:
 - `npm run lint` result.
 - `npm run build` result.
 - `npm test` result and test count.
+- `npm run smoke:degraded` result.
 - `npm run smoke:desktop` result.
 - `npm run smoke:renderer` result.
 - `npm audit --omit=dev` result.

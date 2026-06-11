@@ -258,6 +258,14 @@ npm run smoke:desktop
 
 The desktop smoke script installs the desktop entry, verifies the launcher and icon, restarts `codex-realtime-linux-app.service` when that user service is present, checks `/api/status`, and confirms launch logs exist when the service restart path is available.
 
+For degraded-mode release coverage, run:
+
+```bash
+npm run smoke:degraded
+```
+
+The degraded smoke script starts isolated local API servers and verifies first-run empty state, corrupted state recovery from backup, malformed saved secrets, missing Realtime key handling, missing Codex CLI behavior, unexpected Codex app-server payload handling, unauthenticated Codex account state, and slow Codex app-server timeout behavior.
+
 ## Weather Check
 
 Open `Settings` in the app, enter a location, and use `Get weather` to verify the feature in the UI. A voice weather request updates the same Settings weather result card and clears stale loading or error state from earlier manual requests.
