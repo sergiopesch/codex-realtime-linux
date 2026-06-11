@@ -297,7 +297,7 @@ Before tagging or describing a build as MVP-ready, run:
 npm run verify:mvp
 ```
 
-The readiness checker writes `docs/mvp-readiness-report.md` and exits non-zero until automated evidence, the live probe, and the manual checklist are all complete. During development, use `npm run verify:mvp -- --allow-incomplete` to write the report without treating the expected manual gap as a command failure.
+The readiness checker writes `docs/mvp-readiness-report.md` and exits non-zero until automated evidence, the live probe, and the manual checklist are all complete. The manual checklist commit must match the current checkout, so stale human evidence cannot pass a later build. During development, use `npm run verify:mvp -- --allow-incomplete` to write the report without treating the expected manual gap as a command failure.
 
 ## Weather Check
 

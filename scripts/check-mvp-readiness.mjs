@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { spawn } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -76,6 +77,22 @@ function result(check, status, evidence) {
   }
 }
 
+function run(command, args) {
+  return new Promise((resolve) => {
+    const proc = spawn(command, args, { cwd: repoRoot, stdio: ['ignore', 'pipe', 'pipe'] })
+    let stdout = ''
+    let stderr = ''
+    proc.stdout.on('data', (chunk) => {
+      stdout += chunk.toString()
+    })
+    proc.stderr.on('data', (chunk) => {
+      stderr += chunk.toString()
+    })
+    proc.once('error', (error) => resolve({ ok: false, stdout, stderr: error.message }))
+    proc.once('exit', (code) => resolve({ ok: code === 0, stdout, stderr }))
+  })
+}
+
 function parseMarkdownRows(markdown) {
   return markdown
     .split('\n')
@@ -108,11 +125,16 @@ function checkLiveProbe(markdown) {
   return result('Live probe record', 'pass', summaryMatch ? summaryMatch[0] : 'Live probe is usable.')
 }
 
-function checkManualChecklist(markdown) {
+function checkManualChecklist(markdown, currentCommit) {
   if (!markdown) return result('Manual checklist record', 'fail', `${path.relative(repoRoot, manualChecklistPath)} is missing. Run npm run verify:manual.`)
   const statusMatch = /^Status:\s*(.+)$/m.exec(markdown)
   if (statusMatch?.[1] !== 'complete') {
     return result('Manual checklist record', 'fail', `Manual checklist status is ${statusMatch?.[1] ?? 'missing'}, expected complete.`)
+  }
+  const commitMatch = /^Commit:\s*(.+)$/m.exec(markdown)
+  const checklistCommit = commitMatch ? commitMatch[1].trim() : ''
+  if (!currentCommit || !checklistCommit || !(currentCommit.startsWith(checklistCommit) || checklistCommit.startsWith(currentCommit))) {
+    return result('Manual checklist record', 'fail', `Manual checklist commit ${checklistCommit || 'missing'} does not match current commit ${currentCommit || 'unknown'}.`)
   }
 
   const rows = parseMarkdownRows(markdown)
@@ -157,10 +179,12 @@ async function main() {
     readOptionalFile(liveProbePath),
     readOptionalFile(manualChecklistPath),
   ])
+  const currentCommitResult = await run('git', ['rev-parse', '--short', 'HEAD'])
+  const currentCommit = currentCommitResult.ok ? currentCommitResult.stdout.trim() : ''
   const rows = [
     checkVerificationRecord(verificationRecord),
     checkLiveProbe(liveProbe),
-    checkManualChecklist(manualChecklist),
+    checkManualChecklist(manualChecklist, currentCommit),
   ]
   const report = renderReport({ generatedAt: new Date().toISOString(), rows })
   await mkdir(path.dirname(options.outputPath), { recursive: true })
