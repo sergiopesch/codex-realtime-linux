@@ -144,6 +144,12 @@ OpenAI, admin usage, vision, Realtime token, and exchange-rate HTTP calls are al
 UPSTREAM_FETCH_TIMEOUT_MS=20000
 ```
 
+Release smoke tests may route OpenAI API calls to a local fake upstream to verify invalid-key and timeout behavior without touching the real API. The override accepts only `https://api.openai.com` or a root loopback origin, so real keys are not sent to arbitrary hosts:
+
+```bash
+CODEX_REALTIME_OPENAI_API_BASE_URL=http://127.0.0.1:9999
+```
+
 Visual context uses the same OpenAI key by default. The app captures uploaded images or a single screen-share frame, analyzes it with the Responses API, then injects the concise summary into the live Realtime conversation when voice is active. Image and screen source labels are reduced to safe basename-style labels before they are sent to prompts, notices, or Realtime. Override the vision model if needed:
 
 ```bash
@@ -230,6 +236,7 @@ OPENAI_USAGE_GBP_RATE_API=https://api.frankfurter.app/latest?from=USD&to=GBP
 Automated tests cover routing, persistence, preview policy, API guards, and build correctness. They do not prove microphone permissions, speaker output, app-menu launch behavior, screen capture permissions, or physical Arduino upload success. Use this checklist before treating a release as fully verified.
 
 Use this checklist together with the release gates in [docs/mvp-hardening-spec.md](docs/mvp-hardening-spec.md).
+Record the current release evidence in [docs/mvp-verification-record.md](docs/mvp-verification-record.md).
 
 1. Desktop launch: run `npm run install:desktop`, launch **Codex** from the app menu, then confirm the app opens without a terminal. If launch fails, check `~/.local/state/codex-realtime-linux/desktop-launch.log` and `~/.local/state/codex-realtime-linux/api-server.log`.
 2. API health: with the desktop app open, run `curl -s http://127.0.0.1:3311/api/status` and confirm it returns this app root and a healthy local server response.
@@ -264,7 +271,7 @@ For degraded-mode release coverage, run:
 npm run smoke:degraded
 ```
 
-The degraded smoke script starts isolated local API servers and verifies first-run empty state, corrupted state recovery from backup, malformed saved secrets, missing Realtime key handling, missing Codex CLI behavior, unexpected Codex app-server payload handling, unauthenticated Codex account state, and slow Codex app-server timeout behavior.
+The degraded smoke script starts isolated local API servers and verifies first-run empty state, corrupted state recovery from backup, malformed saved secrets, missing Realtime key handling, invalid upstream Realtime key handling, Realtime token upstream timeout behavior, missing Codex CLI behavior, unexpected Codex app-server payload handling, unauthenticated Codex account state, and slow Codex app-server timeout behavior.
 
 ## Weather Check
 

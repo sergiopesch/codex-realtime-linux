@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process'
 import { chmod, mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
+import { createServer } from 'node:http'
 import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
@@ -81,6 +82,22 @@ async function startServer(tempDir, extraEnv = {}) {
     throw error
   }
   return { baseUrl, proc, statePath, secretsPath }
+}
+
+async function startFakeOpenAiServer(handler) {
+  const port = await getAvailablePort()
+  const server = createServer(handler)
+  await new Promise((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(port, '127.0.0.1', resolve)
+  })
+  return {
+    baseUrl: `http://127.0.0.1:${port}`,
+    async close() {
+      server.closeAllConnections?.()
+      await new Promise((resolve) => server.close(resolve))
+    },
+  }
 }
 
 async function readJson(response) {
@@ -282,11 +299,63 @@ async function scenarioSlowCodexBridge(tempDir) {
   }
 }
 
+async function scenarioInvalidRealtimeKey(tempDir) {
+  const fakeOpenAi = await startFakeOpenAiServer((req, res) => {
+    if (req.method !== 'POST' || req.url !== '/v1/realtime/client_secrets') {
+      res.writeHead(404, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: { message: 'Not found' } }))
+      return
+    }
+    res.writeHead(401, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: { message: 'Incorrect API key provided.' } }))
+  })
+  const { baseUrl, proc } = await startServer(tempDir, {
+    OPENAI_API_KEY: `sk-${'test'.repeat(16)}`,
+    CODEX_REALTIME_OPENAI_API_BASE_URL: fakeOpenAi.baseUrl,
+  })
+  try {
+    const body = await assertStatus(
+      await fetch(`${baseUrl}/api/realtime/token`, { method: 'POST' }),
+      502,
+      'realtime_token_failed',
+      'invalid upstream Realtime key',
+    )
+    if (!/Incorrect API key provided/.test(body.error ?? '')) {
+      throw new Error('Invalid upstream Realtime key did not return the upstream error message.')
+    }
+  } finally {
+    await stopProcess(proc)
+    await fakeOpenAi.close()
+  }
+}
+
+async function scenarioRealtimeTokenTimeout(tempDir) {
+  const fakeOpenAi = await startFakeOpenAiServer(() => {})
+  const { baseUrl, proc } = await startServer(tempDir, {
+    OPENAI_API_KEY: `sk-${'slow'.repeat(16)}`,
+    CODEX_REALTIME_OPENAI_API_BASE_URL: fakeOpenAi.baseUrl,
+    UPSTREAM_FETCH_TIMEOUT_MS: '1000',
+  })
+  try {
+    await assertStatus(
+      await fetch(`${baseUrl}/api/realtime/token`, { method: 'POST' }),
+      502,
+      'realtime_token_failed',
+      'Realtime token upstream timeout',
+    )
+  } finally {
+    await stopProcess(proc)
+    await fakeOpenAi.close()
+  }
+}
+
 async function main() {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-degraded-smoke-'))
   try {
     await scenarioFirstRunAndMissingRealtime(tempDir)
     await scenarioCorruptedStateAndSecrets(tempDir)
+    await scenarioInvalidRealtimeKey(tempDir)
+    await scenarioRealtimeTokenTimeout(tempDir)
     await scenarioUnexpectedCodexPayload(tempDir)
     await scenarioUnauthenticatedCodexAccount(tempDir)
     await scenarioSlowCodexBridge(tempDir)

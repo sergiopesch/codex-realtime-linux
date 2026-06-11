@@ -16,11 +16,14 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const DIST_DIR = path.join(REPO_ROOT, 'dist')
 const DEFAULT_PORT = 3311
 const PORT = configuredPort(process.env.PORT)
+const MAX_OPENAI_API_KEY_LENGTH = 1_000
 const ENV_OPENAI_API_KEY = normalizedOpenAiApiKey(process.env.OPENAI_API_KEY)
 const OPENAI_ADMIN_KEY = process.env.OPENAI_ADMIN_KEY ?? process.env.OPENAI_API_ADMIN_KEY
 const ENV_CODEX_API_KEY = process.env.CODEX_API_KEY
 const CODEX_FORCE_API_KEY_AUTH = process.env.CODEX_FORCE_API_KEY_AUTH === 'true'
 const DESKTOP_SERVER_TOKEN = process.env.CODEX_DESKTOP_SERVER_TOKEN ?? ''
+const localApiHostnames = new Set(['localhost', '127.0.0.1', '[::1]'])
+const OPENAI_API_BASE_HOSTNAMES = new Set([...localApiHostnames, '::1'])
 const MAX_RUNTIME_CONFIG_STRING_LENGTH = 240
 const MAX_CONFIGURED_PATH_LENGTH = 1_000
 const MAX_RUNTIME_PERSONA_LENGTH = 2_000
@@ -47,6 +50,9 @@ const USAGE_PERIOD_DAYS = configuredInteger(process.env.OPENAI_USAGE_PERIOD_DAYS
 })
 const MAX_USD_TO_GBP_RATE = 10
 const GBP_RATE_API = process.env.OPENAI_USAGE_GBP_RATE_API ?? 'https://api.frankfurter.app/latest?from=USD&to=GBP'
+const DEFAULT_OPENAI_API_BASE_URL = 'https://api.openai.com'
+const MAX_OPENAI_API_BASE_URL_LENGTH = 300
+const OPENAI_API_BASE_URL = configuredOpenAiApiBaseUrl(process.env.CODEX_REALTIME_OPENAI_API_BASE_URL)
 const DEFAULT_UPSTREAM_FETCH_TIMEOUT_MS = 20_000
 const MAX_UPSTREAM_FETCH_TIMEOUT_MS = 120_000
 const UPSTREAM_FETCH_TIMEOUT_MS = configuredInteger(process.env.UPSTREAM_FETCH_TIMEOUT_MS, {
@@ -137,7 +143,6 @@ const MAX_EVENT_STRING_LENGTH = 2_000
 const MAX_EVENT_ARRAY_ITEMS = 20
 const MAX_EVENT_OBJECT_KEYS = 30
 const MAX_EVENT_DEPTH = 4
-const MAX_OPENAI_API_KEY_LENGTH = 1_000
 const MAX_CODEX_RPC_LINE_LENGTH = 120_000
 const MAX_ERROR_MESSAGE_LENGTH = 500
 const MAX_OPENAI_SAFETY_IDENTIFIER_LENGTH = 128
@@ -162,7 +167,6 @@ let localSecrets = {}
 const app = express()
 app.disable('x-powered-by')
 const usbMonitor = new UsbDeviceMonitor()
-const localApiHostnames = new Set(['localhost', '127.0.0.1', '[::1]'])
 const MAX_ALLOWED_API_ORIGINS = 20
 const MAX_ALLOWED_API_ORIGINS_ENV_LENGTH = 4_000
 const MAX_API_ORIGIN_LENGTH = 300
@@ -221,6 +225,26 @@ function configuredJsonBodyLimit(value, fallback = DEFAULT_JSON_BODY_LIMIT) {
   const multiplier = unit === 'mb' ? 1024 * 1024 : unit === 'kb' ? 1024 : 1
   const bytes = amount * multiplier
   return Number.isInteger(amount) && amount > 0 && bytes <= MAX_JSON_BODY_LIMIT_BYTES ? `${amount}${unit}` : fallback
+}
+
+function configuredOpenAiApiBaseUrl(value, fallback = DEFAULT_OPENAI_API_BASE_URL) {
+  const text = typeof value === 'string' ? value.trim() : ''
+  if (!text) return fallback
+  if (text.length > MAX_OPENAI_API_BASE_URL_LENGTH) return fallback
+
+  try {
+    const url = new URL(text)
+    if (url.username || url.password || url.pathname !== '/' || url.search || url.hash) return fallback
+    if (url.protocol === 'https:' && url.hostname === 'api.openai.com') return url.origin
+    if ((url.protocol === 'http:' || url.protocol === 'https:') && OPENAI_API_BASE_HOSTNAMES.has(url.hostname)) return url.origin
+  } catch {
+    return fallback
+  }
+  return fallback
+}
+
+function openAiApiUrl(pathname) {
+  return new URL(pathname, `${OPENAI_API_BASE_URL}/`).toString()
 }
 
 function configuredRuntimeString(value, fallback, maxLength = MAX_RUNTIME_CONFIG_STRING_LENGTH) {
@@ -919,7 +943,7 @@ function realtimeSessionConfig() {
 }
 
 async function createRealtimeClientSecret(openAiApiKey) {
-  const response = await fetch('https://api.openai.com/v1/realtime/client_secrets', {
+  const response = await fetch(openAiApiUrl('/v1/realtime/client_secrets'), {
     method: 'POST',
     signal: upstreamSignal(),
     headers: {
@@ -1070,7 +1094,7 @@ async function analyzeVisualContext({ imageDataUrl, source, prompt }) {
     })
   }
 
-  const response = await fetch('https://api.openai.com/v1/responses', {
+  const response = await fetch(openAiApiUrl('/v1/responses'), {
     method: 'POST',
     signal: upstreamSignal(),
     headers: {
@@ -1999,7 +2023,7 @@ async function normalizeUsage(costs, completionUsage) {
 
 async function openaiGet(path, key = OPENAI_ADMIN_KEY) {
   if (!key) throw new Error('OPENAI_ADMIN_KEY is not configured')
-  const response = await fetch(`https://api.openai.com/v1${path}`, {
+  const response = await fetch(openAiApiUrl(`/v1${path}`), {
     headers: { Authorization: `Bearer ${key}` },
     signal: upstreamSignal(),
   })
