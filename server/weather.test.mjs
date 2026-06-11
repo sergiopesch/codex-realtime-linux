@@ -249,6 +249,37 @@ test('getCurrentWeather rejects malformed forecast JSON', async () => {
   )
 })
 
+test('getCurrentWeather reports non-json upstream forecast errors as api errors', async () => {
+  const fetchImpl = async (url) => {
+    if (String(url).startsWith('https://geocoding-api.open-meteo.com/')) {
+      return Response.json({
+        results: [
+          {
+            name: 'London',
+            latitude: 51.50853,
+            longitude: -0.12574,
+          },
+        ],
+      })
+    }
+
+    return new Response('<html><h1>502 Bad Gateway</h1></html>', {
+      status: 502,
+      statusText: 'Bad Gateway',
+      headers: { 'Content-Type': 'text/html' },
+    })
+  }
+
+  await assert.rejects(
+    () => getCurrentWeather('London', { fetchImpl }),
+    (error) =>
+      error instanceof WeatherServiceError &&
+      error.status === 502 &&
+      error.code === 'weather_forecast_api_error' &&
+      /502 Bad Gateway/.test(error.message),
+  )
+})
+
 test('getCurrentWeather surfaces not-found locations as a 404', async () => {
   const fetchImpl = async () => Response.json({ results: [] })
 

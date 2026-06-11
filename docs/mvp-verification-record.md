@@ -7,15 +7,26 @@ Status: automated release gates passed; MVP is not complete until the manual liv
 ## Automated Evidence
 
 - Branch: `main`
-- Base commit before this verification update: `a65b32d`
+- Previous pushed commit before this verification update: `df173af`
 - `npm run lint`: passed.
 - `npm run build`: passed.
-- `npm test`: passed, 122 tests.
+- `npm test`: passed, 123 tests.
 - `npm run smoke:degraded`: passed.
 - `npm run smoke:desktop`: passed with user service restart.
 - `npm run smoke:renderer`: passed.
 - `npm audit --omit=dev`: passed, 0 vulnerabilities.
 - Desktop API status: passed at `http://127.0.0.1:3311/api/status`; `appRoot` returned `/home/sergiopesch/codex-realtime-linux`.
+
+## Live Desktop Evidence
+
+- Desktop service: `codex-realtime-linux-app.service` was active under the user systemd session and running the app launcher through the `dialout` group handoff.
+- Desktop launcher: `~/.local/share/applications/codex-realtime-linux.desktop` exists with `Name=Codex`, `Terminal=false`, and `Exec=/home/sergiopesch/codex-realtime-linux/scripts/launch-desktop.sh`.
+- Desktop logs: `desktop-launch.log` and `api-server.log` exist under `~/.local/state/codex-realtime-linux/` with `0600` permissions.
+- API health: `/api/status` returned `realtime: true`, `openAiKeySource: settings`, `appRoot: /home/sergiopesch/codex-realtime-linux`, `usb.active: true`, and Arduino CLI availability.
+- Realtime token: a bodyless `POST /api/realtime/token` returned HTTP 200; token contents were not recorded.
+- Local media devices: PipeWire reported speaker output, multiple microphone inputs, and an integrated camera. This proves device enumeration only, not user permission acceptance inside Electron.
+- USB and Arduino: `/api/usb/events?scan=true` returned no connected devices; `/api/arduino/status` reported no boards and no serial ports. A safe upload request returned `arduino_port_not_found`, so physical upload success could not be verified without connecting the board.
+- Weather: live London lookup reached the app route but the upstream weather service did not return live data. The app surfaced an explicit bounded weather error instead of fabricated data.
 
 ## Degraded Coverage Confirmed
 
@@ -43,7 +54,7 @@ These checks still require a live desktop pass before an MVP tag:
 - Voice-routed Codex task against a real external workspace.
 - Generated HTML presentation written to the selected workspace and previewed in the temporary browser view.
 - Subtle Codex agent activity while work is running.
-- Settings weather lookup and voice weather result path.
+- Settings weather lookup and voice weather result path once the upstream weather service returns live data.
 - USB detection with the target Arduino-style board.
 - Physical Arduino upload with an explicit detected port and LED behavior confirmation.
 

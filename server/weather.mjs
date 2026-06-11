@@ -193,14 +193,20 @@ async function fetchJson(url, { fetchImpl = fetch, timeoutMs = DEFAULT_TIMEOUT_M
     )
   }
 
-  const data = await readJson(response, stage)
   if (!response.ok) {
+    const text = await readBoundedResponseText(response, stage)
+    let data = {}
+    try {
+      data = text ? JSON.parse(text) : {}
+    } catch {
+      data = {}
+    }
     const reason =
       typeof data?.reason === 'string'
         ? boundedString(data.reason, '', MAX_UPSTREAM_REASON_LENGTH)
         : typeof data?.error?.message === 'string'
           ? boundedString(data.error.message, '', MAX_UPSTREAM_REASON_LENGTH)
-          : null
+          : `${response.status} ${response.statusText || 'upstream error'}`
     throw new WeatherServiceError(
       reason ? `Weather service request failed: ${reason}` : 'Weather service request failed.',
       {
@@ -210,6 +216,7 @@ async function fetchJson(url, { fetchImpl = fetch, timeoutMs = DEFAULT_TIMEOUT_M
     )
   }
 
+  const data = await readJson(response, stage)
   return data
 }
 
