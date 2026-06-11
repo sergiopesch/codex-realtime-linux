@@ -3078,6 +3078,11 @@ function App() {
         setWeatherError(displayErrorMessage(error, 'Weather lookup failed'))
         setWeatherResult(null)
       }
+      if (toolName === 'arduino_upload_sketch') {
+        const action = typeof payload.action === 'string' ? payload.action.trim() : ''
+        appendEvent('arduino/upload-failed', { action, message })
+        setActivity('Arduino upload', 'Upload failed')
+      }
       result = { error: message }
     }
 
