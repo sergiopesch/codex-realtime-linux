@@ -12,6 +12,8 @@ This is an independent prototype. It does not reverse engineer the closed Codex 
 
 The current solution is a standalone Linux desktop app with a realtime voice-first center surface. The primary flow is deliberately minimal: start voice, cancel if connection setup stalls, add transcript/screen/image context when needed, and while voice is live switch to mute and stop controls. Codex work runs through the app-server bridge in the selected workspace, while generated HTML presentations and previews are written under that workspace and rendered inside the app browser preview.
 
+The current MVP hardening target, audit findings, acceptance criteria, and release gates live in [docs/mvp-hardening-spec.md](docs/mvp-hardening-spec.md).
+
 ## Current Shape
 
 - Electron desktop shell for Linux.
@@ -226,6 +228,8 @@ OPENAI_USAGE_GBP_RATE_API=https://api.frankfurter.app/latest?from=USD&to=GBP
 ## Live Verification Checklist
 
 Automated tests cover routing, persistence, preview policy, API guards, and build correctness. They do not prove microphone permissions, speaker output, app-menu launch behavior, screen capture permissions, or physical Arduino upload success. Use this checklist before treating a release as fully verified.
+
+Use this checklist together with the release gates in [docs/mvp-hardening-spec.md](docs/mvp-hardening-spec.md).
 
 1. Desktop launch: run `npm run install:desktop`, launch **Codex** from the app menu, then confirm the app opens without a terminal. If launch fails, check `~/.local/state/codex-realtime-linux/desktop-launch.log` and `~/.local/state/codex-realtime-linux/api-server.log`.
 2. API health: with the desktop app open, run `curl -s http://127.0.0.1:3311/api/status` and confirm it returns this app root and a healthy local server response.
