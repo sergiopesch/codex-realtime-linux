@@ -1288,11 +1288,14 @@ const valueContainsString = (value: unknown, needle: string): boolean => {
 const valueContainsCompletedCodexStatus = (value: unknown, statusContext = false): boolean => {
   if (typeof value === 'string') return statusContext && completedCodexTurnWords.has(value.toLowerCase())
   if (!value || typeof value !== 'object') return false
-  if (Array.isArray(value)) return statusContext && value.some((item) => valueContainsCompletedCodexStatus(item, true))
+  if (Array.isArray(value)) {
+    return !statusContext && value.some((item) => valueContainsCompletedCodexStatus(item, false))
+  }
 
   return Object.entries(value as UnknownRecord).some(([key, item]) => {
     const statusKey = /status|state|type|outcome|phase/i.test(key)
     if (statusKey && typeof item === 'string' && completedCodexTurnWords.has(item.toLowerCase())) return true
+    if (statusKey && Array.isArray(item)) return false
     return valueContainsCompletedCodexStatus(item, statusContext || statusKey)
   })
 }
