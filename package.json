@@ -18,6 +18,7 @@
     "smoke:degraded": "node scripts/smoke-degraded.mjs",
     "smoke:desktop": "node scripts/smoke-desktop-release.mjs",
     "smoke:renderer": "node scripts/smoke-renderer.mjs",
+    "verify:manual": "node scripts/record-mvp-manual-checklist.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

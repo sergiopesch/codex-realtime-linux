@@ -56,7 +56,7 @@ MVP-ready does not mean feature-complete with the public Codex app. It means the
   - app server becomes healthy
   - status appRoot matches the repo
   - startup logs are created under the expected state directory
-- Manually run and record the Live Verification Checklist on the target Linux desktop, including microphone, speaker, screen capture, app-menu launch, and physical Arduino upload.
+- Manually run and record the Live Verification Checklist on the target Linux desktop using `npm run verify:manual`, including microphone, speaker, screen capture, app-menu launch, and physical Arduino upload.
 - Maintain degraded-mode smoke coverage for first-run behavior, corrupted state/secrets recovery, missing and invalid Realtime credentials, Realtime token upstream timeout behavior, missing Codex CLI behavior, unexpected Codex app-server responses, slow Codex app-server responses, and unauthenticated Codex account states.
 - Confirm Realtime voice failure modes that require OS or live WebRTC behavior, especially denied microphone permission and live connection setup failures.
 
@@ -104,6 +104,7 @@ Every MVP candidate must record:
 - `npm run smoke:degraded` result.
 - `npm run smoke:desktop` result.
 - `npm run smoke:renderer` result.
+- `npm run verify:manual` result in `docs/mvp-live-checklist-result.md`.
 - `npm audit --omit=dev` result.
 - Desktop app restart/status result from `systemctl --user restart codex-realtime-linux-app.service` and `/api/status`.
 - Manual Live Verification Checklist result.

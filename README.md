@@ -237,6 +237,7 @@ Automated tests cover routing, persistence, preview policy, API guards, and buil
 
 Use this checklist together with the release gates in [docs/mvp-hardening-spec.md](docs/mvp-hardening-spec.md).
 Record the current release evidence in [docs/mvp-verification-record.md](docs/mvp-verification-record.md).
+Use `npm run verify:manual` to write the human pass/fail evidence for the checklist to `docs/mvp-live-checklist-result.md`; use `npm run verify:manual -- --print-template` to print a non-interactive template.
 
 1. Desktop launch: run `npm run install:desktop`, launch **Codex** from the app menu, then confirm the app opens without a terminal. If launch fails, check `~/.local/state/codex-realtime-linux/desktop-launch.log` and `~/.local/state/codex-realtime-linux/api-server.log`.
 2. API health: with the desktop app open, run `curl -s http://127.0.0.1:3311/api/status` and confirm it returns this app root and a healthy local server response.
@@ -272,6 +273,14 @@ npm run smoke:degraded
 ```
 
 The degraded smoke script starts isolated local API servers and verifies first-run empty state, corrupted state recovery from backup, malformed saved secrets, missing Realtime key handling, invalid upstream Realtime key handling, Realtime token upstream timeout behavior, missing Codex CLI behavior, unexpected Codex app-server payload handling, unauthenticated Codex account state, and slow Codex app-server timeout behavior.
+
+For manual live verification evidence, run:
+
+```bash
+npm run verify:manual
+```
+
+The manual recorder prompts for each live-only check, writes a Markdown result file, and marks the checklist incomplete until every row is recorded as `pass` with evidence.
 
 ## Weather Check
 
