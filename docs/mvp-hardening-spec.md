@@ -21,6 +21,7 @@ MVP-ready does not mean feature-complete with the public Codex app. It means the
 - Local state and Settings secrets are persisted outside the repo with bounded normalization, user-only permissions, atomic writes, backup recovery, and strict row-key mutation for duplicate conversation IDs.
 - Weather, USB, and Arduino integrations validate inputs, bound diagnostics, avoid fake data, and surface hardware ambiguity instead of guessing.
 - Automated validation currently covers API routing, persistence, preview policy, app-source guards, renderer invariants, Arduino/USB/weather modules, desktop install behavior, linting, and production build correctness.
+- Browser-driven renderer smoke coverage now exercises the voice surface, Settings/Usage/Profile navigation, empty workspace state, transcript toggle, and generated preview open/close behavior against a real Chromium instance.
 - Production dependency audit currently reports no vulnerabilities with `npm audit --omit=dev`.
 
 ## MVP Acceptance Criteria
@@ -42,13 +43,13 @@ MVP-ready does not mean feature-complete with the public Codex app. It means the
 
 ### P0 Before MVP Tag
 
-- Add browser-driven smoke coverage for the renderer using Playwright or equivalent:
+- Maintain and expand browser-driven smoke coverage for the renderer using Playwright or equivalent:
   - app starts to the voice surface
   - Settings/Usage/Profile navigation does not collapse sidebar entries
   - workspace with no threads stays on the voice surface
   - generated preview open/close behavior is visible and closeable
   - transcript panel toggles without layout overlap
-- Add a desktop release smoke script that runs after `npm run install:desktop` and verifies:
+- Maintain the desktop release smoke script that runs installation checks and verifies:
   - desktop entry exists
   - launcher path is executable
   - app server becomes healthy
@@ -100,8 +101,9 @@ Every MVP candidate must record:
 - `npm run lint` result.
 - `npm run build` result.
 - `npm test` result and test count.
+- `npm run smoke:desktop` result.
+- `npm run smoke:renderer` result.
 - `npm audit --omit=dev` result.
 - Desktop app restart/status result from `systemctl --user restart codex-realtime-linux-app.service` and `/api/status`.
 - Manual Live Verification Checklist result.
 - Known limitations accepted for that build.
-

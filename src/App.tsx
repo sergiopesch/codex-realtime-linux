@@ -2005,6 +2005,18 @@ function App() {
     extendArtifactPreview()
   }, [extendArtifactPreview])
 
+  useEffect(() => {
+    if (import.meta.env.MODE !== 'smoke') return undefined
+    const openSmokeArtifact = (event: Event) => {
+      const artifact = safeGeneratedArtifact((event as CustomEvent<unknown>).detail)
+      if (!artifact) return
+      setDismissedArtifact(null)
+      openArtifactPreview(artifact)
+    }
+    window.addEventListener('codex:smoke-open-artifact-preview', openSmokeArtifact)
+    return () => window.removeEventListener('codex:smoke-open-artifact-preview', openSmokeArtifact)
+  }, [openArtifactPreview])
+
   const requestWeather = async (event?: FormEvent<HTMLFormElement>) => {
     event?.preventDefault()
     const requestId = weatherRequestIdRef.current + 1

@@ -242,6 +242,22 @@ Use this checklist together with the release gates in [docs/mvp-hardening-spec.m
 9. USB detection: with voice running, connect the board and run `curl "http://127.0.0.1:3311/api/usb/events?scan=true"`. The app should briefly acknowledge the detected board without pretending to read sketch or serial data.
 10. Arduino upload: run `curl -s http://127.0.0.1:3311/api/arduino/status`, confirm `arduino-cli` is available, then upload a safe onboard LED sketch with an explicit port if auto-detection is ambiguous. Verify the physical board LED changes as instructed.
 
+For automated browser coverage of the core renderer flows, run:
+
+```bash
+npm run smoke:renderer
+```
+
+The renderer smoke script starts isolated local API and Vite servers, drives Chromium through Playwright, and checks the voice surface, Settings/Usage/Profile navigation, empty workspace state, transcript toggle, and generated preview open/close behavior. If Chromium is not installed at a common Linux path, set `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/absolute/path/to/chromium`.
+
+For a desktop release smoke check on the target Linux session, run:
+
+```bash
+npm run smoke:desktop
+```
+
+The desktop smoke script installs the desktop entry, verifies the launcher and icon, restarts `codex-realtime-linux-app.service` when that user service is present, checks `/api/status`, and confirms launch logs exist when the service restart path is available.
+
 ## Weather Check
 
 Open `Settings` in the app, enter a location, and use `Get weather` to verify the feature in the UI. A voice weather request updates the same Settings weather result card and clears stale loading or error state from earlier manual requests.
