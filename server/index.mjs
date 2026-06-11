@@ -638,12 +638,13 @@ async function readUpstreamJson(response, fallbackMessage = 'Upstream response w
   }
 }
 
-async function artifactPlanForWorkspace(cwd, goal) {
+async function artifactPlanForWorkspace(cwd, goal, protectedWorkspace = null) {
   const basePlan = artifactPlanForGoal(goal, new Date(), randomUUID().slice(0, 8))
   if (!basePlan) return null
 
   const workspacePath = path.resolve(cwd)
-  if (!CODEX_ALLOW_APP_SOURCE_TASKS && (await isProtectedAppWorkspace(workspacePath))) {
+  const appSourceWorkspace = protectedWorkspace ?? (await isProtectedAppWorkspace(workspacePath))
+  if (!CODEX_ALLOW_APP_SOURCE_TASKS && appSourceWorkspace) {
     throw httpError('Generated artifacts must be created in a selected workspace outside this app source tree.', {
       statusCode: 400,
       code: 'protected_app_workspace',
@@ -665,9 +666,10 @@ async function isProtectedAppWorkspace(cwd) {
   return isPathInside(REPO_ROOT, workspacePath) || isPathInside(realRepoRoot, realWorkspacePath)
 }
 
-async function requireAllowedCodexTaskWorkspace(cwd) {
+async function requireAllowedCodexTaskWorkspace(cwd, protectedWorkspace = null) {
   if (CODEX_ALLOW_APP_SOURCE_TASKS) return
-  if (await isProtectedAppWorkspace(cwd)) {
+  const appSourceWorkspace = protectedWorkspace ?? (await isProtectedAppWorkspace(cwd))
+  if (appSourceWorkspace) {
     throw httpError('Codex tasks cannot run inside this app source tree unless CODEX_ALLOW_APP_SOURCE_TASKS=true.', {
       statusCode: 400,
       code: 'protected_app_workspace',
@@ -675,9 +677,9 @@ async function requireAllowedCodexTaskWorkspace(cwd) {
   }
 }
 
-function goalForWorkspace(cwd, goal, artifactPlan = null) {
+function goalForWorkspace(cwd, goal, artifactPlan = null, protectedWorkspace = false) {
   const workspacePath = path.resolve(cwd)
-  if (artifactPlan && workspacePath !== REPO_ROOT) {
+  if (artifactPlan && !protectedWorkspace) {
     return [
       'Artifact workflow: inspect this selected workspace before creating the result.',
       'Use local project files, documents, and images in this workspace as source data for the requested HTML presentation or page.',
@@ -691,6 +693,7 @@ function goalForWorkspace(cwd, goal, artifactPlan = null) {
     ].join('\n')
   }
 
+  if (protectedWorkspace) return goalWithWorkspaceGuard(goal, artifactPlan)
   if (workspacePath !== REPO_ROOT) return goal
   return goalWithWorkspaceGuard(goal, artifactPlan)
 }
@@ -2296,8 +2299,9 @@ app.post('/api/codex/task', async (req, res) => {
     const body = requireObjectBody(req.body, 'Codex task request')
     const goal = requireText(body.goal, 'goal')
     const cwd = await requireWorkspaceDirectory(body.cwd, 'cwd')
-    await requireAllowedCodexTaskWorkspace(cwd)
-    const artifactPlan = await artifactPlanForWorkspace(cwd, goal)
+    const protectedWorkspace = await isProtectedAppWorkspace(cwd)
+    await requireAllowedCodexTaskWorkspace(cwd, protectedWorkspace)
+    const artifactPlan = await artifactPlanForWorkspace(cwd, goal, protectedWorkspace)
     if (artifactPlan) await mkdir(artifactPlan.absoluteDir, { recursive: true })
     await codex.ensure()
     const threadResult = await codex.request('thread/start', {
@@ -2310,7 +2314,7 @@ app.post('/api/codex/task', async (req, res) => {
     threadId = normalizeCodexEntityId(threadResult.thread, 'thread')
     const turnResult = await codex.request('turn/start', {
       threadId,
-      input: [{ type: 'text', text: goalForWorkspace(cwd, goal, artifactPlan) }],
+      input: [{ type: 'text', text: goalForWorkspace(cwd, goal, artifactPlan, protectedWorkspace) }],
     })
     const turnId = normalizeCodexEntityId(turnResult.turn, 'turn')
     res.json({ thread: { id: threadId }, turn: { id: turnId }, artifact: publicArtifactPlan(artifactPlan) })

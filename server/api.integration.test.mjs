@@ -930,6 +930,39 @@ test('codex app-source tasks require an explicit environment opt-in', async (t) 
     .map((line) => JSON.parse(line))
   const threadStart = rpcMessages.find((message) => message.method === 'thread/start')
   assert.equal(threadStart?.params?.cwd, repoRoot)
+  const turnStart = rpcMessages.find((message) => message.method === 'turn/start')
+  const turnText = turnStart?.params?.input?.[0]?.text ?? ''
+  assert.match(turnText, /Protected app source paths:/)
+
+  const appSubdir = path.join(repoRoot, 'src')
+  const subdirTask = await fetch(`${baseUrl}/api/codex/task`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      cwd: appSubdir,
+      goal: 'Review this renderer folder and summarize the current implementation.',
+    }),
+  })
+  assert.equal(subdirTask.status, 200)
+  const subdirBody = await subdirTask.json()
+  assert.equal(subdirBody.thread.id, 'thread-ok')
+  assert.equal(subdirBody.turn.id, 'turn-ok')
+  assert.equal(subdirBody.artifact, null)
+
+  const subdirRpcMessages = (await readFile(logPath, 'utf8'))
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line))
+  const threadStarts = subdirRpcMessages.filter((message) => message.method === 'thread/start')
+  assert.equal(threadStarts.at(-1)?.params?.cwd, appSubdir)
+  const turnStarts = subdirRpcMessages.filter((message) => message.method === 'turn/start')
+  const subdirTurnText = turnStarts.at(-1)?.params?.input?.[0]?.text ?? ''
+  assert.match(subdirTurnText, /Protected app source paths:/)
+  assert.match(
+    subdirTurnText,
+    /Do not edit protected app source paths unless the user explicitly asks to modify this app or a specific protected file\./,
+  )
+  assert.match(subdirTurnText, /User goal:\nReview this renderer folder and summarize the current implementation\./)
 })
 
 test('codex routes bound app-server rpc error messages', async (t) => {
