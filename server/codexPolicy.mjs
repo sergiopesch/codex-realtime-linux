@@ -179,6 +179,7 @@ export function buildWorkspaceGuard(goal, artifactPlan = artifactPlanForGoal(goa
       `Keep all supporting files for this result inside ${artifactPlan.relativeDir}/.`,
       'If the user asks for index.html without explicitly asking to change this app, use the artifact path above instead of editing the root index.html.',
       'The result should be directly viewable in an iframe/browser preview from that index.html file.',
+      'In your final response, mention only workspace-relative generated paths. Do not include absolute local file links.',
     )
   }
 

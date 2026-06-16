@@ -165,7 +165,11 @@ async function probeRealtimeToken(apiBaseUrl) {
 async function probeUsbAndArduino(apiBaseUrl) {
   const rows = []
   try {
-    const { response, body } = await readJsonResponse(`${apiBaseUrl}/api/usb/events?scan=true`)
+    const { response, body } = await readJsonResponse(`${apiBaseUrl}/api/usb/events/scan`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    })
     const active = body?.status?.active === true
     const devices = Array.isArray(body?.data) ? body.data.length : 0
     rows.push(tableRow('USB watcher', response.ok && active ? 'pass' : 'warn', `HTTP ${response.status}; active=${active}; detected events=${devices}.`))

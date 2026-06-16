@@ -41,6 +41,51 @@ chmod 600 "$desktop_log" 2>/dev/null || true
 exec >> "$desktop_log" 2>&1
 printf '\n[%s] Launching Codex desktop from %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$repo_root"
 
+is_absolute_file_without_control_chars() {
+  local candidate="$1"
+  if [ -z "$candidate" ] || [ "${candidate#/}" = "$candidate" ]; then
+    return 1
+  fi
+  case "$candidate" in
+    *[$'\001'-$'\037'$'\177']*) return 1 ;;
+    *) [ -x "$candidate" ] ;;
+  esac
+}
+
+resolve_codex_bin_candidate() {
+  local command_path=""
+  command_path="$(command -v codex 2>/dev/null || true)"
+  if is_absolute_file_without_control_chars "$command_path"; then
+    printf '%s\n' "$command_path"
+    return 0
+  fi
+
+  local npm_prefix=""
+  if command -v npm >/dev/null 2>&1; then
+    npm_prefix="$(npm config get prefix 2>/dev/null || true)"
+  fi
+  if is_absolute_dir_without_control_chars "$npm_prefix" &&
+    is_absolute_file_without_control_chars "$npm_prefix/bin/codex"; then
+    printf '%s\n' "$npm_prefix/bin/codex"
+    return 0
+  fi
+
+  return 1
+}
+
+configured_codex_bin="${CODEX_BIN:-}"
+if [ -n "$configured_codex_bin" ]; then
+  printf '[%s] Using configured CODEX_BIN %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$configured_codex_bin"
+else
+  resolved_codex_bin="$(resolve_codex_bin_candidate || true)"
+  if [ -n "$resolved_codex_bin" ]; then
+    export CODEX_BIN="$resolved_codex_bin"
+    printf '[%s] Resolved Codex CLI to %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$CODEX_BIN"
+  else
+    printf '[%s] Codex CLI was not resolved before launch; API bridge will use PATH fallback\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  fi
+fi
+
 current_user="${USER:-$(id -un 2>/dev/null || true)}"
 if [ "${CODEX_REALTIME_DIALOUT_REEXEC:-}" != "1" ] &&
   [ -n "$current_user" ] &&

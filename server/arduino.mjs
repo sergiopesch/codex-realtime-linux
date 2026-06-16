@@ -507,7 +507,7 @@ export async function uploadArduinoSketch(
         requestedPort: request.port,
         serialPorts: ports,
         detectedBoards: boards,
-        hint: 'Run /api/arduino/status or /api/usb/events?scan=true, then pass one of the detected serial ports.',
+        hint: 'Run /api/arduino/status or POST /api/usb/events/scan, then pass one of the detected serial ports.',
       },
     })
   }

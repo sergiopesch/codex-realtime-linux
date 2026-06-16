@@ -812,6 +812,13 @@ button:disabled {
   gap: 2px;
 }
 
+.artifact-stage header .artifact-stage-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 2px;
+  min-width: auto;
+}
+
 .artifact-stage strong,
 .artifact-stage span {
   min-width: 0;
@@ -871,6 +878,11 @@ button:disabled {
 .artifact-stage header button:hover {
   background: rgba(255, 255, 255, 0.08);
   color: var(--ink);
+}
+
+.artifact-stage header button:disabled {
+  cursor: default;
+  opacity: 0.42;
 }
 
 .artifact-stage iframe {

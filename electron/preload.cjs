@@ -5,4 +5,5 @@ contextBridge.exposeInMainWorld('desktopWindow', {
   maximize: () => ipcRenderer.send('window-control', 'maximize'),
   close: () => ipcRenderer.send('window-control', 'close'),
   selectWorkspaceFolder: () => ipcRenderer.invoke('select-workspace-folder'),
+  localApiToken: () => ipcRenderer.invoke('local-api-token'),
 })

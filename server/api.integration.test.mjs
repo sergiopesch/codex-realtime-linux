@@ -29,7 +29,7 @@ async function waitForServer(baseUrl, proc) {
       throw new Error(`Server exited before it was ready with code ${proc.exitCode}.`)
     }
     try {
-      const response = await fetch(`${baseUrl}/api/app-state`)
+      const response = await fetch(`${baseUrl}/api/status`)
       if (response.ok) return
       lastError = new Error(`Server returned ${response.status}`)
     } catch (error) {
@@ -153,6 +153,7 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   await writeFile(path.join(artifactDir, '.env'), 'OPENAI_API_KEY=secret')
   await mkdir(path.join(artifactDir, 'assets', '.private'), { recursive: true })
   await writeFile(path.join(artifactDir, 'assets', '.private', 'secret.txt'), 'hidden generated file')
+  await writeFile(path.join(workspacePath, 'public', 'agent-files', 'hello-world.html'), '<!doctype html><title>Hello world</title><h1>Hello world</h1>')
   const unsafeArtifactDir = path.join(workspacePath, 'public', 'agent-files', 'unsafe report')
   await mkdir(unsafeArtifactDir, { recursive: true })
   await writeFile(path.join(unsafeArtifactDir, 'index.html'), '<!doctype html><title>Unsafe report</title>')
@@ -176,8 +177,14 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   const artifactList = await fetch(`${baseUrl}/api/artifacts?workspacePath=${encodeURIComponent(workspacePath)}`)
   assert.equal(artifactList.status, 200)
   const artifactBody = await artifactList.json()
-  assert.equal(artifactBody.data.length, 1)
-  assert.equal(artifactBody.data[0].relativePath, 'public/agent-files/sample-report/index.html')
+  assert.equal(artifactBody.data.length, 2)
+  assert.equal(artifactBody.data.some((artifact) => artifact.relativePath === 'public/agent-files/sample-report/index.html'), true)
+  assert.equal(artifactBody.data.some((artifact) => artifact.relativePath === 'public/agent-files/hello-world.html'), true)
+  const flatArtifactUrl = artifactBody.data.find((artifact) => artifact.relativePath === 'public/agent-files/hello-world.html')?.url
+  assert.match(flatArtifactUrl ?? '', /^\/workspace-artifacts\/[A-Za-z0-9_-]+\/hello-world\.html$/)
+  const token = flatArtifactUrl?.split('/')[2] ?? ''
+  assert.ok(token)
+  assert.notEqual(token, Buffer.from(path.resolve(workspacePath), 'utf8').toString('base64url'))
   assert.equal(artifactBody.data.some((artifact) => artifact.relativePath.includes('unsafe report')), false)
   assert.equal(artifactBody.data.some((artifact) => artifact.id === 'escaped-index'), false)
   assert.equal(artifactBody.data.some((artifact) => artifact.id === 'looped-index'), false)
@@ -211,7 +218,6 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   assert.equal(boundedArtifactBody.data.some((artifact) => artifact.id === 'oversized-index'), false)
   assert.ok(boundedArtifactBody.data.every((artifact) => artifact.title.length <= 180))
 
-  const token = Buffer.from(path.resolve(workspacePath), 'utf8').toString('base64url')
   const preview = await fetch(`${baseUrl}/workspace-artifacts/${token}/sample-report/index.html`)
   assert.equal(preview.status, 200)
   assert.match(preview.headers.get('content-type') ?? '', /^text\/html\b/)
@@ -226,6 +232,14 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   assert.match(preview.headers.get('content-security-policy') ?? '', /connect-src 'none'/)
   assert.doesNotMatch(preview.headers.get('content-security-policy') ?? '', /connect-src 'self'/)
   assert.match(await preview.text(), /Sample report/)
+
+  const flatPreview = await fetch(`${baseUrl}/workspace-artifacts/${token}/hello-world.html`)
+  assert.equal(flatPreview.status, 200)
+  assert.match(flatPreview.headers.get('content-type') ?? '', /^text\/html\b/)
+  assert.match(await flatPreview.text(), /Hello world/)
+
+  const topLevelTextPreview = await fetch(`${baseUrl}/workspace-artifacts/${token}/notes.txt`)
+  assert.equal(topLevelTextPreview.status, 404)
 
   const hiddenPreviewFile = await fetch(`${baseUrl}/workspace-artifacts/${token}/sample-report/.env`)
   assert.equal(hiddenPreviewFile.status, 404)
@@ -266,9 +280,67 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   const symlinkedWorkspaceArtifacts = await fetch(`${baseUrl}/api/artifacts?workspacePath=${encodeURIComponent(symlinkedWorkspacePath)}`)
   assert.equal(symlinkedWorkspaceArtifacts.status, 200)
   assert.deepEqual((await symlinkedWorkspaceArtifacts.json()).data, [])
-  const symlinkedWorkspaceToken = Buffer.from(path.resolve(symlinkedWorkspacePath), 'utf8').toString('base64url')
-  const symlinkedWorkspacePreview = await fetch(`${baseUrl}/workspace-artifacts/${symlinkedWorkspaceToken}/linked-report/index.html`)
-  assert.equal(symlinkedWorkspacePreview.status, 403)
+  const symlinkedWorkspacePreview = await fetch(`${baseUrl}/workspace-artifacts/${Buffer.from(path.resolve(symlinkedWorkspacePath), 'utf8').toString('base64url')}/linked-report/index.html`)
+  assert.equal(symlinkedWorkspacePreview.status, 400)
+
+  const cleanupWorkspacePath = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-cleanup-workspace-'))
+  t.after(() => rm(cleanupWorkspacePath, { recursive: true, force: true }))
+  const cleanupArtifactsDir = path.join(cleanupWorkspacePath, 'public', 'agent-files')
+  const cleanupOldDir = path.join(cleanupArtifactsDir, 'old-report')
+  const cleanupKeepDir = path.join(cleanupArtifactsDir, 'keep-report')
+  await mkdir(cleanupOldDir, { recursive: true })
+  await mkdir(cleanupKeepDir, { recursive: true })
+  await writeFile(path.join(cleanupOldDir, 'index.html'), '<!doctype html><title>Old report</title>')
+  await writeFile(path.join(cleanupKeepDir, 'index.html'), '<!doctype html><title>Keep report</title>')
+  await writeFile(path.join(cleanupKeepDir, 'notes.txt'), 'supporting generated asset')
+  await writeFile(path.join(cleanupArtifactsDir, 'flat-report.html'), '<!doctype html><title>Flat report</title>')
+
+  const clearOldArtifacts = await fetch(`${baseUrl}/api/artifacts/cleanup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      workspacePath: cleanupWorkspacePath,
+      action: 'clear_old',
+      keepRelativePath: 'public/agent-files/keep-report/index.html',
+    }),
+  })
+  assert.equal(clearOldArtifacts.status, 200)
+  const clearOldBody = await readJson(clearOldArtifacts)
+  assert.equal(clearOldBody.deleted.length, 2)
+  assert.equal(clearOldBody.deleted.some((artifact) => artifact.relativePath === 'public/agent-files/old-report/index.html'), true)
+  assert.equal(clearOldBody.deleted.some((artifact) => artifact.relativePath === 'public/agent-files/flat-report.html'), true)
+  assert.deepEqual(clearOldBody.data.map((artifact) => artifact.relativePath), ['public/agent-files/keep-report/index.html'])
+  await assert.rejects(() => stat(cleanupOldDir), { code: 'ENOENT' })
+  await assert.rejects(() => stat(path.join(cleanupArtifactsDir, 'flat-report.html')), { code: 'ENOENT' })
+  assert.equal((await stat(path.join(cleanupKeepDir, 'index.html'))).isFile(), true)
+
+  const deleteKeptArtifact = await fetch(`${baseUrl}/api/artifacts/cleanup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      workspacePath: cleanupWorkspacePath,
+      action: 'delete_path',
+      relativePath: 'public/agent-files/keep-report/index.html',
+    }),
+  })
+  assert.equal(deleteKeptArtifact.status, 200)
+  const deleteKeptBody = await readJson(deleteKeptArtifact)
+  assert.equal(deleteKeptBody.deleted.length, 1)
+  assert.equal(deleteKeptBody.deleted[0].relativePath, 'public/agent-files/keep-report/index.html')
+  assert.deepEqual(deleteKeptBody.data, [])
+  await assert.rejects(() => stat(cleanupKeepDir), { code: 'ENOENT' })
+
+  const deleteMissingArtifact = await fetch(`${baseUrl}/api/artifacts/cleanup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      workspacePath: cleanupWorkspacePath,
+      action: 'delete_path',
+      relativePath: 'public/agent-files/missing/index.html',
+    }),
+  })
+  assert.equal(deleteMissingArtifact.status, 404)
+  assert.equal((await readJson(deleteMissingArtifact)).code, 'artifact_not_found')
 
   await writeFile(path.join(artifactDir, 'unsafe-preview.bin'), 'not a browser preview asset')
   const unsupportedPreview = await fetch(`${baseUrl}/workspace-artifacts/${token}/sample-report/unsafe-preview.bin`)
@@ -298,18 +370,22 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   assert.equal(oversizedToken.status, 400)
   assert.match(await oversizedToken.text(), /Invalid workspace token/)
 
-  const relativeToken = Buffer.from('relative-workspace', 'utf8').toString('base64url')
-  const relativeWorkspaceToken = await fetch(`${baseUrl}/workspace-artifacts/${relativeToken}/sample-report/index.html`)
+  const relativeWorkspaceToken = await fetch(`${baseUrl}/workspace-artifacts/${Buffer.from('relative-workspace', 'utf8').toString('base64url')}/sample-report/index.html`)
   assert.equal(relativeWorkspaceToken.status, 400)
   assert.match(await relativeWorkspaceToken.text(), /Invalid workspace token/)
 
-  const controlCharacterToken = Buffer.from(`${workspacePath}\0control`, 'utf8').toString('base64url')
-  const controlCharacterWorkspaceToken = await fetch(`${baseUrl}/workspace-artifacts/${controlCharacterToken}/sample-report/index.html`)
+  const controlCharacterWorkspaceToken = await fetch(`${baseUrl}/workspace-artifacts/${Buffer.from(`${workspacePath}\0control`, 'utf8').toString('base64url')}/sample-report/index.html`)
   assert.equal(controlCharacterWorkspaceToken.status, 400)
   assert.match(await controlCharacterWorkspaceToken.text(), /Invalid workspace token/)
 
-  const missingWorkspaceToken = Buffer.from(path.join(os.tmpdir(), 'missing-codex-realtime-preview-workspace'), 'utf8').toString('base64url')
-  const missingWorkspacePreview = await fetch(`${baseUrl}/workspace-artifacts/${missingWorkspaceToken}/sample-report/index.html`)
+  const disappearingWorkspacePath = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-missing-preview-workspace-'))
+  const disappearingArtifactDir = path.join(disappearingWorkspacePath, 'public', 'agent-files', 'gone-report')
+  await mkdir(disappearingArtifactDir, { recursive: true })
+  await writeFile(path.join(disappearingArtifactDir, 'index.html'), '<!doctype html><title>Gone</title>')
+  const disappearingList = await fetch(`${baseUrl}/api/artifacts?workspacePath=${encodeURIComponent(disappearingWorkspacePath)}`)
+  const disappearingUrl = (await disappearingList.json()).data[0]?.url
+  await rm(disappearingWorkspacePath, { recursive: true, force: true })
+  const missingWorkspacePreview = await fetch(`${baseUrl}${disappearingUrl}`)
   assert.equal(missingWorkspacePreview.status, 404)
   assert.match(await missingWorkspacePreview.text(), /workspace token does not exist/)
 
@@ -435,6 +511,22 @@ test('server enforces workspace scoped state and artifact routes over HTTP', asy
   })
   assert.equal(nonObjectCodexTask.status, 400)
   assert.equal((await readJson(nonObjectCodexTask)).code, 'invalid_request')
+
+  const nonObjectArtifactCleanup = await fetch(`${baseUrl}/api/artifacts/cleanup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '[]',
+  })
+  assert.equal(nonObjectArtifactCleanup.status, 400)
+  assert.equal((await readJson(nonObjectArtifactCleanup)).code, 'invalid_request')
+
+  const invalidArtifactCleanupAction = await fetch(`${baseUrl}/api/artifacts/cleanup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspacePath, action: 'delete_everything' }),
+  })
+  assert.equal(invalidArtifactCleanupAction.status, 400)
+  assert.equal((await readJson(invalidArtifactCleanupAction)).code, 'invalid_artifact_cleanup_action')
 
   const nonObjectCodexSteer = await fetch(`${baseUrl}/api/codex/steer`, {
     method: 'POST',
@@ -779,10 +871,11 @@ test('codex task returns public artifact metadata for external workspace artifac
     /^public\/agent-files\/\d{8}t\d{6}-create-an-html-presentation-about-this-workspace-[a-z0-9-]+$/,
   )
   assert.equal(body.artifact.relativePath, `${body.artifact.relativeDir}/index.html`)
-  assert.equal(
+  assert.match(
     body.artifact.url,
-    `/workspace-artifacts/${Buffer.from(workspacePath, 'utf8').toString('base64url')}/${body.artifact.directoryName}/index.html`,
+    new RegExp(`^/workspace-artifacts/[A-Za-z0-9_-]+/${body.artifact.directoryName}/index\\.html$`),
   )
+  assert.doesNotMatch(body.artifact.url, new RegExp(Buffer.from(workspacePath, 'utf8').toString('base64url')))
   assert.equal('absoluteDir' in body.artifact, false)
   assert.equal('absolutePath' in body.artifact, false)
   assert.equal((await stat(path.join(workspacePath, body.artifact.relativeDir))).isDirectory(), true)
@@ -799,8 +892,12 @@ test('codex task returns public artifact metadata for external workspace artifac
   const turnText = turnStart?.params?.input?.[0]?.text ?? ''
   assert.match(turnText, /Artifact workflow: inspect this selected workspace/)
   assert.match(turnText, new RegExp(escapedRelativePath))
+  assert.match(turnText, /Do not start local HTTP servers, dev servers, python http\.server/)
+  assert.match(turnText, /The desktop app owns preview serving through \/workspace-artifacts/)
+  assert.match(turnText, /verify generated HTML by checking files and workspace-relative paths only/)
   assert.match(turnText, /User goal:\nCreate an HTML presentation about this workspace\./)
   assert.doesNotMatch(turnText, /absoluteDir|absolutePath/)
+  assert.doesNotMatch(turnText, /python3 -m http\.server|http:\/\/127\.0\.0\.1:\d+/)
 
   const threads = await fetch(`${baseUrl}/api/codex/threads?limit=10&cwd=${encodeURIComponent(workspacePath)}`)
   assert.equal(threads.status, 200)
@@ -848,6 +945,48 @@ test('codex task returns public artifact metadata for external workspace artifac
   assert.equal(threadListMessages.length, 2)
   assert.equal(threadListMessages[0].params.cwd, workspacePath)
   assert.equal(threadListMessages[1].params.cwd, workspacePath)
+})
+
+test('codex task adds selected-workspace guard for non-artifact external workspace edits', async (t) => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-fake-codex-'))
+  const workspacePath = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-workspace-edit-task-'))
+  t.after(() => rm(tempDir, { recursive: true, force: true }))
+  t.after(() => rm(workspacePath, { recursive: true, force: true }))
+  const { fakeCodexPath, logPath } = await writeFakeCodexAppServer(tempDir)
+  const { baseUrl } = await startTestServer(t, {
+    CODEX_BIN: fakeCodexPath,
+    CODEX_API_KEY: '',
+    CODEX_USE_OPENAI_API_KEY: 'false',
+    FAKE_CODEX_RPC_LOG: logPath,
+    FAKE_CODEX_THREAD_CWD: workspacePath,
+  })
+
+  const task = await fetch(`${baseUrl}/api/codex/task`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      cwd: workspacePath,
+      goal: 'Update public/agent-files/hello-world.html to include a happy-face emoji.',
+    }),
+  })
+  assert.equal(task.status, 200)
+  const body = await task.json()
+  assert.equal(body.artifact, null)
+
+  const rpcMessages = (await readFile(logPath, 'utf8'))
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line))
+  const turnStart = rpcMessages.find((message) => message.method === 'turn/start')
+  const turnText = turnStart?.params?.input?.[0]?.text ?? ''
+  assert.match(turnText, /Selected workspace workflow: work in the selected workspace only/)
+  assert.match(turnText, /use workspace-relative paths only/)
+  assert.match(turnText, /Do not include absolute local file links/)
+  assert.match(turnText, /Do not tell the user to open generated files outside the desktop app/)
+  assert.match(turnText, /Do not start local HTTP servers, dev servers, python http\.server/)
+  assert.match(turnText, /The desktop app owns preview serving through \/workspace-artifacts/)
+  assert.match(turnText, /User goal:\nUpdate public\/agent-files\/hello-world\.html/)
+  assert.doesNotMatch(turnText, new RegExp(workspacePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
 })
 
 test('codex task archives started thread when turn start fails', async (t) => {
@@ -1187,6 +1326,60 @@ test('server only trusts configured loopback API origins', async (t) => {
   })
   assert.equal(untrustedBeyondCappedOrigins.status, 403)
   assert.equal((await readJson(untrustedBeyondCappedOrigins)).code, 'origin_not_allowed')
+})
+
+test('server enforces configured local API token for privileged routes', async (t) => {
+  const { baseUrl } = await startTestServer(t, {
+    CODEX_LOCAL_API_TOKEN: 'test-local-api-token',
+  })
+
+  const status = await fetch(`${baseUrl}/api/status`)
+  assert.equal(status.status, 200)
+
+  const missingToken = await fetch(`${baseUrl}/api/app-state`)
+  assert.equal(missingToken.status, 401)
+  assert.equal((await readJson(missingToken)).code, 'local_api_token_required')
+
+  const invalidToken = await fetch(`${baseUrl}/api/app-state`, {
+    headers: { 'X-Codex-Local-Api-Token': 'wrong-token' },
+  })
+  assert.equal(invalidToken.status, 401)
+  assert.equal((await readJson(invalidToken)).code, 'local_api_token_required')
+
+  const authorized = await fetch(`${baseUrl}/api/app-state`, {
+    headers: { 'X-Codex-Local-Api-Token': 'test-local-api-token' },
+  })
+  assert.equal(authorized.status, 200)
+  assert.deepEqual((await readJson(authorized)).workspaces, [])
+
+  const preflight = await fetch(`${baseUrl}/api/app-state/conversations`, {
+    method: 'OPTIONS',
+    headers: {
+      Origin: 'http://127.0.0.1:5173',
+      'Access-Control-Request-Method': 'POST',
+      'Access-Control-Request-Headers': 'content-type,x-codex-local-api-token',
+    },
+  })
+  assert.equal(preflight.status, 204)
+  assert.match(preflight.headers.get('access-control-allow-headers') ?? '', /X-Codex-Local-Api-Token/)
+})
+
+test('USB event scans require POST', async (t) => {
+  const { baseUrl } = await startTestServer(t)
+
+  const getScan = await fetch(`${baseUrl}/api/usb/events?scan=true`)
+  assert.equal(getScan.status, 405)
+  assert.equal((await readJson(getScan)).code, 'usb_scan_requires_post')
+
+  const postScan = await fetch(`${baseUrl}/api/usb/events/scan`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+  })
+  assert.equal(postScan.status, 200)
+  const body = await readJson(postScan)
+  assert.equal(typeof body.status?.active, 'boolean')
+  assert.equal(Array.isArray(body.data), true)
 })
 
 test('server bounds persisted app state loaded from disk', async (t) => {

@@ -13,6 +13,7 @@ import {
   MonitorUp,
   PanelLeft,
   Plus,
+  RefreshCw,
   Settings,
   ShieldCheck,
   Trash2,
@@ -212,6 +213,12 @@ type ArduinoUploadResponse = {
   summary: string
 }
 
+type ArduinoStatusResponse = {
+  cli: Status['arduino']
+  boards: unknown[]
+  ports: string[]
+}
+
 type ArduinoUploadAction = ArduinoUploadResponse['action']
 
 type GeneratedArtifact = {
@@ -222,6 +229,13 @@ type GeneratedArtifact = {
   workspacePath: string
   updatedAt: string
   size: number
+}
+
+type ArtifactCleanupResponse = {
+  action: 'delete_path' | 'clear_old'
+  deleted: { relativePath: string; url: string }[]
+  kept: GeneratedArtifact[]
+  data: GeneratedArtifact[]
 }
 
 type ArtifactPreviewLease = {
@@ -236,6 +250,15 @@ type ArtifactPlan = {
   relativePath: string
   url: string
   workspacePath: string
+}
+
+type PendingArtifact = ArtifactPlan & {
+  createdAfter: string
+}
+
+type ActiveCodexArtifactWatch = {
+  workspacePath: string
+  startedAt: string
 }
 
 type PendingVisualContext = {
@@ -260,6 +283,7 @@ type DesktopWindow = Window & {
     maximize: () => void
     close: () => void
     selectWorkspaceFolder?: () => Promise<{ name: string; path: string } | null>
+    localApiToken?: () => Promise<string>
   }
 }
 
@@ -316,7 +340,9 @@ const REALTIME_TOOL_NAMES = new Set([
   'codex_start_task',
   'codex_steer_task',
   'codex_interrupt_task',
+  'browser_preview_control',
   'get_current_weather',
+  'arduino_status',
   'arduino_upload_sketch',
 ])
 
@@ -388,6 +414,17 @@ const fetchWithTimeout = async (input: RequestInfo | URL, init: RequestInit = {}
     window.clearTimeout(timeout)
     externalSignal?.removeEventListener('abort', abortFromExternalSignal)
   }
+}
+
+let localApiTokenPromise: Promise<string> | null = null
+
+const getLocalApiToken = () => {
+  const provider = (window as DesktopWindow).desktopWindow?.localApiToken
+  if (!provider) return Promise.resolve('')
+  localApiTokenPromise ??= provider()
+    .then((token) => (typeof token === 'string' ? token : ''))
+    .catch(() => '')
+  return localApiTokenPromise
 }
 
 const getUserMediaWithTimeout = async (constraints: MediaStreamConstraints, timeoutMs = REALTIME_CONNECTION_TIMEOUT_MS) => {
@@ -472,7 +509,15 @@ const validateVisualContextDataUrl = (dataUrl: string) => {
 }
 
 const api = async <T,>(path: string, init?: RequestInit, options?: { timeoutMs?: number }): Promise<T> => {
-  const response = await fetchWithTimeout(path, init, options?.timeoutMs)
+  const token = typeof path === 'string' && path.startsWith('/api/') ? await getLocalApiToken() : ''
+  const requestInit = token
+    ? (() => {
+        const headers = new Headers(init?.headers)
+        headers.set('X-Codex-Local-Api-Token', token)
+        return { ...init, headers }
+      })()
+    : init
+  const response = await fetchWithTimeout(path, requestInit, options?.timeoutMs)
   if (!response.ok) {
     const rawText = await readBoundedApiText(response, MAX_API_ERROR_RESPONSE_TEXT_LENGTH)
     const text = boundedApiErrorText(rawText)
@@ -496,6 +541,14 @@ const api = async <T,>(path: string, init?: RequestInit, options?: { timeoutMs?:
 
 const fetchGeneratedArtifacts = (workspacePath: string, init?: RequestInit) =>
   api<{ data: GeneratedArtifact[] }>(`/api/artifacts?workspacePath=${encodeURIComponent(workspacePath)}`, init)
+
+const cleanupGeneratedArtifacts = (payload: Record<string, unknown>, init?: RequestInit) =>
+  api<ArtifactCleanupResponse>('/api/artifacts/cleanup', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    ...init,
+    body: JSON.stringify(payload),
+  })
 
 const slug = (value: string) =>
   value
@@ -1175,27 +1228,93 @@ const safeHiddenCodexThreadIdsByWorkspace = (value: unknown) => {
 }
 
 const safeArtifactNamePattern = /^[a-z0-9][a-z0-9-]*$/i
+const safeArtifactPreviewSegmentPattern = /^[a-z0-9][a-z0-9._-]*$/i
+const safeArtifactPreviewTokenPattern = /^[A-Za-z0-9_-]+$/
+const generatedArtifactPathPrefix = 'public/agent-files/'
 
-const base64UrlEncode = (value: string) => {
-  const bytes = new TextEncoder().encode(value)
-  let binary = ''
-  for (const byte of bytes) binary += String.fromCharCode(byte)
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+const isSafeArtifactPreviewPath = (value: string) => {
+  if (!value || value.length > MAX_UI_ARTIFACT_PATH_LENGTH || value.includes('\\') || value.includes('\0')) return false
+  return value.split('/').every((segment) =>
+    segment &&
+    segment !== '.' &&
+    segment !== '..' &&
+    !segment.startsWith('.') &&
+    safeArtifactPreviewSegmentPattern.test(segment),
+  )
 }
 
-const artifactPreviewUrl = (workspacePath: string, artifactName: string) =>
-  `/workspace-artifacts/${base64UrlEncode(workspacePath)}/${artifactName}/index.html`
+const artifactPreviewPathFromRelativePath = (relativePath: string) => {
+  if (!relativePath.startsWith(generatedArtifactPathPrefix)) return ''
+  const previewPath = relativePath.slice(generatedArtifactPathPrefix.length)
+  return isSafeArtifactPreviewPath(previewPath) ? previewPath : ''
+}
+
+const artifactRelativePathForChangedGeneratedPath = (relativePath: string) => {
+  if (!relativePath.startsWith(generatedArtifactPathPrefix)) return ''
+  const previewPath = relativePath.slice(generatedArtifactPathPrefix.length)
+  if (!isSafeArtifactPreviewPath(previewPath)) return ''
+  const segments = previewPath.split('/')
+  if (segments.length === 1) {
+    return /\.html?$/i.test(segments[0]) ? relativePath : ''
+  }
+  const directoryName = segments[0]
+  if (!safeArtifactNamePattern.test(directoryName)) return ''
+  return `${generatedArtifactPathPrefix}${directoryName}/index.html`
+}
+
+const changedGeneratedArtifactPathsFromDiff = (diff: string) => {
+  const paths = new Set<string>()
+  for (const line of diff.split('\n')) {
+    const match =
+      /^diff --git a\/(.+?) b\/(.+)$/.exec(line) ||
+      /^(?:---|\+\+\+) [ab]\/(.+)$/.exec(line)
+    if (!match) continue
+    const leftPath = match[1]
+    const rightPath = match[2] ?? match[1]
+    for (const candidate of [leftPath, rightPath]) {
+      const artifactPath = artifactRelativePathForChangedGeneratedPath(candidate)
+      if (artifactPath) paths.add(artifactPath)
+    }
+  }
+  return paths
+}
+
+const changedGeneratedArtifactPathsFromEvents = (events: EventRecord[], turnId: string | null) => {
+  const paths = new Set<string>()
+  if (!turnId) return paths
+  for (const event of events) {
+    if (!valueContainsString(event.params, turnId)) continue
+    const diff = typeof event.params?.diff === 'string' ? event.params.diff : ''
+    if (!diff) continue
+    changedGeneratedArtifactPathsFromDiff(diff).forEach((artifactPath) => paths.add(artifactPath))
+  }
+  return paths
+}
+
+const isArtifactPreviewUrlForPath = (url: string, previewPath: string) => {
+  const match = /^\/workspace-artifacts\/([^/]+)\/(.+)$/.exec(url)
+  if (!match) return false
+  const [, token, encodedPath] = match
+  return Boolean(token) &&
+    token.length <= MAX_UI_ARTIFACT_PATH_LENGTH &&
+    safeArtifactPreviewTokenPattern.test(token) &&
+    encodedPath === previewPath.split('/').map(encodeURIComponent).join('/')
+}
 
 const safeGeneratedArtifact = (value: unknown): GeneratedArtifact | null => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const artifact = value as UnknownRecord
   const workspacePath = normalizeAbsoluteLocalWorkspacePath(typeof artifact.workspacePath === 'string' ? artifact.workspacePath : '')
   const id = boundedPlainString(artifact.id, '', MAX_UI_ARTIFACT_TITLE_LENGTH)
-  if (!workspacePath || !safeArtifactNamePattern.test(id)) return null
+  if (!workspacePath || id.includes('/') || !isSafeArtifactPreviewPath(id)) return null
   const url = boundedPlainString(artifact.url, '', MAX_UI_ARTIFACT_PATH_LENGTH)
   const relativePath = boundedPlainString(artifact.relativePath, '', MAX_UI_ARTIFACT_PATH_LENGTH)
-  if (relativePath !== `public/agent-files/${id}/index.html`) return null
-  if (url !== artifactPreviewUrl(workspacePath, id)) return null
+  const previewPath = artifactPreviewPathFromRelativePath(relativePath)
+  if (!previewPath) return null
+  const folderIndexPath = safeArtifactNamePattern.test(id) ? `${id}/index.html` : ''
+  const flatHtmlPath = id.toLowerCase().endsWith('.html') ? id : ''
+  if (previewPath !== folderIndexPath && previewPath !== flatHtmlPath) return null
+  if (!isArtifactPreviewUrlForPath(url, previewPath)) return null
   const updatedAt = typeof artifact.updatedAt === 'string' && finiteTimestamp(artifact.updatedAt) != null
     ? artifact.updatedAt
     : new Date(0).toISOString()
@@ -1230,7 +1349,7 @@ const safeArtifactPlan = (value: unknown, expectedWorkspacePath: string): Artifa
   if (!safeArtifactNamePattern.test(directoryName)) return null
   if (relativeDir !== `public/agent-files/${directoryName}`) return null
   if (relativePath !== `${relativeDir}/index.html`) return null
-  if (url !== artifactPreviewUrl(workspacePath, directoryName)) return null
+  if (!isArtifactPreviewUrlForPath(url, `${directoryName}/index.html`)) return null
   return { directoryName, relativeDir, relativePath, url, workspacePath }
 }
 const basenameFromWorkspacePath = (workspacePath: string) =>
@@ -1342,8 +1461,10 @@ function App() {
   const [selectedArtifact, setSelectedArtifact] = useState<GeneratedArtifact | null>(null)
   const [artifactPreviewLease, setArtifactPreviewLease] = useState<ArtifactPreviewLease | null>(null)
   const [artifactPreviewEngaged, setArtifactPreviewEngaged] = useState(false)
+  const [artifactPreviewRefreshKey, setArtifactPreviewRefreshKey] = useState(0)
+  const [artifactCleanupInFlight, setArtifactCleanupInFlight] = useState(false)
   const [dismissedArtifact, setDismissedArtifact] = useState<{ url: string; updatedAt: string; workspacePath: string } | null>(null)
-  const [pendingArtifact, setPendingArtifact] = useState<ArtifactPlan | null>(null)
+  const [pendingArtifact, setPendingArtifact] = useState<PendingArtifact | null>(null)
   const [routingActivity, setRoutingActivity] = useState<string[]>(['Voice router idle'])
   const [waveLevels, setWaveLevels] = useState<number[]>(() => Array.from({ length: 18 }, () => 0.18))
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
@@ -1368,10 +1489,12 @@ function App() {
   const screenEndedTrackRef = useRef<MediaStreamTrack | null>(null)
   const screenEndedHandlerRef = useRef<(() => void) | null>(null)
   const pendingVisualContextRef = useRef<PendingVisualContext[]>([])
-  const pendingArtifactRef = useRef<ArtifactPlan | null>(null)
+  const pendingArtifactRef = useRef<PendingArtifact | null>(null)
+  const selectedArtifactRef = useRef<GeneratedArtifact | null>(null)
   const activeThreadIdRef = useRef<string | null>(null)
   const activeTurnIdRef = useRef<string | null>(null)
   const activeCodexWorkspaceRef = useRef<string | null>(null)
+  const activeCodexArtifactWatchRef = useRef<ActiveCodexArtifactWatch | null>(null)
   const activeSystemScreenRef = useRef<SystemScreen | null>(null)
   const conversationsByWorkspaceRef = useRef<Record<string, AgentConversation[]>>({})
   const handledRealtimeFunctionCallIdsRef = useRef<Set<string>>(new Set())
@@ -1490,6 +1613,11 @@ function App() {
     if (!threadId) activeCodexWorkspaceRef.current = null
     setActiveThreadId(threadId)
     setActiveTurnId(turnId)
+  }
+
+  const setTrackedPendingArtifact = (artifact: PendingArtifact | null) => {
+    pendingArtifactRef.current = artifact
+    setPendingArtifact(artifact)
   }
 
   const markCodexConversationReady = useCallback((threadId: string | null) => {
@@ -1914,6 +2042,143 @@ function App() {
     return context
   }
 
+  const browserPreviewTargetPath = (value: unknown) => {
+    const text = boundedPlainString(value, '', MAX_UI_ARTIFACT_PATH_LENGTH)
+    if (!text) return ''
+    const relativePath = text.startsWith(generatedArtifactPathPrefix) ? text : `${generatedArtifactPathPrefix}${text}`
+    return artifactPreviewPathFromRelativePath(relativePath) ? relativePath : ''
+  }
+
+  const findBrowserPreviewArtifact = (artifactsData: GeneratedArtifact[], target: string) => {
+    const targetPath = browserPreviewTargetPath(target)
+    const targetText = boundedPlainString(target, '', MAX_UI_ARTIFACT_PATH_LENGTH)
+    if (!targetPath && !targetText) return null
+    return artifactsData.find((artifact) =>
+      artifact.relativePath === targetPath ||
+      artifact.relativePath === targetText ||
+      artifact.id === targetText ||
+      artifact.url === targetText,
+    ) ?? null
+  }
+
+  const runArtifactCleanup = async (payload: Record<string, unknown>, signal?: AbortSignal) => {
+    const workspacePath = selectedWorkspaceRef.current
+    if (!workspacePath) throw new Error('Select a workspace before cleaning generated previews.')
+    const response = await cleanupGeneratedArtifacts({ workspacePath, ...payload }, signal ? { signal } : undefined)
+    const artifacts = safeGeneratedArtifacts(response.data).filter((artifact) => artifact.workspacePath === workspacePath)
+    setArtifacts(artifacts)
+    return {
+      ...response,
+      data: artifacts,
+    }
+  }
+
+  const deleteCurrentArtifactPreview = async (signal?: AbortSignal) => {
+    const artifact = selectedArtifactRef.current
+    if (!artifact) throw new Error('No browser preview is currently open.')
+    if (artifact.workspacePath !== selectedWorkspaceRef.current) {
+      throw new Error('The browser preview can only be deleted from the selected workspace.')
+    }
+    const result = await runArtifactCleanup({
+      action: 'delete_path',
+      relativePath: artifact.relativePath,
+    }, signal)
+    setDismissedArtifact(null)
+    closeArtifactPreview()
+    return result
+  }
+
+  const clearOldArtifactPreviews = async (signal?: AbortSignal) => {
+    const current = selectedArtifactRef.current
+    const keepRelativePath =
+      current && current.workspacePath === selectedWorkspaceRef.current
+        ? current.relativePath
+        : ''
+    return runArtifactCleanup({
+      action: 'clear_old',
+      ...(keepRelativePath ? { keepRelativePath } : { keepLatest: 1 }),
+    }, signal)
+  }
+
+  const controlBrowserPreview = async (payload: UnknownRecord, signal?: AbortSignal) => {
+    const rawAction = typeof payload.action === 'string' ? payload.action.trim() : ''
+    const requestedTarget = typeof payload.relativePath === 'string'
+      ? payload.relativePath
+      : typeof payload.path === 'string'
+        ? payload.path
+        : ''
+    const action =
+      rawAction === 'open'
+        ? requestedTarget ? 'open_path' : 'open_latest'
+        : rawAction === 'delete' || rawAction === 'delete_path'
+          ? 'delete_current'
+          : rawAction === 'clear' || rawAction === 'reset' || rawAction === 'replace_current'
+            ? 'clear_old'
+            : rawAction
+
+    if (action === 'close') {
+      const closed = dismissArtifactPreview()
+      setActivity('Browser preview', 'Closed')
+      showNotice(closed ? 'Browser preview closed.' : 'Browser preview is already closed.')
+      return { action, closed: Boolean(closed) }
+    }
+
+    if (action === 'refresh') {
+      const refreshed = await refreshArtifactPreview(signal ? { signal } : undefined)
+      setActivity('Browser preview', 'Refreshed')
+      showNotice(`Browser preview refreshed: ${refreshed.relativePath}`)
+      return { action, artifact: { relativePath: refreshed.relativePath, url: refreshed.url } }
+    }
+
+    if (action === 'delete_current') {
+      const result = await deleteCurrentArtifactPreview(signal)
+      setActivity('Browser preview', 'Deleted')
+      showNotice(
+        result.deleted.length > 0
+          ? 'Deleted the current generated preview.'
+          : 'No generated preview was deleted.',
+      )
+      return { action, deleted: result.deleted.length }
+    }
+
+    if (action === 'clear_old') {
+      const result = await clearOldArtifactPreviews(signal)
+      setActivity('Browser preview', 'Old previews cleared')
+      showNotice(
+        result.deleted.length > 0
+          ? `Cleared ${result.deleted.length} old generated preview${result.deleted.length === 1 ? '' : 's'}.`
+          : 'No old generated previews needed cleanup.',
+      )
+      return { action, deleted: result.deleted.length }
+    }
+
+    if (action !== 'open_latest' && action !== 'open_path') {
+      throw new Error('A supported browser preview action is required.')
+    }
+
+    const workspacePath = selectedWorkspaceRef.current
+    if (!workspacePath) throw new Error('Select a workspace before opening the browser preview.')
+    const artifactData = await refreshArtifacts(workspacePath, signal ? { signal } : undefined)
+    const artifact = action === 'open_latest'
+      ? artifactData[0] ?? null
+      : findBrowserPreviewArtifact(artifactData, requestedTarget)
+    if (!artifact) {
+      throw new Error(
+        action === 'open_latest'
+          ? 'No generated browser preview is available in this workspace.'
+          : 'That generated browser preview was not found in this workspace.',
+      )
+    }
+    setDismissedArtifact(null)
+    if (!openArtifactPreview(artifact, { exitSystemScreen: true })) {
+      throw new Error('The browser preview can only open for the selected workspace.')
+    }
+    setArtifactPreviewRefreshKey((current) => current + 1)
+    setActivity('Browser preview', artifact.title)
+    showNotice(`Browser preview opened: ${artifact.relativePath}`)
+    return { action, artifact: { relativePath: artifact.relativePath, url: artifact.url } }
+  }
+
   const refreshStatus = async () => {
     setStatus(await api<Status>('/api/status'))
   }
@@ -1936,6 +2201,9 @@ function App() {
       signal,
       body: JSON.stringify(payload),
     })
+
+  const fetchArduinoStatus = async (signal?: AbortSignal) =>
+    api<ArduinoStatusResponse>('/api/arduino/status', signal ? { signal } : undefined)
 
   const refreshArtifacts = useCallback(async (workspacePath = selectedWorkspaceRef.current, init?: RequestInit) => {
     const normalizedWorkspacePath = normalizeAbsoluteLocalWorkspacePath(workspacePath)
@@ -1971,22 +2239,94 @@ function App() {
   }, [artifactPreviewLease, dismissedArtifact])
 
   const closeArtifactPreview = useCallback(() => {
+    selectedArtifactRef.current = null
     setSelectedArtifact(null)
     setArtifactPreviewLease(null)
     setArtifactPreviewEngaged(false)
   }, [])
 
-  const openArtifactPreview = useCallback((artifact: GeneratedArtifact) => {
-    if (activeSystemScreenRef.current || artifact.workspacePath !== selectedWorkspaceRef.current) {
+  const openArtifactPreview = useCallback((artifact: GeneratedArtifact, options: { exitSystemScreen?: boolean } = {}) => {
+    if (artifact.workspacePath !== selectedWorkspaceRef.current) {
       return false
     }
+    if (activeSystemScreenRef.current) {
+      if (!options.exitSystemScreen) return false
+      activeSystemScreenRef.current = null
+      setActiveSystemScreen(null)
+    }
     setSelectedArtifact(artifact)
+    selectedArtifactRef.current = artifact
     setArtifactPreviewLease({
       url: artifact.url,
       workspacePath: artifact.workspacePath,
       expiresAt: Date.now() + ARTIFACT_PREVIEW_SESSION_MS,
     })
     return true
+  }, [])
+
+  const dismissArtifactPreview = useCallback(() => {
+    const artifact = selectedArtifactRef.current
+    if (artifact) {
+      setDismissedArtifact({
+        url: artifact.url,
+        updatedAt: artifact.updatedAt,
+        workspacePath: artifact.workspacePath,
+      })
+    }
+    closeArtifactPreview()
+    return artifact
+  }, [closeArtifactPreview])
+
+  const refreshArtifactPreview = useCallback(async (init?: RequestInit) => {
+    const artifact = selectedArtifactRef.current
+    if (!artifact) throw new Error('No browser preview is currently open.')
+    const artifactData = await refreshArtifacts(artifact.workspacePath, init)
+    const refreshed = artifactData.find((item) => item.url === artifact.url || item.relativePath === artifact.relativePath)
+    if (!refreshed) throw new Error('The current browser preview is no longer available in this workspace.')
+    setDismissedArtifact(null)
+    if (!openArtifactPreview(refreshed, { exitSystemScreen: true })) {
+      throw new Error('The browser preview can only open for the selected workspace.')
+    }
+    setArtifactPreviewRefreshKey((current) => current + 1)
+    return refreshed
+  }, [openArtifactPreview, refreshArtifacts])
+
+  const completedArtifactForPending = useCallback((artifactData: GeneratedArtifact[], pending: PendingArtifact) => {
+    const exactArtifact = artifactData.find((artifact) => artifact.url === pending.url)
+    if (exactArtifact) return exactArtifact
+
+    const startedAt = finiteTimestamp(pending.createdAfter)
+    if (startedAt == null) return null
+    const taskStartGraceMs = 2000
+    return artifactData.find((artifact) => {
+      if (artifact.workspacePath !== pending.workspacePath) return false
+      const artifactUpdatedAt = finiteTimestamp(artifact.updatedAt)
+      return artifactUpdatedAt != null && artifactUpdatedAt >= startedAt - taskStartGraceMs
+    }) ?? null
+  }, [])
+
+  const completedArtifactForCodexWork = useCallback((
+    artifactData: GeneratedArtifact[],
+    watch: ActiveCodexArtifactWatch,
+    events: EventRecord[],
+    turnId: string | null,
+  ) => {
+    const changedPaths = changedGeneratedArtifactPathsFromEvents(events, turnId)
+    for (const changedPath of changedPaths) {
+      const exactArtifact = artifactData.find((artifact) =>
+        artifact.workspacePath === watch.workspacePath && artifact.relativePath === changedPath,
+      )
+      if (exactArtifact) return exactArtifact
+    }
+
+    const startedAt = finiteTimestamp(watch.startedAt)
+    if (startedAt == null) return null
+    const taskStartGraceMs = 2000
+    return artifactData.find((artifact) => {
+      if (artifact.workspacePath !== watch.workspacePath) return false
+      const artifactUpdatedAt = finiteTimestamp(artifact.updatedAt)
+      return artifactUpdatedAt != null && artifactUpdatedAt >= startedAt - taskStartGraceMs
+    }) ?? null
   }, [])
 
   const extendArtifactPreview = useCallback(() => {
@@ -2431,7 +2771,9 @@ function App() {
   useEffect(() => {
     selectedWorkspaceRef.current = selectedWorkspace
     refreshArtifacts(selectedWorkspace)
-      .then(refreshOpenArtifact)
+      .then((artifactData) => {
+        if (!activeTurnIdRef.current) refreshOpenArtifact(artifactData)
+      })
       .catch(() => undefined)
   }, [refreshArtifacts, refreshOpenArtifact, selectedWorkspace])
 
@@ -2529,6 +2871,10 @@ function App() {
   useEffect(() => {
     pendingArtifactRef.current = pendingArtifact
   }, [pendingArtifact])
+
+  useEffect(() => {
+    selectedArtifactRef.current = selectedArtifact
+  }, [selectedArtifact])
 
   useEffect(() => {
     if (!artifactPreviewLease) return undefined
@@ -2680,6 +3026,7 @@ function App() {
           const completedTurnId = activeTurnIdRef.current
           const completedThreadId = activeThreadIdRef.current
           const pendingArtifactForTurn = pendingArtifactRef.current
+          const artifactWatchForTurn = activeCodexArtifactWatchRef.current
 
           if (pendingArtifactForTurn) {
             const artifactData = await refreshArtifacts(pendingArtifactForTurn.workspacePath, {
@@ -2695,7 +3042,7 @@ function App() {
             ) {
               return
             }
-            const completedArtifact = artifactData.find((artifact) => artifact.url === pendingArtifactForTurn.url)
+            const completedArtifact = completedArtifactForPending(artifactData, pendingArtifactForTurn)
             if (completedArtifact) {
               if (openArtifactPreview(completedArtifact)) {
                 setDismissedArtifact(null)
@@ -2706,13 +3053,40 @@ function App() {
               }
             } else {
               setActivity('Codex work complete')
-              showNotice(`Codex finished without creating ${pendingArtifactForTurn.relativePath}.`)
+              showNotice('Codex finished without creating a generated preview for this task.')
             }
-            setPendingArtifact(null)
+            setTrackedPendingArtifact(null)
+          } else if (artifactWatchForTurn) {
+            const artifactData = await refreshArtifacts(artifactWatchForTurn.workspacePath, {
+              signal: controller.signal,
+            })
+            if (!effectActive) return
+            if (activeTurnIdRef.current !== completedTurnId || activeCodexArtifactWatchRef.current !== artifactWatchForTurn) {
+              return
+            }
+            const completedArtifact = completedArtifactForCodexWork(
+              artifactData,
+              artifactWatchForTurn,
+              data.data,
+              completedTurnId,
+            )
+            if (completedArtifact) {
+              if (openArtifactPreview(completedArtifact)) {
+                setDismissedArtifact(null)
+                setArtifactPreviewRefreshKey((current) => current + 1)
+                setActivity('Artifact ready', completedArtifact.title)
+                showNotice(`Preview ready: ${completedArtifact.relativePath}`)
+              } else {
+                setActivity('Codex work complete')
+              }
+            } else {
+              setActivity('Codex work complete')
+            }
           } else {
             setActivity('Codex work complete')
           }
 
+          activeCodexArtifactWatchRef.current = null
           setActiveCodexTurn(completedThreadId, null)
           markCodexConversationReady(completedThreadId)
         }
@@ -2731,7 +3105,7 @@ function App() {
       controller.abort()
       window.clearInterval(interval)
     }
-  }, [markCodexConversationReady, openArtifactPreview, refreshArtifacts])
+  }, [completedArtifactForCodexWork, completedArtifactForPending, markCodexConversationReady, openArtifactPreview, refreshArtifacts])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -2745,6 +3119,7 @@ function App() {
           signal: controller.signal,
         })
         if (!effectActive) return
+        if (activeTurnIdRef.current) return
         if (!pendingArtifact) {
           refreshOpenArtifact(artifactData)
           return
@@ -2760,7 +3135,7 @@ function App() {
         if (activeTurnIdRef.current) return
 
         const completedThreadId = activeThreadIdRef.current
-        setPendingArtifact(null)
+        setTrackedPendingArtifact(null)
         setActiveCodexTurn(completedThreadId, null)
         markCodexConversationReady(completedThreadId)
         if (previewOpened) showNotice(`Preview ready: ${completed.relativePath}`)
@@ -2790,10 +3165,14 @@ function App() {
       pollInFlight = true
       try {
         const initialUsbPoll = !usbInitializedRef.current
-        const data = await api<UsbEventsResponse>(
-          `/api/usb/events${initialUsbPoll ? '?scan=true' : ''}`,
-          { signal: controller.signal },
-        )
+        const data = initialUsbPoll
+          ? await api<UsbEventsResponse>('/api/usb/events/scan', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              signal: controller.signal,
+              body: '{}',
+            })
+          : await api<UsbEventsResponse>('/api/usb/events', { signal: controller.signal })
         if (!effectActive) return
         setStatus((current) => current ? { ...current, usb: data.status } : current)
 
@@ -2915,9 +3294,10 @@ function App() {
         setActivity('Voice router', 'Codex starting')
         const goal = requireRealtimeToolText(payload.goal, 'A concrete Codex goal')
         const workspacePath = selectedRoutableWorkspacePath(payload.cwd)
+        const taskStartedAt = new Date().toISOString()
         setDismissedArtifact(null)
         closeArtifactPreview()
-        setPendingArtifact(null)
+        setTrackedPendingArtifact(null)
         setActiveCodexTurn(null, null)
         const taskResult = await api<Record<string, unknown>>('/api/codex/task', {
           method: 'POST',
@@ -2928,10 +3308,6 @@ function App() {
             goal,
           }),
         })
-        if (!toolCallStillCurrent()) {
-          appendStaleToolCallEvent()
-          return
-        }
         const taskThread = taskResult.thread && typeof taskResult.thread === 'object' && !Array.isArray(taskResult.thread)
           ? taskResult.thread as UnknownRecord
           : {}
@@ -2941,6 +3317,7 @@ function App() {
         const threadId = safeCodexEntityId(taskThread.id)
         const turnId = safeCodexEntityId(taskTurn.id)
         const artifact = safeArtifactPlan(taskResult.artifact, workspacePath)
+        const trackedArtifact = artifact ? { ...artifact, createdAfter: taskStartedAt } : null
         if (!threadId) throw new Error('Codex task response did not include a valid thread id.')
         if (!turnId) throw new Error('Codex task response did not include a valid turn id.')
         result = {
@@ -2948,8 +3325,9 @@ function App() {
           turn: { id: turnId },
           artifact,
         }
+        activeCodexArtifactWatchRef.current = { workspacePath, startedAt: taskStartedAt }
         setActiveCodexTurn(threadId, turnId, workspacePath)
-        setPendingArtifact(artifact)
+        setTrackedPendingArtifact(trackedArtifact)
 
         if (threadId) {
           const title =
@@ -2996,11 +3374,23 @@ function App() {
           openConversationWindow(workspacePath, routedConversation.id)
           showNotice(artifact ? `Codex is building a preview at ${artifact.relativePath}.` : 'Realtime routed this work to Codex.')
         }
+
+        if (!toolCallStillCurrent()) {
+          appendStaleToolCallEvent()
+          return
+        }
       }
 
       if (toolName === 'codex_steer_task' && activeThreadIdRef.current) {
         setActivity('Voice router', 'Codex steering')
         const instruction = requireRealtimeToolText(payload.instruction, 'A steering instruction')
+        const workspacePath = activeCodexWorkspaceRef.current || selectedWorkspaceRef.current
+        if (workspacePath) {
+          activeCodexArtifactWatchRef.current = {
+            workspacePath,
+            startedAt: new Date().toISOString(),
+          }
+        }
         result = await api('/api/codex/steer', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -3029,11 +3419,21 @@ function App() {
           return
         }
         setActiveCodexTurn(interruptedThreadId, null)
-        setPendingArtifact(null)
+        setTrackedPendingArtifact(null)
+        activeCodexArtifactWatchRef.current = null
         markCodexConversationReady(interruptedThreadId)
         setActivity('Codex interrupted')
       } else if (toolName === 'codex_interrupt_task') {
         result = { error: 'No active Codex turn is available to interrupt.' }
+      }
+
+      if (toolName === 'browser_preview_control') {
+        setActivity('Browser preview', 'Updating')
+        result = await controlBrowserPreview(payload, toolCallAbortSignal)
+        if (!toolCallStillCurrent()) {
+          appendStaleToolCallEvent()
+          return
+        }
       }
 
       if (toolName === 'get_current_weather') {
@@ -3054,6 +3454,29 @@ function App() {
         setLastError(null)
         result = weather
         showNotice(weather.summary)
+      }
+
+      if (toolName === 'arduino_status') {
+        setActivity('Arduino upload', 'Checking board')
+        const arduinoStatus = await fetchArduinoStatus(toolCallAbortSignal)
+        if (!toolCallStillCurrent()) {
+          appendStaleToolCallEvent()
+          return
+        }
+        const portCount = Array.isArray(arduinoStatus.ports) ? arduinoStatus.ports.length : 0
+        const boardCount = Array.isArray(arduinoStatus.boards) ? arduinoStatus.boards.length : 0
+        appendEvent('arduino/status', {
+          available: Boolean(arduinoStatus.cli?.available),
+          boards: boardCount,
+          ports: portCount,
+        })
+        setActivity('Arduino upload', portCount > 0 ? 'Board detected' : 'No serial board detected')
+        showNotice(
+          portCount > 0
+            ? `Arduino status ready: ${portCount} serial port${portCount === 1 ? '' : 's'} detected.`
+            : 'Arduino status ready: no Arduino serial port is detected.',
+        )
+        result = arduinoStatus
       }
 
       if (toolName === 'arduino_upload_sketch') {
@@ -3094,6 +3517,10 @@ function App() {
         const action = typeof payload.action === 'string' ? payload.action.trim() : ''
         appendEvent('arduino/upload-failed', { action, message })
         setActivity('Arduino upload', 'Upload failed')
+      }
+      if (toolName === 'arduino_status') {
+        appendEvent('arduino/status-failed', { message })
+        setActivity('Arduino upload', 'Status failed')
       }
       result = { error: message }
     }
@@ -3961,21 +4388,55 @@ function App() {
                       </span>
                     </div>
                     {artifactPreview && (
-                      <button
-                        type="button"
-                        aria-label="Close preview"
-                        title="Close preview"
-                        onClick={() => {
-                          setDismissedArtifact({
-                            url: artifactPreview.url,
-                            updatedAt: artifactPreview.updatedAt,
-                            workspacePath: artifactPreview.workspacePath,
-                          })
-                          closeArtifactPreview()
-                        }}
-                      >
-                        <X size={14} />
-                      </button>
+                      <div className="artifact-stage-actions">
+                        <button
+                          type="button"
+                          aria-label="Delete generated preview"
+                          title="Delete generated preview"
+                          disabled={artifactCleanupInFlight}
+                          onClick={() => {
+                            setArtifactCleanupInFlight(true)
+                            void deleteCurrentArtifactPreview()
+                              .then((result) => {
+                                showNotice(
+                                  result.deleted.length > 0
+                                    ? 'Deleted the current generated preview.'
+                                    : 'No generated preview was deleted.',
+                                )
+                              })
+                              .catch((error: unknown) => {
+                                setLastError(displayErrorMessage(error, 'Failed to delete browser preview'))
+                              })
+                              .finally(() => setArtifactCleanupInFlight(false))
+                          }}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Refresh preview"
+                          title="Refresh preview"
+                          disabled={artifactCleanupInFlight}
+                          onClick={() => {
+                            void refreshArtifactPreview().catch((error: unknown) => {
+                              setLastError(displayErrorMessage(error, 'Failed to refresh browser preview'))
+                            })
+                          }}
+                        >
+                          <RefreshCw size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Close preview"
+                          title="Close preview"
+                          disabled={artifactCleanupInFlight}
+                          onClick={() => {
+                            dismissArtifactPreview()
+                          }}
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
                     )}
                   </header>
 
@@ -3987,7 +4448,7 @@ function App() {
                     </div>
                   ) : artifactPreview ? (
                     <iframe
-                      key={`${artifactPreview.url}::${artifactPreview.updatedAt}`}
+                      key={`${artifactPreview.url}::${artifactPreview.updatedAt}::${artifactPreviewRefreshKey}`}
                       src={artifactPreview.url}
                       title={artifactPreview.title}
                       sandbox="allow-scripts"

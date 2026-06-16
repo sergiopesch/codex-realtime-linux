@@ -121,6 +121,37 @@ async function assertHidden(locator, label) {
   }
 }
 
+async function assertMissing(filePath, label) {
+  try {
+    await access(filePath)
+  } catch (error) {
+    if (error?.code === 'ENOENT') return
+    throw error
+  }
+  throw new Error(`Expected missing file after cleanup: ${label}.`)
+}
+
+async function fileExists(filePath) {
+  try {
+    await access(filePath)
+    return true
+  } catch (error) {
+    if (error?.code === 'ENOENT') return false
+    throw error
+  }
+}
+
+async function generatedArtifactFor(apiPort, workspacePath, relativePath) {
+  const response = await fetch(`http://127.0.0.1:${apiPort}/api/artifacts?workspacePath=${encodeURIComponent(workspacePath)}`)
+  if (!response.ok) throw new Error(`Generated artifact lookup failed with HTTP ${response.status}.`)
+  const body = await response.json()
+  const artifact = Array.isArray(body?.data)
+    ? body.data.find((item) => item?.workspacePath === workspacePath && item?.relativePath === relativePath)
+    : null
+  if (!artifact?.url) throw new Error(`Generated artifact was not indexed: ${relativePath}.`)
+  return artifact
+}
+
 async function main() {
   const browserPath = await chromiumExecutable()
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'codex-realtime-renderer-smoke-'))
@@ -136,6 +167,7 @@ async function main() {
   try {
     await mkdir(artifactDir, { recursive: true })
     await writeFile(path.join(artifactDir, 'index.html'), '<!doctype html><title>Smoke Report</title><button>Next</button>')
+    await writeFile(path.join(workspacePath, 'public', 'agent-files', 'hello-world.html'), '<!doctype html><title>Hello world</title><h1>Hello world</h1>')
 
     apiProc = spawnLogged(process.execPath, ['server/index.mjs'], {
       cwd: repoRoot,
@@ -149,6 +181,7 @@ async function main() {
         CODEX_USE_OPENAI_API_KEY: 'false',
         CODEX_REALTIME_STATE_PATH: path.join(tempDir, 'state.json'),
         CODEX_REALTIME_SECRETS_PATH: path.join(tempDir, 'secrets.json'),
+        CODEX_REALTIME_ALLOWED_ORIGINS: `http://127.0.0.1:${uiPort}`,
         CODEX_RPC_TIMEOUT_MS: '5000',
       },
     })
@@ -207,23 +240,44 @@ async function main() {
     await assertVisible(page.getByLabel('Voice transcript'), 'transcript panel')
     await assertHidden(page.getByLabel('Generated artifact preview'), 'old artifact preview before smoke event')
 
-    const artifactUrl = `/workspace-artifacts/${Buffer.from(workspacePath, 'utf8').toString('base64url')}/smoke-report/index.html`
+    const smokeArtifact = await generatedArtifactFor(apiPort, workspacePath, 'public/agent-files/smoke-report/index.html')
+    const artifactUrl = smokeArtifact.url
     await page.evaluate((detail) => {
       window.dispatchEvent(new CustomEvent('codex:smoke-open-artifact-preview', { detail }))
     }, {
-      id: 'smoke-report',
-      title: 'Smoke Report',
-      url: artifactUrl,
-      relativePath: 'public/agent-files/smoke-report/index.html',
-      workspacePath,
-      updatedAt: new Date().toISOString(),
-      size: 80,
+      ...smokeArtifact,
     })
     await assertVisible(page.getByLabel('Generated artifact preview'), 'generated artifact preview')
+    await assertVisible(page.getByRole('button', { name: 'Delete generated preview' }), 'preview delete button')
+    await assertVisible(page.getByRole('button', { name: 'Refresh preview' }), 'preview refresh button')
     await assertVisible(page.getByRole('button', { name: 'Close preview' }), 'preview close button')
     await assertVisible(page.locator(`iframe[src="${artifactUrl}"]`), 'preview iframe')
+    await page.getByRole('button', { name: 'Refresh preview' }).click()
+    await assertVisible(page.locator(`iframe[src="${artifactUrl}"]`), 'refreshed preview iframe')
     await page.getByRole('button', { name: 'Close preview' }).click()
     await assertHidden(page.getByLabel('Generated artifact preview'), 'closed generated artifact preview')
+
+    const flatArtifact = await generatedArtifactFor(apiPort, workspacePath, 'public/agent-files/hello-world.html')
+    const flatArtifactUrl = flatArtifact.url
+    await page.evaluate((detail) => {
+      window.dispatchEvent(new CustomEvent('codex:smoke-open-artifact-preview', { detail }))
+    }, {
+      ...flatArtifact,
+    })
+    await assertVisible(page.getByLabel('Generated artifact preview'), 'flat generated artifact preview')
+    await assertVisible(page.locator(`iframe[src="${flatArtifactUrl}"]`), 'flat preview iframe')
+    await page.getByRole('button', { name: 'Delete generated preview' }).click()
+    try {
+      await assertHidden(page.getByLabel('Generated artifact preview'), 'deleted flat generated artifact preview')
+    } catch (error) {
+      const errorStrip = await page.locator('.error-strip').textContent().catch(() => '')
+      const noticeStrip = await page.locator('.notice-strip').textContent().catch(() => '')
+      const stillExists = await fileExists(path.join(workspacePath, 'public', 'agent-files', 'hello-world.html'))
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)} UI error: ${errorStrip || 'none'}. Notice: ${noticeStrip || 'none'}. File exists: ${stillExists}.`,
+      )
+    }
+    await assertMissing(path.join(workspacePath, 'public', 'agent-files', 'hello-world.html'), 'flat generated artifact')
 
     console.log('Renderer smoke passed.')
   } catch (error) {

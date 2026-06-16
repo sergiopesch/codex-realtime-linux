@@ -47,6 +47,10 @@ const configuredAbsolutePath = (value, fallback) => {
   const candidate = typeof value === 'string' && value.trim() ? value.trim() : fallback
   return path.isAbsolute(candidate) && !/[\u0000-\u001f\u007f]/.test(candidate) ? path.resolve(candidate) : fallback
 }
+const configuredLocalApiToken = (value) => {
+  const token = typeof value === 'string' ? value.trim() : ''
+  return token && token.length <= 240 && !/[\u0000-\u001f\u007f]/.test(token) ? token : ''
+}
 const apiPort = configuredPort(process.env.PORT)
 const apiUrl = configuredLocalHttpOrigin(process.env.CODEX_DESKTOP_API_URL, `http://127.0.0.1:${apiPort}`)
 const devServerUrl = process.env.NODE_ENV === 'production'
@@ -61,6 +65,7 @@ const externalNavigationProtocols = new Set(['https:', 'mailto:'])
 const apiNodeBin = configuredAbsolutePath(process.env.CODEX_REALTIME_NODE_BIN, process.execPath)
 const apiNodeUsesElectronRuntime = apiNodeBin === process.execPath
 const desktopServerToken = randomUUID()
+const localApiToken = configuredLocalApiToken(process.env.CODEX_LOCAL_API_TOKEN) || desktopServerToken
 const repoRoot = path.join(__dirname, '..')
 const stateHome = configuredAbsoluteDir(process.env.XDG_STATE_HOME, path.join(os.homedir(), '.local', 'state'))
 const stateDir = path.join(stateHome, 'codex-realtime-linux')
@@ -392,6 +397,7 @@ const ensureApiServer = async () => {
       PORT: String(apiPort),
       NODE_ENV: process.env.NODE_ENV || 'production',
       CODEX_DESKTOP_SERVER_TOKEN: desktopServerToken,
+      CODEX_LOCAL_API_TOKEN: localApiToken,
       ...(apiNodeUsesElectronRuntime ? { ELECTRON_RUN_AS_NODE: '1' } : {}),
     }
     apiProcess = spawn(apiNodeBin, ['server/index.mjs'], {
@@ -500,6 +506,11 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
       name: path.basename(folderPath),
       path: folderPath,
     }
+  })
+
+  ipcMain.handle('local-api-token', async (event) => {
+    if (!isTrustedRendererEvent(event)) return ''
+    return localApiToken
   })
 
   createWindow()

@@ -17,7 +17,7 @@ MVP-ready does not mean feature-complete with the public Codex app. It means the
 - The local API validates JSON bodies, rejects untrusted browser origins, bounds upstream requests, and returns normalized JSON errors for API failures.
 - Realtime voice uses bounded runtime instructions, transcript normalization, cancellable connection setup, stale tool-call dropping, duplicate tool-call suppression, and bounded function outputs.
 - Codex task routing requires an explicit existing workspace, rejects this app source tree by default, preserves app-source guardrails when app-source tasks are explicitly allowed, and creates generated artifact plans server-side instead of embedding fixed paths in Realtime prompts.
-- Generated HTML previews are workspace-scoped, temporary, closeable, hidden on system screens/workspace navigation, remounted on artifact timestamp changes, and served through a sandboxed iframe with strict preview CSP.
+- Generated HTML previews are workspace-scoped, temporary, closeable, refreshable, hidden on system screens/workspace navigation/active Codex turns, remounted on artifact timestamp changes after completion or explicit refresh, and served through a sandboxed iframe with strict preview CSP.
 - Local state and Settings secrets are persisted outside the repo with bounded normalization, user-only permissions, atomic writes, backup recovery, and strict row-key mutation for duplicate conversation IDs.
 - Weather, USB, and Arduino integrations validate inputs, bound diagnostics, avoid fake data, and surface hardware ambiguity instead of guessing.
 - Automated validation currently covers API routing, persistence, preview policy, app-source guards, renderer invariants, Arduino/USB/weather modules, desktop install behavior, linting, and production build correctness.
@@ -29,12 +29,12 @@ MVP-ready does not mean feature-complete with the public Codex app. It means the
 
 1. Standalone launch: after `npm run install:desktop`, the app launches from the Linux app menu without a terminal, uses the built renderer, starts the local API server, and reports a healthy `/api/status`.
 2. No hardcoded content path: asking Realtime/Codex to create an HTML presentation writes it under the selected workspace's `public/agent-files/` folder, never root `index.html`, bundled public demo routes, or this app source tree unless explicitly opted in for app-source work.
-3. Temporary browser view: the in-app browser preview appears only for a newly completed foreground artifact, can be closed, does not reopen old artifacts on startup/navigation/polling, and expires after the idle viewing window.
+3. Temporary browser view: the in-app browser preview appears only for a newly completed or updated foreground artifact or an explicit voice request, can be closed/refreshed/deleted by voice or UI controls, does not reopen old artifacts on startup/navigation/polling, does not remount repeatedly while Codex is actively writing files, and expires after the idle viewing window. Close is hide-only; generated artifact deletion and stale-preview cleanup require explicit user intent and are performed by app-owned workspace-scoped cleanup routes, not by Codex shell commands.
 4. Subtle agent activity: Codex work indicators stay local to the relevant work surface and never overtake the full window or follow the user into unrelated workspaces/system screens.
 5. Voice fundamentals: voice can start, cancel during connection, go live, mute/unmute, stop, record transcript lines, save transcript to the bound conversation, and ignore in-flight tool completions after the session ends.
 6. Workspace safety: Codex tasks, Codex history, generated artifacts, hidden thread deletes, and local conversations remain scoped to the selected workspace and cannot delete or mutate unrelated workspace rows.
 7. App-source safety: app-source paths remain protected by default, symlinked app paths are treated as protected, and opt-in app-source tasks still carry protected-path prompt guardrails.
-8. Hardware clarity: USB detection may acknowledge a connected Arduino-like device, but uploads must compile first, require a supported action, choose only detected supported ports, avoid flashing ambiguous boards, and display upload failure state clearly.
+8. Hardware clarity: USB detection may acknowledge a connected Arduino-like device, Realtime can query Arduino CLI/board/port status directly, and uploads must compile first, require a supported action, choose only detected supported ports, avoid flashing ambiguous boards, and display upload failure state clearly.
 9. Settings and secrets: OpenAI keys can be saved/removed locally without exposing absolute secret paths in responses, and invalid or oversized saved secret files are ignored safely.
 10. Usage and weather honesty: Usage and weather screens show live normalized data or explicit empty/error states; they must not fabricate placeholders as real data.
 11. Security envelope: untrusted origins, malformed JSON, oversized payloads, hidden preview files, symlink escapes, top-level preview navigation, and unsupported preview file types are rejected.
@@ -49,6 +49,12 @@ MVP-ready does not mean feature-complete with the public Codex app. It means the
   - Settings/Usage/Profile navigation does not collapse sidebar entries
   - workspace with no threads stays on the voice surface
   - generated preview open/close behavior is visible and closeable
+  - closing a generated preview hides it without deleting the file
+  - flat generated files such as `public/agent-files/hello-world.html` open inside the app preview instead of requiring an external file
+  - preview refresh keeps the browser view inside the app and remounts the iframe
+  - generated previews do not repeatedly remount while a Codex turn is still active
+  - editing an existing indexed generated artifact under `public/agent-files/` opens or refreshes that artifact in the internal browser after Codex completes
+  - explicit generated-preview deletion removes only the current indexed artifact under `public/agent-files/`
   - transcript panel toggles without layout overlap
 - Maintain the desktop release smoke script that runs installation checks and verifies:
   - desktop entry exists
@@ -59,6 +65,7 @@ MVP-ready does not mean feature-complete with the public Codex app. It means the
 - Manually run and record the Live Verification Checklist on the target Linux desktop using `npm run verify:manual`, including microphone, speaker, screen capture, app-menu launch, and physical Arduino upload.
 - Maintain degraded-mode smoke coverage for first-run behavior, corrupted state/secrets recovery, missing and invalid Realtime credentials, Realtime token upstream timeout behavior, missing Codex CLI behavior, unexpected Codex app-server responses, slow Codex app-server responses, and unauthenticated Codex account states.
 - Confirm Realtime voice failure modes that require OS or live WebRTC behavior, especially denied microphone permission and live connection setup failures.
+- Keep Codex task prompt regression checks that prevent agents from starting local preview servers or external file/browser open commands for generated HTML verification.
 
 ### P1 Immediately After MVP
 

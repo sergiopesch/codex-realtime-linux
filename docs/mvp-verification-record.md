@@ -28,7 +28,7 @@ Final readiness should be checked with `npm run verify:mvp`, which writes `docs/
 - API health: `/api/status` returned `realtime: true`, `openAiKeySource: settings`, `appRoot: /home/sergiopesch/codex-realtime-linux`, `usb.active: true`, and Arduino CLI availability.
 - Realtime token: a bodyless `POST /api/realtime/token` returned HTTP 200; token contents were not recorded.
 - Local media devices: PipeWire reported speaker output, multiple microphone inputs, and an integrated camera. This proves device enumeration only, not user permission acceptance inside Electron.
-- USB and Arduino: `/api/usb/events?scan=true` returned no connected devices; `/api/arduino/status` reported no boards and no serial ports. A safe upload request returned `arduino_port_not_found`, so physical upload success could not be verified without connecting the board.
+- USB and Arduino: `POST /api/usb/events/scan` returned no connected devices; `/api/arduino/status` reported no boards and no serial ports. A safe upload request returned `arduino_port_not_found`, so physical upload success could not be verified without connecting the board.
 - Weather: live London lookup reached the app route but the upstream weather service did not return live data. The app surfaced an explicit bounded weather error instead of fabricated data.
 
 ## Degraded Coverage Confirmed

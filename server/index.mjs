@@ -22,6 +22,8 @@ const OPENAI_ADMIN_KEY = process.env.OPENAI_ADMIN_KEY ?? process.env.OPENAI_API_
 const ENV_CODEX_API_KEY = process.env.CODEX_API_KEY
 const CODEX_FORCE_API_KEY_AUTH = process.env.CODEX_FORCE_API_KEY_AUTH === 'true'
 const DESKTOP_SERVER_TOKEN = process.env.CODEX_DESKTOP_SERVER_TOKEN ?? ''
+const LOCAL_API_TOKEN = configuredLocalApiToken(process.env.CODEX_LOCAL_API_TOKEN || DESKTOP_SERVER_TOKEN)
+const LOCAL_API_TOKEN_HEADER = 'x-codex-local-api-token'
 const localApiHostnames = new Set(['localhost', '127.0.0.1', '[::1]'])
 const OPENAI_API_BASE_HOSTNAMES = new Set([...localApiHostnames, '::1'])
 const MAX_RUNTIME_CONFIG_STRING_LENGTH = 240
@@ -100,6 +102,8 @@ const MAX_ARTIFACT_NAME_LENGTH = 120
 const MAX_ARTIFACT_TITLE_LENGTH = 180
 const MAX_ARTIFACT_PREVIEW_PATH_LENGTH = 1024
 const MAX_ARTIFACT_PREVIEW_FILE_BYTES = 25 * 1024 * 1024
+const MAX_ARTIFACT_CLEANUP_KEEP_LATEST = 10
+const ARTIFACT_CLEANUP_ACTIONS = new Set(['delete_path', 'clear_old'])
 const ARTIFACT_PREVIEW_CONTENT_TYPES = new Map([
   ['.html', 'text/html; charset=utf-8'],
   ['.htm', 'text/html; charset=utf-8'],
@@ -163,6 +167,8 @@ const OPENAI_SAFETY_IDENTIFIER =
   normalizeOpenAiSafetyIdentifier(process.env.OPENAI_SAFETY_IDENTIFIER) || defaultOpenAiSafetyIdentifier()
 
 let localSecrets = {}
+const workspacePreviewTokensByPath = new Map()
+const workspacePathsByPreviewToken = new Map()
 
 const app = express()
 app.disable('x-powered-by')
@@ -192,6 +198,13 @@ function apiRouteRequiresJsonBody(req) {
 
 function apiRouteRequiresEmptyBody(req) {
   return req.method === 'POST' && req.path === '/api/realtime/token'
+}
+
+function apiRouteRequiresLocalToken(req) {
+  if (!LOCAL_API_TOKEN) return false
+  if (!req.path.startsWith('/api/')) return false
+  if (req.method === 'OPTIONS') return false
+  return req.path !== '/api/status'
 }
 
 function requestHasBody(req) {
@@ -225,6 +238,12 @@ function configuredJsonBodyLimit(value, fallback = DEFAULT_JSON_BODY_LIMIT) {
   const multiplier = unit === 'mb' ? 1024 * 1024 : unit === 'kb' ? 1024 : 1
   const bytes = amount * multiplier
   return Number.isInteger(amount) && amount > 0 && bytes <= MAX_JSON_BODY_LIMIT_BYTES ? `${amount}${unit}` : fallback
+}
+
+function configuredLocalApiToken(value) {
+  const token = typeof value === 'string' ? value.trim() : ''
+  if (!token || token.length > 240 || /[\u0000-\u001f\u007f]/.test(token)) return ''
+  return token
 }
 
 function configuredOpenAiApiBaseUrl(value, fallback = DEFAULT_OPENAI_API_BASE_URL) {
@@ -324,7 +343,7 @@ function guardLocalApiRequests(req, res, next) {
     res.set({
       'Access-Control-Allow-Origin': origin,
       'Access-Control-Allow-Methods': 'GET,POST,PATCH,PUT,DELETE,OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Allow-Headers': 'Content-Type, X-Codex-Local-Api-Token',
       'Access-Control-Max-Age': '600',
       Vary: 'Origin',
     })
@@ -332,6 +351,11 @@ function guardLocalApiRequests(req, res, next) {
 
   if (req.method === 'OPTIONS') {
     res.status(204).end()
+    return
+  }
+
+  if (apiRouteRequiresLocalToken(req) && req.get(LOCAL_API_TOKEN_HEADER) !== LOCAL_API_TOKEN) {
+    res.status(401).json({ error: 'A valid local API token is required.', code: 'local_api_token_required' })
     return
   }
 
@@ -494,22 +518,26 @@ function getCodexApiKey() {
 }
 
 function workspaceToken(workspacePath) {
-  return Buffer.from(path.resolve(workspacePath), 'utf8').toString('base64url')
+  const resolvedWorkspacePath = path.resolve(workspacePath)
+  const existingToken = workspacePreviewTokensByPath.get(resolvedWorkspacePath)
+  if (existingToken) return existingToken
+
+  const token = randomUUID()
+  workspacePreviewTokensByPath.set(resolvedWorkspacePath, token)
+  workspacePathsByPreviewToken.set(token, resolvedWorkspacePath)
+  return token
 }
 
 function workspaceFromToken(token) {
-  if (typeof token !== 'string' || token.length > MAX_WORKSPACE_TOKEN_LENGTH || !/^[A-Za-z0-9_-]+$/.test(token)) {
-    throw httpError('Invalid workspace token.', { statusCode: 400, code: 'invalid_workspace_token' })
-  }
-  const workspacePath = Buffer.from(token, 'base64url').toString('utf8')
   if (
-    !path.isAbsolute(workspacePath) ||
-    /[\u0000-\u001f\u007f]/.test(workspacePath) ||
-    workspaceToken(workspacePath) !== token
+    typeof token !== 'string' ||
+    token.length > MAX_WORKSPACE_TOKEN_LENGTH ||
+    !/^[A-Za-z0-9_-]+$/.test(token) ||
+    !workspacePathsByPreviewToken.has(token)
   ) {
     throw httpError('Invalid workspace token.', { statusCode: 400, code: 'invalid_workspace_token' })
   }
-  return workspacePath
+  return workspacePathsByPreviewToken.get(token)
 }
 
 function isPathInside(parent, child) {
@@ -536,6 +564,17 @@ function isSafeArtifactPreviewPath(value) {
 
 function artifactPreviewContentType(filePath) {
   return ARTIFACT_PREVIEW_CONTENT_TYPES.get(path.extname(filePath).toLowerCase()) ?? ''
+}
+
+function artifactPreviewUrlFor(token, previewPath) {
+  return `/workspace-artifacts/${token}/${previewPath.split('/').map(encodeURIComponent).join('/')}`
+}
+
+function artifactPreviewPathFromRelativePath(relativePath) {
+  const prefix = `${GENERATED_ARTIFACT_DIR}/`
+  if (typeof relativePath !== 'string' || !relativePath.startsWith(prefix)) return ''
+  const previewPath = relativePath.slice(prefix.length)
+  return isSafeArtifactPreviewPath(previewPath) ? previewPath : ''
 }
 
 function isIgnorableArtifactEntryError(error) {
@@ -703,6 +742,8 @@ async function requireAllowedCodexTaskWorkspace(cwd, protectedWorkspace = null) 
 
 function goalForWorkspace(cwd, goal, artifactPlan = null, protectedWorkspace = false) {
   const workspacePath = path.resolve(cwd)
+  const inAppPreviewOwnership =
+    'Do not start local HTTP servers, dev servers, python http.server, xdg-open, open, or external browser/file-open commands to verify generated previews. The desktop app owns preview serving through /workspace-artifacts; verify generated HTML by checking files and workspace-relative paths only.'
   if (artifactPlan && !protectedWorkspace) {
     return [
       'Artifact workflow: inspect this selected workspace before creating the result.',
@@ -710,6 +751,8 @@ function goalForWorkspace(cwd, goal, artifactPlan = null, protectedWorkspace = f
       `Create the finished HTML presentation at ${artifactPlan.relativePath}.`,
       `Keep all supporting assets for this presentation inside ${artifactPlan.relativeDir}/.`,
       'Use relative asset paths from index.html so local images and assets load inside the app preview.',
+      'In your final response, mention only workspace-relative generated paths. Do not include absolute local file links.',
+      inAppPreviewOwnership,
       'Do not edit unrelated workspace source files unless the user explicitly asked for source changes.',
       'The result must be directly viewable in an iframe/browser preview from that index.html file.',
       '',
@@ -718,7 +761,17 @@ function goalForWorkspace(cwd, goal, artifactPlan = null, protectedWorkspace = f
   }
 
   if (protectedWorkspace) return goalWithWorkspaceGuard(goal, artifactPlan)
-  if (workspacePath !== REPO_ROOT) return goal
+  if (workspacePath !== REPO_ROOT) {
+    return [
+      'Selected workspace workflow: work in the selected workspace only unless the user explicitly asks otherwise.',
+      'When mentioning local files in progress updates or final responses, use workspace-relative paths only. Do not include absolute local file links.',
+      `If you create or update generated browser-preview files, keep them under ${GENERATED_ARTIFACT_DIR}/ unless the user explicitly requests a different path.`,
+      'Do not tell the user to open generated files outside the desktop app.',
+      inAppPreviewOwnership,
+      '',
+      `User goal:\n${goal}`,
+    ].join('\n')
+  }
   return goalWithWorkspaceGuard(goal, artifactPlan)
 }
 
@@ -763,9 +816,36 @@ async function listGeneratedArtifacts(workspacePath) {
     for await (const entry of directory) {
       scannedEntries += 1
       if (scannedEntries > MAX_ARTIFACT_DIRECTORY_SCAN_ENTRIES) break
+      if (entry.isFile()) {
+        if (entry.name.length > MAX_ARTIFACT_NAME_LENGTH) continue
+        if (!isSafeArtifactPreviewPath(entry.name)) continue
+        if (path.extname(entry.name).toLowerCase() !== '.html') continue
+        const filePath = path.join(artifactsDir, entry.name)
+        try {
+          const realFilePath = await realpath(filePath)
+          if (!isPathInside(realArtifactsDir, realFilePath)) continue
+          const details = await stat(realFilePath)
+          if (!details.isFile()) continue
+          if (details.size > MAX_ARTIFACT_PREVIEW_FILE_BYTES) continue
+          const title = path.basename(entry.name, path.extname(entry.name)).replace(/^\d{8}t?\d{6}-?/i, '').replace(/-/g, ' ') || entry.name
+          artifacts.push({
+            id: entry.name,
+            title: normalizeBoundedString(title, entry.name, MAX_ARTIFACT_TITLE_LENGTH),
+            url: artifactPreviewUrlFor(token, entry.name),
+            relativePath: `${GENERATED_ARTIFACT_DIR}/${entry.name}`,
+            workspacePath: resolvedWorkspacePath,
+            updatedAt: details.mtime.toISOString(),
+            size: finiteNumber(details.size),
+          })
+        } catch (error) {
+          if (!isIgnorableArtifactEntryError(error)) throw error
+        }
+        continue
+      }
       if (!entry.isDirectory()) continue
       if (!isSafeArtifactName(entry.name)) continue
-      const indexPath = path.join(artifactsDir, entry.name, 'index.html')
+      const previewPath = `${entry.name}/index.html`
+      const indexPath = path.join(artifactsDir, previewPath)
       try {
         const [realArtifactRoot, realIndexPath] = await Promise.all([
           realpath(path.join(artifactsDir, entry.name)),
@@ -780,8 +860,8 @@ async function listGeneratedArtifacts(workspacePath) {
         artifacts.push({
           id: entry.name,
           title: normalizeBoundedString(title, entry.name, MAX_ARTIFACT_TITLE_LENGTH),
-          url: `/workspace-artifacts/${token}/${entry.name}/index.html`,
-          relativePath: `${GENERATED_ARTIFACT_DIR}/${entry.name}/index.html`,
+          url: artifactPreviewUrlFor(token, previewPath),
+          relativePath: `${GENERATED_ARTIFACT_DIR}/${previewPath}`,
           workspacePath: resolvedWorkspacePath,
           updatedAt: details.mtime.toISOString(),
           size: finiteNumber(details.size),
@@ -799,6 +879,107 @@ async function listGeneratedArtifacts(workspacePath) {
     .slice(0, MAX_GENERATED_ARTIFACTS)
 }
 
+async function artifactCleanupTarget(workspacePath, artifact) {
+  const resolvedWorkspacePath = path.resolve(workspacePath)
+  const artifactsDir = path.join(resolvedWorkspacePath, GENERATED_ARTIFACT_DIR)
+  const previewPath = artifactPreviewPathFromRelativePath(artifact?.relativePath)
+  if (!previewPath) return null
+
+  const pathSegments = previewPath.split('/')
+  let targetPath
+  let expectedFilePath
+  if (pathSegments.length === 1) {
+    if (path.extname(previewPath).toLowerCase() !== '.html') return null
+    targetPath = path.join(artifactsDir, previewPath)
+    expectedFilePath = targetPath
+  } else if (pathSegments.length === 2 && pathSegments[1] === 'index.html' && isSafeArtifactName(pathSegments[0])) {
+    targetPath = path.join(artifactsDir, pathSegments[0])
+    expectedFilePath = path.join(targetPath, 'index.html')
+  } else {
+    return null
+  }
+
+  const [realWorkspacePath, realArtifactsDir, realTargetPath, realExpectedFilePath] = await Promise.all([
+    realpath(resolvedWorkspacePath),
+    realpath(artifactsDir),
+    realpath(targetPath),
+    realpath(expectedFilePath),
+  ])
+  if (!isPathInside(realWorkspacePath, realArtifactsDir)) return null
+  if (!isPathInside(realArtifactsDir, realTargetPath)) return null
+  if (!isPathInside(realTargetPath, realExpectedFilePath)) return null
+
+  const expectedDetails = await stat(realExpectedFilePath)
+  if (!expectedDetails.isFile() || expectedDetails.size > MAX_ARTIFACT_PREVIEW_FILE_BYTES) return null
+  return {
+    path: targetPath,
+    relativePath: artifact.relativePath,
+    url: artifact.url,
+  }
+}
+
+async function deleteGeneratedArtifactTargets(workspacePath, artifacts) {
+  const deleted = []
+  for (const artifact of artifacts) {
+    try {
+      const target = await artifactCleanupTarget(workspacePath, artifact)
+      if (!target) continue
+      await rm(target.path, { recursive: true, force: true })
+      deleted.push({ relativePath: target.relativePath, url: target.url })
+    } catch (error) {
+      if (!isIgnorableArtifactEntryError(error)) throw error
+    }
+  }
+  return deleted
+}
+
+async function cleanupGeneratedArtifacts(workspacePath, input) {
+  const body = requireObjectBody(input)
+  const action = normalizeString(body.action)
+  if (!ARTIFACT_CLEANUP_ACTIONS.has(action)) {
+    throw httpError('A supported artifact cleanup action is required.', {
+      statusCode: 400,
+      code: 'invalid_artifact_cleanup_action',
+    })
+  }
+
+  const artifacts = await listGeneratedArtifacts(workspacePath)
+  if (action === 'delete_path') {
+    const targetRelativePath = normalizeBoundedString(body.relativePath, '', MAX_ARTIFACT_PREVIEW_PATH_LENGTH)
+    const target = artifacts.find((artifact) => artifact.relativePath === targetRelativePath)
+    if (!target) {
+      throw httpError('Generated artifact was not found in this workspace.', {
+        statusCode: 404,
+        code: 'artifact_not_found',
+      })
+    }
+    return {
+      action,
+      deleted: await deleteGeneratedArtifactTargets(workspacePath, [target]),
+      kept: artifacts.filter((artifact) => artifact.relativePath !== target.relativePath),
+    }
+  }
+
+  const keepRelativePath = normalizeBoundedString(body.keepRelativePath, '', MAX_ARTIFACT_PREVIEW_PATH_LENGTH)
+  const keepArtifact = keepRelativePath
+    ? artifacts.find((artifact) => artifact.relativePath === keepRelativePath)
+    : null
+  const parsedKeepLatest = Number(body.keepLatest)
+  const keepLatest = Number.isSafeInteger(parsedKeepLatest)
+    ? Math.min(Math.max(parsedKeepLatest, 0), MAX_ARTIFACT_CLEANUP_KEEP_LATEST)
+    : keepArtifact
+      ? 0
+      : 1
+  const keepPaths = new Set(artifacts.slice(0, keepLatest).map((artifact) => artifact.relativePath))
+  if (keepArtifact) keepPaths.add(keepArtifact.relativePath)
+  const deleteTargets = artifacts.filter((artifact) => !keepPaths.has(artifact.relativePath))
+  return {
+    action,
+    deleted: await deleteGeneratedArtifactTargets(workspacePath, deleteTargets),
+    kept: artifacts.filter((artifact) => keepPaths.has(artifact.relativePath)),
+  }
+}
+
 function realtimeSessionConfig() {
   const userContextInstructions = [
     REALTIME_USER_NAME ? `The local user name is ${REALTIME_USER_NAME}.` : '',
@@ -813,13 +994,17 @@ function realtimeSessionConfig() {
       'You are the conversational voice router for a Linux Codex desktop client.',
       'Your job is to understand the user through natural speech, clarify intent when needed, and route concrete coding work to the Codex app-server harness.',
       'Do not act like the coding agent and do not narrate long implementation plans. Codex does the execution through tools.',
-      'Use codex_start_task when the user gives a concrete build, fix, review, refactor, test, or debugging goal.',
+      'Hardware-control requests are not Codex coding tasks. When the user asks to upload code to a connected Arduino or change the Arduino onboard LED behaviour, use arduino_status when detection context is needed and arduino_upload_sketch for the upload.',
+      'Use codex_start_task when the user gives a concrete build, fix, review, refactor, test, or debugging goal that is not a direct browser-preview lifecycle request and is not a direct Arduino hardware upload request.',
       'Use codex_steer_task when an active Codex task exists and the user changes priority, scope, style, or direction.',
       'Use codex_interrupt_task when the user asks to stop, pause, cancel, or abandon the active Codex turn.',
+      'Use browser_preview_control when the user asks to open, show, close, hide, refresh, delete, clear, replace, or reset generated previews. Do not route browser preview lifecycle requests to Codex just to manage files.',
       `For this app, protect the app source by default. ${buildWorkspaceGuard('', null)}`,
       `For simple HTML, demo, presentation, slide, page, or generated-file requests, tell Codex to inspect the selected workspace, including images and documents, then create files under ${GENERATED_ARTIFACT_DIR}/ in that workspace unless the user explicitly asks to modify this app.`,
-      'When the generated presentation is finished, it will appear in the app browser preview automatically.',
+      'When a generated HTML file is ready, open it with browser_preview_control instead of telling the user to open a file outside this desktop app. If you mention the file, mention only its workspace-relative path.',
+      'Closing the browser preview only hides it. Delete or clear generated previews only when the user explicitly asks to delete, clear, replace, or reset them; use browser_preview_control for that cleanup.',
       'Use get_current_weather when the user asks for current weather conditions in a specific place.',
+      'Use arduino_status when the user asks whether an Arduino is connected, which port it is using, or why upload is not available.',
       'Use arduino_upload_sketch only when the user explicitly asks to upload code to a connected Arduino or to change the Arduino onboard LED behaviour.',
       'For simple requests like turning on the Arduino light, use action onboard_led_on. For blinking, use onboard_led_blink.',
       'Uploading code changes the connected board firmware; confirm the target behaviour conversationally if the request is ambiguous.',
@@ -887,6 +1072,27 @@ function realtimeSessionConfig() {
       },
       {
         type: 'function',
+        name: 'browser_preview_control',
+        description: 'Open, close, refresh, or explicitly clean up temporary generated HTML previews in the selected workspace.',
+        parameters: {
+          type: 'object',
+          properties: {
+            action: {
+              type: 'string',
+              enum: ['open_latest', 'open_path', 'close', 'refresh', 'delete_current', 'clear_old'],
+              description: 'Use open_latest to show the newest generated preview, open_path for a specific generated relative path, close to hide it, refresh to reload it, delete_current to remove the open generated artifact, and clear_old to remove stale generated artifacts while keeping the current or newest one.',
+            },
+            relativePath: {
+              type: 'string',
+              maxLength: MAX_ARTIFACT_PREVIEW_PATH_LENGTH,
+              description: `Optional generated file path under ${GENERATED_ARTIFACT_DIR}/, such as ${GENERATED_ARTIFACT_DIR}/deck/index.html or ${GENERATED_ARTIFACT_DIR}/hello-world.html.`,
+            },
+          },
+          required: ['action'],
+        },
+      },
+      {
+        type: 'function',
         name: 'get_current_weather',
         description: 'Fetch the current weather for a city or place name.',
         parameters: {
@@ -905,6 +1111,12 @@ function realtimeSessionConfig() {
           },
           required: ['location'],
         },
+      },
+      {
+        type: 'function',
+        name: 'arduino_status',
+        description: 'Read arduino-cli availability, detected Arduino boards, and detected serial ports before attempting a hardware upload or when diagnosing upload availability.',
+        parameters: { type: 'object', properties: {} },
       },
       {
         type: 'function',
@@ -2145,8 +2357,10 @@ app.post('/api/weather/current', handleCurrentWeather)
 
 app.get('/api/usb/events', async (req, res) => {
   try {
-    const scan = req.query.scan === 'true'
-    if (scan) await usbMonitor.scanSerialDevices()
+    if (req.query.scan === 'true') {
+      res.status(405).json({ error: 'USB scans must use POST /api/usb/events/scan.', code: 'usb_scan_requires_post' })
+      return
+    }
     res.json({
       status: usbMonitor.status(),
       data: usbMonitor.events,
@@ -2156,6 +2370,22 @@ app.get('/api/usb/events', async (req, res) => {
       fallbackStatus: 502,
       fallbackMessage: 'Failed to read USB events.',
       fallbackCode: 'usb_events_failed',
+    })
+  }
+})
+
+app.post('/api/usb/events/scan', async (_req, res) => {
+  try {
+    await usbMonitor.scanSerialDevices()
+    res.json({
+      status: usbMonitor.status(),
+      data: usbMonitor.events,
+    })
+  } catch (error) {
+    sendJsonError(res, error, {
+      fallbackStatus: 502,
+      fallbackMessage: 'Failed to scan USB events.',
+      fallbackCode: 'usb_scan_failed',
     })
   }
 })
@@ -2721,20 +2951,29 @@ app.get('/api/artifacts', async (req, res) => {
   }
 })
 
+app.post('/api/artifacts/cleanup', async (req, res) => {
+  try {
+    const body = requireObjectBody(req.body)
+    const workspacePath = await requireWorkspaceDirectory(body.workspacePath, 'workspacePath')
+    const result = await cleanupGeneratedArtifacts(workspacePath, body)
+    res.json({
+      ...result,
+      data: await listGeneratedArtifacts(workspacePath),
+    })
+  } catch (error) {
+    sendJsonError(res, error, { fallbackStatus: 500, fallbackMessage: 'Failed to clean generated artifacts.' })
+  }
+})
+
 app.use('/workspace-artifacts', (_req, res, next) => {
   setArtifactPreviewHeaders(res)
   next()
 })
 
-app.get(/^\/workspace-artifacts\/([^/]+)\/([^/]+)\/(.+)$/, async (req, res) => {
+app.get(/^\/workspace-artifacts\/([^/]+)\/(.+)$/, async (req, res) => {
   try {
     const token = req.params[0]
-    const artifactName = req.params[1]
-    const filePath = req.params[2]
-    if (!isSafeArtifactName(artifactName)) {
-      res.status(400).send('Invalid artifact name')
-      return
-    }
+    const filePath = req.params[1]
     if (!isSafeArtifactPreviewPath(filePath)) {
       res.status(404).send('Not found')
       return
@@ -2744,35 +2983,48 @@ app.get(/^\/workspace-artifacts\/([^/]+)\/([^/]+)\/(.+)$/, async (req, res) => {
       res.status(415).send('Unsupported artifact preview file type')
       return
     }
+    const pathSegments = filePath.split('/')
+    const isTopLevelPreviewFile = pathSegments.length === 1
+    if (isTopLevelPreviewFile && !['.html', '.htm'].includes(path.extname(filePath).toLowerCase())) {
+      res.status(404).send('Not found')
+      return
+    }
     const workspacePath = await requireWorkspaceDirectory(workspaceFromToken(token), 'workspace token')
     const artifactsDir = path.join(workspacePath, GENERATED_ARTIFACT_DIR)
-    const artifactRoot = path.join(workspacePath, GENERATED_ARTIFACT_DIR, artifactName)
-    const artifactIndexPath = path.join(artifactRoot, 'index.html')
-    const requestedPath = path.resolve(artifactRoot, filePath)
+    const requestedPath = path.resolve(artifactsDir, filePath)
 
-    if (!isPathInside(artifactRoot, requestedPath)) {
+    if (!isPathInside(artifactsDir, requestedPath)) {
       res.status(403).send('Forbidden')
       return
     }
 
     let realWorkspacePath
-    let realArtifactRoot
     let realArtifactsDir
-    let realArtifactIndexPath
     let realRequestedPath
+    let realArtifactRoot
+    let realArtifactIndexPath
     try {
-      const resolvedPaths = await Promise.all([
+      const pathChecks = [
         realpath(workspacePath),
         realpath(artifactsDir),
-        realpath(artifactRoot),
-        realpath(artifactIndexPath),
         realpath(requestedPath),
-      ])
+      ]
+      if (!isTopLevelPreviewFile) {
+        const artifactName = pathSegments[0]
+        if (!isSafeArtifactName(artifactName)) {
+          res.status(404).send('Not found')
+          return
+        }
+        const artifactRoot = path.join(artifactsDir, artifactName)
+        const artifactIndexPath = path.join(artifactRoot, 'index.html')
+        pathChecks.push(realpath(artifactRoot), realpath(artifactIndexPath))
+      }
+      const resolvedPaths = await Promise.all(pathChecks)
       realWorkspacePath = resolvedPaths[0]
       realArtifactsDir = resolvedPaths[1]
-      realArtifactRoot = resolvedPaths[2]
-      realArtifactIndexPath = resolvedPaths[3]
-      realRequestedPath = resolvedPaths[4]
+      realRequestedPath = resolvedPaths[2]
+      realArtifactRoot = resolvedPaths[3]
+      realArtifactIndexPath = resolvedPaths[4]
     } catch {
       res.status(404).send('Not found')
       return
@@ -2782,27 +3034,25 @@ app.get(/^\/workspace-artifacts\/([^/]+)\/([^/]+)\/(.+)$/, async (req, res) => {
       res.status(403).send('Forbidden')
       return
     }
-    if (!isPathInside(realArtifactsDir, realArtifactRoot)) {
+    if (!isPathInside(realArtifactsDir, realRequestedPath)) {
       res.status(403).send('Forbidden')
       return
     }
-    if (!isPathInside(realArtifactRoot, realRequestedPath)) {
-      res.status(403).send('Forbidden')
-      return
-    }
-    if (!isPathInside(realArtifactRoot, realArtifactIndexPath)) {
-      res.status(403).send('Forbidden')
-      return
+    if (!isTopLevelPreviewFile) {
+      if (!isPathInside(realArtifactsDir, realArtifactRoot)) {
+        res.status(403).send('Forbidden')
+        return
+      }
+      if (!isPathInside(realArtifactRoot, realRequestedPath) || !isPathInside(realArtifactRoot, realArtifactIndexPath)) {
+        res.status(403).send('Forbidden')
+        return
+      }
     }
     let requestedDetails
     let artifactIndexDetails
     try {
-      const details = await Promise.all([
-        stat(realRequestedPath),
-        stat(realArtifactIndexPath),
-      ])
-      requestedDetails = details[0]
-      artifactIndexDetails = details[1]
+      requestedDetails = await stat(realRequestedPath)
+      if (!isTopLevelPreviewFile) artifactIndexDetails = await stat(realArtifactIndexPath)
     } catch (error) {
       if (isIgnorableArtifactEntryError(error)) {
         res.status(404).send('Not found')
@@ -2810,16 +3060,18 @@ app.get(/^\/workspace-artifacts\/([^/]+)\/([^/]+)\/(.+)$/, async (req, res) => {
       }
       throw error
     }
+    if (!isTopLevelPreviewFile) {
+      if (!artifactIndexDetails?.isFile()) {
+        res.status(404).send('Not found')
+        return
+      }
+      if (artifactIndexDetails.size > MAX_ARTIFACT_PREVIEW_FILE_BYTES) {
+        res.status(413).send('Artifact index file is too large')
+        return
+      }
+    }
     if (!requestedDetails.isFile()) {
       res.status(404).send('Not found')
-      return
-    }
-    if (!artifactIndexDetails.isFile()) {
-      res.status(404).send('Not found')
-      return
-    }
-    if (artifactIndexDetails.size > MAX_ARTIFACT_PREVIEW_FILE_BYTES) {
-      res.status(413).send('Artifact index file is too large')
       return
     }
     if (requestedDetails.size > MAX_ARTIFACT_PREVIEW_FILE_BYTES) {
