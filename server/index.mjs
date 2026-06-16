@@ -21,8 +21,8 @@ const ENV_OPENAI_API_KEY = normalizedOpenAiApiKey(process.env.OPENAI_API_KEY)
 const OPENAI_ADMIN_KEY = process.env.OPENAI_ADMIN_KEY ?? process.env.OPENAI_API_ADMIN_KEY
 const ENV_CODEX_API_KEY = process.env.CODEX_API_KEY
 const CODEX_FORCE_API_KEY_AUTH = process.env.CODEX_FORCE_API_KEY_AUTH === 'true'
-const DESKTOP_SERVER_TOKEN = process.env.CODEX_DESKTOP_SERVER_TOKEN ?? ''
-const LOCAL_API_TOKEN = configuredLocalApiToken(process.env.CODEX_LOCAL_API_TOKEN || DESKTOP_SERVER_TOKEN)
+const DESKTOP_SERVER_TOKEN = configuredLocalSecret(process.env.CODEX_DESKTOP_SERVER_TOKEN)
+const LOCAL_API_TOKEN = configuredLocalApiToken(process.env.CODEX_LOCAL_API_TOKEN, DESKTOP_SERVER_TOKEN)
 const LOCAL_API_TOKEN_HEADER = 'x-codex-local-api-token'
 const localApiHostnames = new Set(['localhost', '127.0.0.1', '[::1]'])
 const OPENAI_API_BASE_HOSTNAMES = new Set([...localApiHostnames, '::1'])
@@ -240,10 +240,15 @@ function configuredJsonBodyLimit(value, fallback = DEFAULT_JSON_BODY_LIMIT) {
   return Number.isInteger(amount) && amount > 0 && bytes <= MAX_JSON_BODY_LIMIT_BYTES ? `${amount}${unit}` : fallback
 }
 
-function configuredLocalApiToken(value) {
+function configuredLocalSecret(value) {
   const token = typeof value === 'string' ? value.trim() : ''
   if (!token || token.length > 240 || /[\u0000-\u001f\u007f]/.test(token)) return ''
   return token
+}
+
+function configuredLocalApiToken(value, desktopServerToken = '') {
+  const token = configuredLocalSecret(value)
+  return token && token !== desktopServerToken ? token : ''
 }
 
 function configuredOpenAiApiBaseUrl(value, fallback = DEFAULT_OPENAI_API_BASE_URL) {
@@ -2290,7 +2295,7 @@ app.get('/api/status', async (_req, res) => {
       appName: path.basename(REPO_ROOT),
       desktopServer: {
         pid: process.pid,
-        token: DESKTOP_SERVER_TOKEN || null,
+        launchProof: DESKTOP_SERVER_TOKEN || null,
       },
       defaultWeatherLocation: REALTIME_USER_LOCATION,
       realtimeUser: {
@@ -2404,8 +2409,17 @@ app.get('/api/arduino/status', async (_req, res) => {
 })
 
 app.post('/api/arduino/upload', async (req, res) => {
+  const uploadAbortController = new AbortController()
+  const abortUpload = () => {
+    if (!uploadAbortController.signal.aborted) uploadAbortController.abort()
+  }
+  const abortOnResponseClose = () => {
+    if (!res.writableEnded) abortUpload()
+  }
+  req.once('aborted', abortUpload)
+  res.once('close', abortOnResponseClose)
   try {
-    res.json(await uploadArduinoSketch(requireObjectBody(req.body, 'Arduino upload request')))
+    res.json(await uploadArduinoSketch(requireObjectBody(req.body, 'Arduino upload request'), { signal: uploadAbortController.signal }))
   } catch (error) {
     if (error instanceof ArduinoUploadError) {
       res.status(error.status).json({ error: responseErrorMessage(error, 'Arduino upload failed.'), code: error.code, details: error.details })
@@ -2417,6 +2431,9 @@ app.post('/api/arduino/upload', async (req, res) => {
       fallbackMessage: 'Arduino upload failed.',
       fallbackCode: 'arduino_upload_failed',
     })
+  } finally {
+    req.off('aborted', abortUpload)
+    res.off('close', abortOnResponseClose)
   }
 })
 

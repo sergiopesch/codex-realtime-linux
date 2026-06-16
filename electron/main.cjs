@@ -51,6 +51,10 @@ const configuredLocalApiToken = (value) => {
   const token = typeof value === 'string' ? value.trim() : ''
   return token && token.length <= 240 && !/[\u0000-\u001f\u007f]/.test(token) ? token : ''
 }
+const createLocalApiToken = (configuredToken, desktopServerLaunchProof) => {
+  const token = configuredLocalApiToken(configuredToken)
+  return token && token !== desktopServerLaunchProof ? token : randomUUID()
+}
 const apiPort = configuredPort(process.env.PORT)
 const apiUrl = configuredLocalHttpOrigin(process.env.CODEX_DESKTOP_API_URL, `http://127.0.0.1:${apiPort}`)
 const devServerUrl = process.env.NODE_ENV === 'production'
@@ -64,8 +68,8 @@ const desktopAllowedPermissions = new Set(['media', 'display-capture'])
 const externalNavigationProtocols = new Set(['https:', 'mailto:'])
 const apiNodeBin = configuredAbsolutePath(process.env.CODEX_REALTIME_NODE_BIN, process.execPath)
 const apiNodeUsesElectronRuntime = apiNodeBin === process.execPath
-const desktopServerToken = randomUUID()
-const localApiToken = configuredLocalApiToken(process.env.CODEX_LOCAL_API_TOKEN) || desktopServerToken
+const desktopServerLaunchProof = randomUUID()
+const localApiToken = createLocalApiToken(process.env.CODEX_LOCAL_API_TOKEN, desktopServerLaunchProof)
 const repoRoot = path.join(__dirname, '..')
 const stateHome = configuredAbsoluteDir(process.env.XDG_STATE_HOME, path.join(os.homedir(), '.local', 'state'))
 const stateDir = path.join(stateHome, 'codex-realtime-linux')
@@ -214,7 +218,7 @@ const readJson = (url) =>
     })
   })
 
-const waitForAppServer = (baseUrl, timeoutMs = 15000, expectedDesktopServerToken = '') =>
+const waitForAppServer = (baseUrl, timeoutMs = 15000, expectedDesktopServerLaunchProof = '') =>
   new Promise((resolve, reject) => {
     const deadline = Date.now() + timeoutMs
 
@@ -226,13 +230,13 @@ const waitForAppServer = (baseUrl, timeoutMs = 15000, expectedDesktopServerToken
           reject(refusingToLoadError(`Refusing to load unrelated local server at ${baseUrl}`))
           return
         }
-        if (expectedDesktopServerToken) {
-          const serverToken = status?.desktopServer?.token
-          if (serverToken !== expectedDesktopServerToken) {
+        if (expectedDesktopServerLaunchProof) {
+          const serverLaunchProof = status?.desktopServer?.launchProof ?? status?.desktopServer?.token
+          if (serverLaunchProof !== expectedDesktopServerLaunchProof) {
             const serverPid = status?.desktopServer?.pid
             const staleMessage = `Refusing to load stale local server at ${baseUrl}. Stop the existing Codex desktop server and relaunch.`
             reject(
-              serverToken && Number.isInteger(serverPid) && serverPid > 0
+              serverLaunchProof && Number.isInteger(serverPid) && serverPid > 0
                 ? staleDesktopServerError(staleMessage, serverPid)
                 : refusingToLoadError(staleMessage),
             )
@@ -382,7 +386,7 @@ const ensureApiServer = async () => {
   if (devServerUrl) return devServerUrl
 
   try {
-    await waitForAppServer(apiUrl, 750, desktopServerToken)
+    await waitForAppServer(apiUrl, 750, desktopServerLaunchProof)
     return apiUrl
   } catch (error) {
     if (isStaleDesktopServerError(error)) {
@@ -396,7 +400,7 @@ const ensureApiServer = async () => {
       ...process.env,
       PORT: String(apiPort),
       NODE_ENV: process.env.NODE_ENV || 'production',
-      CODEX_DESKTOP_SERVER_TOKEN: desktopServerToken,
+      CODEX_DESKTOP_SERVER_TOKEN: desktopServerLaunchProof,
       CODEX_LOCAL_API_TOKEN: localApiToken,
       ...(apiNodeUsesElectronRuntime ? { ELECTRON_RUN_AS_NODE: '1' } : {}),
     }
@@ -414,7 +418,7 @@ const ensureApiServer = async () => {
       closeApiLog()
     })
     apiProcess.unref()
-    await waitForAppServer(apiUrl, 15000, desktopServerToken)
+    await waitForAppServer(apiUrl, 15000, desktopServerLaunchProof)
     return apiUrl
   }
 }

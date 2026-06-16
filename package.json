@@ -19,9 +19,11 @@
     "smoke:degraded": "node scripts/smoke-degraded.mjs",
     "smoke:desktop": "node scripts/smoke-desktop-release.mjs",
     "smoke:renderer": "node scripts/smoke-renderer.mjs",
+    "verify:ci": "node scripts/run-ci-verification.mjs",
     "verify:live": "node scripts/probe-mvp-live-environment.mjs",
     "verify:manual": "node scripts/record-mvp-manual-checklist.mjs",
     "verify:mvp": "node scripts/check-mvp-readiness.mjs",
+    "release:check": "npm run verify:ci && npm run verify:mvp",
     "preview": "vite preview"
   },
   "dependencies": {

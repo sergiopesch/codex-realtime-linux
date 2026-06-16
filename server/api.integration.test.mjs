@@ -1151,7 +1151,8 @@ test('server exposes desktop launch metadata when managed by Electron', async (t
   assert.equal(status.status, 200)
   assert.equal(status.headers.has('x-powered-by'), false)
   const body = await status.json()
-  assert.equal(body.desktopServer.token, 'test-desktop-token')
+  assert.equal(body.desktopServer.launchProof, 'test-desktop-token')
+  assert.equal(Object.hasOwn(body.desktopServer, 'token'), false)
   assert.equal(Number.isInteger(body.desktopServer.pid), true)
   assert.equal(body.codexBin, 'codex')
   assert.equal(body.codexApprovalPolicy, 'on-request')
@@ -1335,6 +1336,9 @@ test('server enforces configured local API token for privileged routes', async (
 
   const status = await fetch(`${baseUrl}/api/status`)
   assert.equal(status.status, 200)
+  const statusBody = await readJson(status)
+  assert.equal(Object.hasOwn(statusBody.desktopServer, 'token'), false)
+  assert.equal(statusBody.desktopServer.launchProof, null)
 
   const missingToken = await fetch(`${baseUrl}/api/app-state`)
   assert.equal(missingToken.status, 401)
@@ -1362,6 +1366,34 @@ test('server enforces configured local API token for privileged routes', async (
   })
   assert.equal(preflight.status, 204)
   assert.match(preflight.headers.get('access-control-allow-headers') ?? '', /X-Codex-Local-Api-Token/)
+})
+
+test('server does not treat desktop launch proof as local API auth', async (t) => {
+  const { baseUrl } = await startTestServer(t, {
+    CODEX_DESKTOP_SERVER_TOKEN: 'test-desktop-token',
+    CODEX_LOCAL_API_TOKEN: 'test-desktop-token',
+  })
+
+  const status = await fetch(`${baseUrl}/api/status`)
+  assert.equal(status.status, 200)
+  const body = await readJson(status)
+  assert.equal(body.desktopServer.launchProof, 'test-desktop-token')
+  assert.equal(Object.hasOwn(body.desktopServer, 'token'), false)
+
+  const appState = await fetch(`${baseUrl}/api/app-state`)
+  assert.equal(appState.status, 200)
+  assert.deepEqual((await readJson(appState)).workspaces, [])
+})
+
+test('server leaves privileged routes open when no local API token is configured', async (t) => {
+  const { baseUrl } = await startTestServer(t, {
+    CODEX_DESKTOP_SERVER_TOKEN: '',
+    CODEX_LOCAL_API_TOKEN: '',
+  })
+
+  const appState = await fetch(`${baseUrl}/api/app-state`)
+  assert.equal(appState.status, 200)
+  assert.deepEqual((await readJson(appState)).workspaces, [])
 })
 
 test('USB event scans require POST', async (t) => {

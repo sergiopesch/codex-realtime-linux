@@ -303,6 +303,7 @@ const MAX_REALTIME_TRANSCRIPT_LINES = 80
 const MAX_REALTIME_TRANSCRIPT_ID_LENGTH = 240
 const MAX_REALTIME_TRANSCRIPT_TEXT_LENGTH = 8_000
 const REALTIME_TRANSCRIPT_SAVE_DEBOUNCE_MS = 900
+const WAVEFORM_UPDATE_INTERVAL_MS = 80
 const MAX_REALTIME_RESPONSE_OUTPUT_ITEMS = 20
 const MAX_REALTIME_RESPONSE_CONTENT_PARTS = 20
 const MAX_UI_WORKSPACES = 40
@@ -1471,6 +1472,8 @@ function App() {
   const [activeTurnId, setActiveTurnId] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [lastError, setLastError] = useState<string | null>(null)
+  const [spendLoading, setSpendLoading] = useState(false)
+  const [transcriptSaveRetryTick, setTranscriptSaveRetryTick] = useState(0)
   const peerRef = useRef<RTCPeerConnection | null>(null)
   const dataChannelRef = useRef<RTCDataChannel | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -1500,7 +1503,10 @@ function App() {
   const handledRealtimeFunctionCallIdsRef = useRef<Set<string>>(new Set())
   const selectedWorkspaceRef = useRef(initialWorkspacePath)
   const savedTranscriptSignatureRef = useRef('')
+  const savingTranscriptSignatureRef = useRef('')
+  const transcriptSaveRetryTimeoutRef = useRef<number | null>(null)
   const voiceTranscriptTargetRef = useRef<VoiceTranscriptTarget | null>(null)
+  const spendRequestInFlightRef = useRef(false)
   const artifactRefreshRequestIdsRef = useRef<Record<string, number>>({})
   const routableWorkspacePathsRef = useRef<Set<string>>(new Set())
   const seenUsbEventIdsRef = useRef<Set<string>>(new Set())
@@ -1864,13 +1870,18 @@ function App() {
     analyserRef.current = analyser
 
     const data = new Uint8Array(analyser.frequencyBinCount)
+    let lastWaveformUpdateAt = 0
     const tick = () => {
+      const now = performance.now()
       analyser.getByteFrequencyData(data)
-      const next = Array.from({ length: 18 }, (_, index) => {
-        const value = data[Math.min(data.length - 1, index + 2)] ?? 0
-        return Math.max(0.12, Math.min(1, value / 210))
-      })
-      setWaveLevels(next)
+      if (now - lastWaveformUpdateAt >= WAVEFORM_UPDATE_INTERVAL_MS) {
+        lastWaveformUpdateAt = now
+        const next = Array.from({ length: 18 }, (_, index) => {
+          const value = data[Math.min(data.length - 1, index + 2)] ?? 0
+          return Math.max(0.12, Math.min(1, value / 210))
+        })
+        setWaveLevels(next)
+      }
       waveformFrameRef.current = window.requestAnimationFrame(tick)
     }
     tick()
@@ -2768,6 +2779,10 @@ function App() {
     workspaceInputRef.current?.setAttribute('directory', '')
   }, [])
 
+  useEffect(() => () => {
+    if (transcriptSaveRetryTimeoutRef.current) window.clearTimeout(transcriptSaveRetryTimeoutRef.current)
+  }, [])
+
   useEffect(() => {
     selectedWorkspaceRef.current = selectedWorkspace
     refreshArtifacts(selectedWorkspace)
@@ -2790,6 +2805,7 @@ function App() {
     const { workspacePath, conversationId, conversationKey } = transcriptTarget
     const signature = JSON.stringify({ workspacePath, conversationId, conversationKey, transcript })
     if (savedTranscriptSignatureRef.current === signature) return
+    if (savingTranscriptSignatureRef.current === signature) return
 
     const timeout = window.setTimeout(() => {
       const currentTranscriptTarget = voiceTranscriptTargetRef.current
@@ -2805,7 +2821,11 @@ function App() {
       const targetStillPresent = Boolean(findConversationForSelection(targetConversations, workspacePath, conversationId, conversationKey))
       if (!targetStillPresent) return
 
-      savedTranscriptSignatureRef.current = signature
+      savingTranscriptSignatureRef.current = signature
+      if (transcriptSaveRetryTimeoutRef.current) {
+        window.clearTimeout(transcriptSaveRetryTimeoutRef.current)
+        transcriptSaveRetryTimeoutRef.current = null
+      }
       setConversationsByWorkspace((current) => {
         const conversations = current[workspacePath] ?? []
         const index = conversations.findIndex((conversation, itemIndex) =>
@@ -2825,6 +2845,7 @@ function App() {
         body: JSON.stringify({ workspacePath, conversationId, conversationKey, patch: { transcript } }),
       })
         .then((savedConversation) => {
+          savedTranscriptSignatureRef.current = signature
           const conversation = requireSafeConversation(savedConversation.conversation, workspacePath)
           setConversationsByWorkspace((current) => {
             const conversations = current[workspacePath] ?? []
@@ -2846,11 +2867,26 @@ function App() {
           appendEvent('app-state/realtime-transcript-save-failed', {
             message: displayErrorMessage(error, 'Failed to save voice transcript'),
           })
+          const currentTranscriptTarget = voiceTranscriptTargetRef.current
+          if (
+            currentTranscriptTarget?.workspacePath === workspacePath &&
+            currentTranscriptTarget.conversationId === conversationId &&
+            currentTranscriptTarget.conversationKey === conversationKey &&
+            savedTranscriptSignatureRef.current !== signature
+          ) {
+            transcriptSaveRetryTimeoutRef.current = window.setTimeout(() => {
+              transcriptSaveRetryTimeoutRef.current = null
+              setTranscriptSaveRetryTick((current) => current + 1)
+            }, REALTIME_TRANSCRIPT_SAVE_DEBOUNCE_MS)
+          }
+        })
+        .finally(() => {
+          if (savingTranscriptSignatureRef.current === signature) savingTranscriptSignatureRef.current = ''
         })
     }, REALTIME_TRANSCRIPT_SAVE_DEBOUNCE_MS)
 
     return () => window.clearTimeout(timeout)
-  }, [realtimeTranscript])
+  }, [realtimeTranscript, transcriptSaveRetryTick])
 
   useEffect(() => {
     activeThreadIdRef.current = activeThreadId
@@ -2909,10 +2945,9 @@ function App() {
     let effectActive = true
     const load = async () => {
       try {
-        const [statusData, workspaceData, spendData, appStateData] = await Promise.all([
+        const [statusData, workspaceData, appStateData] = await Promise.all([
           api<Status>('/api/status', { signal: controller.signal }),
           api<{ data: Workspace[] }>('/api/workspaces', { signal: controller.signal }),
-          api<SpendResponse>('/api/spend', { signal: controller.signal }),
           api<AppStateResponse>('/api/app-state', { signal: controller.signal }),
         ])
         if (!effectActive) return
@@ -2936,7 +2971,6 @@ function App() {
         setUserWorkspaces(savedWorkspaces)
         setHiddenWorkspacePaths(hiddenPaths)
         setHiddenCodexThreadIdsByWorkspace(hiddenCodexThreadIds)
-        setSpend(spendData)
         setWeatherLocationInput((current) =>
           current.trim() || !statusData.defaultWeatherLocation ? current : statusData.defaultWeatherLocation ?? '',
         )
@@ -3010,6 +3044,37 @@ function App() {
       controller.abort()
     }
   }, [])
+
+  useEffect(() => {
+    if (activeSystemScreen !== 'usage' || spend || spendRequestInFlightRef.current) return undefined
+    const controller = new AbortController()
+    let effectActive = true
+    spendRequestInFlightRef.current = true
+    setSpendLoading(true)
+    api<SpendResponse>('/api/spend', { signal: controller.signal })
+      .then((spendData) => {
+        if (!effectActive) return
+        setSpend(spendData)
+      })
+      .catch((error: unknown) => {
+        if (!effectActive || controller.signal.aborted) return
+        setSpend({
+          source: 'unavailable',
+          error: displayErrorMessage(error, 'Admin usage is unavailable'),
+          data: {},
+        })
+      })
+      .finally(() => {
+        if (!effectActive) return
+        spendRequestInFlightRef.current = false
+        setSpendLoading(false)
+      })
+    return () => {
+      effectActive = false
+      controller.abort()
+      spendRequestInFlightRef.current = false
+    }
+  }, [activeSystemScreen, spend])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -3569,6 +3634,11 @@ function App() {
     handledRealtimeFunctionCallIdsRef.current.clear()
     voiceTranscriptTargetRef.current = transcriptTarget
     savedTranscriptSignatureRef.current = ''
+    savingTranscriptSignatureRef.current = ''
+    if (transcriptSaveRetryTimeoutRef.current) {
+      window.clearTimeout(transcriptSaveRetryTimeoutRef.current)
+      transcriptSaveRetryTimeoutRef.current = null
+    }
     setActivity('Voice router', 'Connecting')
     voiceStartInFlightRef.current = false
     const sessionId = voiceSessionIdRef.current + 1
@@ -3791,6 +3861,9 @@ function App() {
               type="button"
               onClick={() => setTranscriptOpen((current) => !current)}
               aria-label="Toggle transcript"
+              aria-controls="voice-transcript-panel"
+              aria-expanded={transcriptOpen}
+              aria-pressed={transcriptOpen}
               title="Transcript"
             >
               <Captions size={18} />
@@ -3801,6 +3874,7 @@ function App() {
                 type="button"
                 onClick={toggleVoiceMute}
                 aria-label={voiceMuted ? 'Unmute microphone' : 'Mute microphone'}
+                aria-pressed={voiceMuted}
                 title={voiceMuted ? 'Unmute' : 'Mute'}
               >
                 {voiceMuted ? <MicOff size={compact ? 17 : 20} /> : <Mic size={compact ? 17 : 20} />}
@@ -3822,7 +3896,8 @@ function App() {
                   type="button"
                   onClick={() => void shareScreen()}
                   aria-label="Share screen"
-                  title="Share screen"
+                  aria-pressed={screenShared}
+                  title={screenShared ? 'Share screen again' : 'Share screen'}
                 >
                   <MonitorUp size={18} />
                 </button>
@@ -3831,6 +3906,7 @@ function App() {
                   type="button"
                   onClick={() => imageInputRef.current?.click()}
                   aria-label="Attach image"
+                  aria-pressed={Boolean(attachedImageName)}
                   title="Attach image"
                 >
                   <ImagePlus size={18} />
@@ -3855,6 +3931,9 @@ function App() {
               type="button"
               onClick={() => setTranscriptOpen((current) => !current)}
               aria-label="Toggle transcript"
+              aria-controls="voice-transcript-panel"
+              aria-expanded={transcriptOpen}
+              aria-pressed={transcriptOpen}
               title="Transcript"
             >
               <Captions size={18} />
@@ -3864,7 +3943,8 @@ function App() {
               type="button"
               onClick={() => void shareScreen()}
               aria-label="Share screen"
-              title="Share screen"
+              aria-pressed={screenShared}
+              title={screenShared ? 'Share screen again' : 'Share screen'}
             >
               <MonitorUp size={18} />
             </button>
@@ -3873,6 +3953,7 @@ function App() {
               type="button"
               onClick={() => imageInputRef.current?.click()}
               aria-label="Attach image"
+              aria-pressed={Boolean(attachedImageName)}
               title="Attach image"
             >
               <ImagePlus size={18} />
@@ -3891,18 +3972,20 @@ function App() {
   )
 
   const renderTranscriptPanel = () => (
-    <section className="transcript-panel" aria-label="Voice transcript">
+    <section className="transcript-panel" id="voice-transcript-panel" aria-label="Voice transcript">
       <header>
         <Captions size={15} />
         <span>Transcript</span>
       </header>
       {transcriptLines.length > 0 ? (
-        transcriptLines.map((line) => (
-          <div className={line.speaker === 'user' ? 'transcript-line user' : 'transcript-line'} key={line.id}>
-            <strong>{line.speaker === 'user' ? 'You' : 'Codex'}</strong>
-            <span>{line.text}</span>
-          </div>
-        ))
+        <div className="transcript-log" role="log" aria-live="polite" aria-relevant="additions text">
+          {transcriptLines.map((line) => (
+            <div className={line.speaker === 'user' ? 'transcript-line user' : 'transcript-line'} key={line.id}>
+              <strong>{line.speaker === 'user' ? 'You' : 'Codex'}</strong>
+              <span>{line.text}</span>
+            </div>
+          ))}
+        </div>
       ) : (
         <div className="transcript-empty">
           <strong>No transcript yet</strong>
@@ -4090,14 +4173,16 @@ function App() {
             <small>
               {hasLiveUsage
                 ? `${formatTokens(tokenTotals.total)} tokens over ${usagePeriodDays} days`
-                : 'Add OPENAI_ADMIN_KEY for live organization usage'}
+                : spendLoading
+                  ? 'Loading organization usage'
+                  : 'Add OPENAI_ADMIN_KEY for live organization usage'}
             </small>
           </header>
 
           {!hasLiveUsage ? (
             <section className="empty-system-state">
               <Database size={20} />
-              <span>{spend?.error ?? 'Admin usage is not configured.'}</span>
+              <span>{spendLoading ? 'Loading usage...' : spend?.error ?? 'Admin usage is not configured.'}</span>
             </section>
           ) : (
             <>
@@ -4192,7 +4277,7 @@ function App() {
 
   return (
     <main className={sidebarCollapsed ? 'codex-shell sidebar-collapsed' : 'codex-shell'}>
-      <aside className="thread-sidebar">
+      <aside className="thread-sidebar" id="workspace-sidebar">
         <nav className="sidebar-nav" aria-label="Primary">
           <button type="button" onClick={() => void createConversation()}>
             <Plus size={16} />
@@ -4213,25 +4298,32 @@ function App() {
 
         <section className="sidebar-section workspace-list-section">
           <h2>Workspaces</h2>
-          <div className="workspace-tree">
-            {workspaceRoots.map(({ workspace, workspacePath, conversations }) => {
+          <div className="workspace-tree" role="list" aria-label="Workspaces">
+            {workspaceRoots.map(({ workspace, workspacePath, conversations }, workspaceIndex) => {
               const collapsed = collapsedWorkspaces.includes(workspacePath)
+              const workspaceLabel = workspace.name ?? workspace.id
+              const threadListId = `workspace-${workspaceIndex}-threads`
+              const workspaceSelected = selectedWorkspace === workspacePath && !activeSystemScreen
               return (
-                <div className="workspace-folder" key={workspace.id}>
-                  <div className={selectedWorkspace === workspacePath ? 'workspace-folder-header active' : 'workspace-folder-header'}>
+                <div className="workspace-folder" role="listitem" key={workspace.id}>
+                  <div className={workspaceSelected ? 'workspace-folder-header active' : 'workspace-folder-header'}>
                     <button
                       type="button"
                       className="workspace-folder-row"
                       onClick={() => toggleWorkspace(workspacePath)}
+                      aria-controls={threadListId}
+                      aria-current={workspaceSelected ? 'page' : undefined}
+                      aria-expanded={!collapsed}
+                      title={workspacePath}
                     >
                       {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
                       <Folder size={14} />
-                      <span>{workspace.name ?? workspace.id}</span>
+                      <span>{workspaceLabel}</span>
                     </button>
                     <button
                       type="button"
                       className="workspace-delete"
-                      aria-label={`Remove ${workspace.name ?? workspace.id} from app`}
+                      aria-label={`Remove ${workspaceLabel} from app`}
                       title="Remove from app only"
                       onClick={() => void removeWorkspaceFromApp(workspacePath)}
                     >
@@ -4239,7 +4331,7 @@ function App() {
                     </button>
                   </div>
                   {!collapsed && (
-                    <div className="agent-thread-list">
+                    <div className="agent-thread-list" id={threadListId} role="group" aria-label={`${workspaceLabel} threads`}>
                       {conversations.length === 0 ? (
                         <div className="empty-workspace">
                           <span>No threads yet</span>
@@ -4268,6 +4360,13 @@ function App() {
                               type="button"
                               className="agent-thread-open"
                               onClick={() => openConversationWindow(workspacePath, conversation.id, rowKey)}
+                              aria-current={
+                                sameWorkspacePath(selectedWorkspace, workspacePath) &&
+                                selectedRow &&
+                                !activeSystemScreen
+                                  ? 'page'
+                                  : undefined
+                              }
                               title={conversation.title}
                             >
                               <span>{briefThreadTitle(conversation.title)}</span>
@@ -4297,15 +4396,15 @@ function App() {
         </section>
 
         <section className="sidebar-section account-section">
-          <button type="button" className={activeSystemScreen === 'settings' ? 'utility-row active' : 'utility-row'} onClick={() => openSystemScreen('settings')}>
+          <button type="button" className={activeSystemScreen === 'settings' ? 'utility-row active' : 'utility-row'} aria-current={activeSystemScreen === 'settings' ? 'page' : undefined} onClick={() => openSystemScreen('settings')}>
             <Settings size={14} />
             <span>Settings</span>
           </button>
-          <button type="button" className={activeSystemScreen === 'usage' ? 'utility-row active' : 'utility-row'} onClick={() => openSystemScreen('usage')}>
+          <button type="button" className={activeSystemScreen === 'usage' ? 'utility-row active' : 'utility-row'} aria-current={activeSystemScreen === 'usage' ? 'page' : undefined} onClick={() => openSystemScreen('usage')}>
             <CirclePoundSterling size={14} />
             <span>Usage</span>
           </button>
-          <button type="button" className={activeSystemScreen === 'account' ? 'utility-row active' : 'utility-row'} onClick={() => openSystemScreen('account')}>
+          <button type="button" className={activeSystemScreen === 'account' ? 'utility-row active' : 'utility-row'} aria-current={activeSystemScreen === 'account' ? 'page' : undefined} onClick={() => openSystemScreen('account')}>
             <UserRound size={14} />
             <span>Profile</span>
           </button>
@@ -4318,6 +4417,8 @@ function App() {
             type="button"
             className="sidebar-toggle"
             aria-label={sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'}
+            aria-controls="workspace-sidebar"
+            aria-expanded={!sidebarCollapsed}
             title={sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'}
             onClick={() => setSidebarCollapsed((current) => !current)}
           >
@@ -4365,7 +4466,7 @@ function App() {
                 ))}
               </div>
 
-              <div className="routing-strip" aria-live="polite">
+              <div className="routing-strip" role="status" aria-live="polite">
                 <span>{primaryActivity}</span>
               </div>
 
@@ -4468,8 +4569,8 @@ function App() {
           )}
         </div>
 
-        {lastError && <div className="error-strip">{lastError}</div>}
-        {notice && <div className="notice-strip">{notice}</div>}
+        {lastError && <div className="error-strip" role="alert" aria-live="assertive">{lastError}</div>}
+        {notice && <div className="notice-strip" role="status" aria-live="polite">{notice}</div>}
 
       </section>
 

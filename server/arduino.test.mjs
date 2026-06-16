@@ -569,6 +569,38 @@ test('runCommand escalates timed-out arduino-cli processes to SIGKILL', async ()
   assert.deepEqual(killedSignals, ['SIGTERM', 'SIGKILL'])
 })
 
+test('runCommand terminates aborted arduino-cli processes', async () => {
+  const proc = new EventEmitter()
+  proc.stdout = new EventEmitter()
+  proc.stderr = new EventEmitter()
+  const controller = new AbortController()
+  const killedSignals = []
+  proc.kill = (signal) => {
+    killedSignals.push(signal)
+    if (signal === 'SIGKILL') setImmediate(() => proc.emit('exit', null, signal))
+    return true
+  }
+
+  const command = runCommand('arduino-cli', ['upload'], {
+    spawnImpl: () => proc,
+    signal: controller.signal,
+    timeoutMs: 10_000,
+    killGraceMs: 5,
+  })
+  controller.abort()
+
+  await assert.rejects(
+    () => command,
+    (error) =>
+      error instanceof ArduinoUploadError &&
+      error.status === 499 &&
+      error.code === 'arduino_cli_cancelled',
+  )
+
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  assert.deepEqual(killedSignals, ['SIGTERM', 'SIGKILL'])
+})
+
 test('runCommand normalizes synchronous arduino-cli startup failures', async () => {
   await assert.rejects(
     () => runCommand('arduino-cli', ['version'], {
@@ -603,6 +635,94 @@ test('uploadArduinoSketch compiles and uploads through arduino-cli', async () =>
   const uploadCommand = commands.find((command) => command[0] === 'upload')
   assert.deepEqual(compileCommand.slice(0, 3), ['compile', '--fqbn', 'arduino:avr:uno'])
   assert.deepEqual(uploadCommand.slice(0, 5), ['upload', '-p', '/dev/ttyACM0', '--fqbn', 'arduino:avr:uno'])
+})
+
+test('uploadArduinoSketch propagates abort signals into compile and upload commands', async () => {
+  const controller = new AbortController()
+  let uploadStarted
+  const uploadStartedPromise = new Promise((resolve) => {
+    uploadStarted = resolve
+  })
+  let uploadObservedAbort = false
+  const run = async (args, options = {}) => {
+    assert.equal(options.signal, controller.signal)
+    if (args[0] === 'compile') return { stdout: 'compile ok', stderr: '' }
+    uploadStarted()
+    return new Promise((_, reject) => {
+      options.signal.addEventListener('abort', () => {
+        uploadObservedAbort = true
+        reject(new ArduinoUploadError('arduino-cli was cancelled.', {
+          code: 'arduino_cli_cancelled',
+          status: 499,
+        }))
+      }, { once: true })
+    })
+  }
+
+  const upload = uploadArduinoSketch(
+    { action: 'onboard_led_blink', port: '/dev/ttyACM0', fqbn: 'arduino:avr:uno' },
+    { run, listPorts: async () => ['/dev/ttyACM0'], listBoards: async () => [], signal: controller.signal },
+  )
+  await uploadStartedPromise
+  controller.abort()
+
+  await assert.rejects(
+    () => upload,
+    (error) =>
+      error instanceof ArduinoUploadError &&
+      error.status === 499 &&
+      error.code === 'arduino_cli_cancelled' &&
+      error.details.phase === 'upload',
+  )
+  assert.equal(uploadObservedAbort, true)
+})
+
+test('uploadArduinoSketch rejects concurrent uploads to the same resolved board target', async () => {
+  let firstCompileStarted
+  let releaseFirstCompile
+  const firstCompileStartedPromise = new Promise((resolve) => {
+    firstCompileStarted = resolve
+  })
+  const releaseFirstCompilePromise = new Promise((resolve) => {
+    releaseFirstCompile = resolve
+  })
+  let compileCount = 0
+  const run = async (args) => {
+    if (args[0] === 'compile') {
+      compileCount += 1
+      if (compileCount === 1) {
+        firstCompileStarted()
+        await releaseFirstCompilePromise
+      }
+      return { stdout: 'compile ok', stderr: '' }
+    }
+    return { stdout: 'upload ok', stderr: '' }
+  }
+  const listPorts = async () => ['/dev/serial/by-id/usb-Arduino_Nano-if00', '/dev/ttyUSB0']
+  const listBoards = async () => [{ address: '/dev/ttyUSB0', fqbn: 'arduino:avr:nano', boardName: 'Arduino Nano' }]
+  const resolvePortAlias = async () => '/dev/ttyUSB0'
+
+  const firstUpload = uploadArduinoSketch(
+    { action: 'onboard_led_blink', port: '/dev/serial/by-id/usb-Arduino_Nano-if00' },
+    { run, listPorts, listBoards, resolvePortAlias },
+  )
+  await firstCompileStartedPromise
+
+  await assert.rejects(
+    () => uploadArduinoSketch(
+      { action: 'onboard_led_on', port: '/dev/ttyUSB0' },
+      { run, listPorts, listBoards, resolvePortAlias },
+    ),
+    (error) =>
+      error instanceof ArduinoUploadError &&
+      error.status === 409 &&
+      error.code === 'arduino_upload_conflict' &&
+      error.details.port === '/dev/ttyUSB0',
+  )
+
+  releaseFirstCompile()
+  const result = await firstUpload
+  assert.equal(result.port, '/dev/serial/by-id/usb-Arduino_Nano-if00')
 })
 
 test('uploadArduinoSketch reports compile phase failures with target context', async () => {

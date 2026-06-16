@@ -179,7 +179,7 @@ CODEX_REALTIME_JSON_LIMIT=25mb
 
 JSON limits accept `b`, `kb`, or `mb` units up to `25mb`; invalid or larger values fall back to `25mb`.
 
-Electron-managed launches pass a per-launch local API token from the trusted top renderer frame to privileged `/api/*` routes. If you supervise the API server yourself and want the same protection, set `CODEX_LOCAL_API_TOKEN` and send it as `X-Codex-Local-Api-Token` on privileged API requests. `/api/status` remains unauthenticated for launcher health checks.
+Privileged `/api/*` routes require `X-Codex-Local-Api-Token` only when an explicit `CODEX_LOCAL_API_TOKEN` is configured. The token must differ from the Electron desktop launch proof; desktop launch proofs are used only to identify managed servers and are not accepted or returned as API bearer tokens. If you supervise the API server yourself and want local API protection, set `CODEX_LOCAL_API_TOKEN` and send it on privileged API requests. `/api/status` remains unauthenticated for launcher health checks.
 
 Local sidebar state is saved outside the repo by default. Saved state is normalized and bounded on load so stale or oversized local state cannot dominate startup. Writes go through a temp file, file sync, and atomic rename so state updates are durable without exposing partial JSON files. To override it, use an absolute path:
 

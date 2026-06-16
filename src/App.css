@@ -6,8 +6,8 @@
 :root {
   --ink: #f2f2f3;
   --ink-soft: #c8c8cc;
-  --muted: #929297;
-  --quiet: #737379;
+  --muted: #a2a2a7;
+  --quiet: #8a8a90;
   --line: rgba(255, 255, 255, 0.1);
   --line-strong: rgba(255, 255, 255, 0.16);
   --glass: rgba(73, 75, 78, 0.62);
@@ -223,7 +223,7 @@ button:disabled {
 
 .sidebar-section h2 {
   margin: 10px 10px 8px;
-  color: rgba(242, 242, 243, 0.38);
+  color: rgba(242, 242, 243, 0.58);
   font-size: 14px;
   font-weight: 500;
   letter-spacing: 0;
@@ -672,18 +672,16 @@ button:disabled {
   justify-content: center;
   width: min(420px, 100%);
   min-height: 18px;
-  overflow: hidden;
-  color: rgba(242, 242, 243, 0.42);
+  overflow: visible;
+  color: rgba(242, 242, 243, 0.62);
   font-size: 12px;
   line-height: 1.35;
   text-align: center;
-  white-space: nowrap;
 }
 
 .routing-strip span {
   display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 
 .agent-lane {
@@ -974,7 +972,7 @@ button:disabled {
   line-height: 1.45;
 }
 
-.transcript-line:first-of-type {
+.transcript-log .transcript-line:first-child {
   border-top: 0;
 }
 
@@ -993,10 +991,13 @@ button:disabled {
 .transcript-line span {
   justify-self: start;
   max-width: min(82%, 460px);
+  min-width: 0;
   border: 1px solid rgba(255, 255, 255, 0.075);
   border-radius: 15px;
   padding: 9px 11px;
   background: rgba(255, 255, 255, 0.055);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .transcript-line.user span {
@@ -1013,6 +1014,7 @@ button:disabled {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .transcript-empty strong {
@@ -1029,6 +1031,7 @@ button:disabled {
   background: rgba(87, 27, 28, 0.78);
   color: #ffd5d1;
   font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .notice-strip {
@@ -1040,6 +1043,7 @@ button:disabled {
   color: var(--ink-soft);
   font-size: 12px;
   backdrop-filter: blur(16px);
+  overflow-wrap: anywhere;
 }
 
 .system-screen {
@@ -1081,9 +1085,7 @@ button:disabled {
 .system-voice-copy strong,
 .system-voice-copy span {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .system-voice-copy strong {
@@ -1093,7 +1095,7 @@ button:disabled {
 }
 
 .system-voice-copy span {
-  color: rgba(242, 242, 243, 0.44);
+  color: rgba(242, 242, 243, 0.68);
   font-size: 12px;
 }
 
@@ -1130,6 +1132,7 @@ button:disabled {
 .usage-row span {
   color: var(--muted);
   font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .settings-key-form {
@@ -1205,6 +1208,7 @@ button:disabled {
 .settings-key-form > span {
   color: var(--muted);
   font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .weather-request-row {
@@ -1216,6 +1220,7 @@ button:disabled {
 .weather-feedback {
   margin: 0;
   font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .weather-feedback.error {
@@ -1363,6 +1368,7 @@ button:disabled {
   color: var(--ink);
   font-size: 20px;
   font-weight: 540;
+  overflow-wrap: anywhere;
 }
 
 .empty-system-state {
@@ -1530,6 +1536,40 @@ button:disabled {
     justify-content: center;
   }
 
+  .settings-key-form div,
+  .weather-request-row {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-key-form input,
+  .settings-key-form select,
+  .settings-key-form button {
+    width: 100%;
+  }
+
+  .profile-stats,
+  .usage-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-stats div {
+    border-left: 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.075);
+  }
+
+  .profile-stats div:first-child {
+    border-top: 0;
+  }
+
+  .usage-row div:first-child {
+    display: grid;
+    gap: 5px;
+  }
+
+  .transcript-line span {
+    max-width: 100%;
+  }
+
 }
 
 @media (max-width: 360px) {
@@ -1555,5 +1595,26 @@ button:disabled {
     width: 44px;
     min-width: 44px;
     height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.001ms !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+  }
+
+  .voice-waveform span {
+    height: 18px !important;
+    opacity: 0.72 !important;
+  }
+
+  .artifact-stage-building .artifact-agents span {
+    transform: none !important;
+    opacity: 0.78 !important;
   }
 }

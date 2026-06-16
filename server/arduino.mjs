@@ -32,6 +32,7 @@ const SERIAL_BY_ID_PATTERN = /^\/dev\/serial\/by-id\/[a-zA-Z0-9._:+-]+$/
 const DEFAULT_ARDUINO_CLI_PATH = path.join(REPO_ROOT, 'bin', 'arduino-cli')
 const ARDUINO_CLI_PATH = configuredArduinoCliPath(process.env.ARDUINO_CLI_PATH, DEFAULT_ARDUINO_CLI_PATH)
 const ARDUINO_CLI_PATH_WAS_CONFIGURED = ARDUINO_CLI_PATH !== DEFAULT_ARDUINO_CLI_PATH
+const activeArduinoUploadsByPort = new Map()
 
 export class ArduinoUploadError extends Error {
   constructor(message, { code = 'arduino_error', status = 500, details } = {}) {
@@ -342,8 +343,47 @@ function commandPhaseError(error, phase, context) {
   })
 }
 
-export function runCommand(command, args, { spawnImpl = spawn, timeoutMs = 120_000, killGraceMs = COMMAND_TIMEOUT_KILL_GRACE_MS } = {}) {
+function cancelledCommandError(command) {
+  return new ArduinoUploadError(`${command} was cancelled.`, {
+    code: 'arduino_cli_cancelled',
+    status: 499,
+  })
+}
+
+function throwIfAborted(signal) {
+  if (signal?.aborted) throw cancelledCommandError('arduino-cli')
+}
+
+function acquireUploadLock(port) {
+  if (activeArduinoUploadsByPort.has(port)) {
+    throw new ArduinoUploadError('An Arduino upload is already running for this serial port.', {
+      code: 'arduino_upload_conflict',
+      status: 409,
+      details: {
+        port,
+        hint: 'Wait for the current upload to finish before starting another upload to this board.',
+      },
+    })
+  }
+
+  const lock = Symbol(port)
+  activeArduinoUploadsByPort.set(port, lock)
+  return () => {
+    if (activeArduinoUploadsByPort.get(port) === lock) activeArduinoUploadsByPort.delete(port)
+  }
+}
+
+export function runCommand(
+  command,
+  args,
+  { spawnImpl = spawn, timeoutMs = 120_000, killGraceMs = COMMAND_TIMEOUT_KILL_GRACE_MS, signal } = {},
+) {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(cancelledCommandError(command))
+      return
+    }
+
     let proc
     try {
       proc = spawnImpl(command, args, { stdio: ['ignore', 'pipe', 'pipe'] })
@@ -361,9 +401,11 @@ export function runCommand(command, args, { spawnImpl = spawn, timeoutMs = 120_0
     let stderr = ''
     let settled = false
     let killTimeout = null
+    let abortHandler = null
     const timeout = setTimeout(() => {
       if (settled) return
       settled = true
+      removeAbortHandler()
       proc.kill?.('SIGTERM')
       killTimeout = setTimeout(() => {
         proc.kill?.('SIGKILL')
@@ -374,13 +416,33 @@ export function runCommand(command, args, { spawnImpl = spawn, timeoutMs = 120_0
       if (killTimeout != null) clearTimeout(killTimeout)
       killTimeout = null
     }
+    const removeAbortHandler = () => {
+      if (abortHandler) signal?.removeEventListener('abort', abortHandler)
+      abortHandler = null
+    }
     const settle = (callback) => {
       clearKillTimeout()
       if (settled) return
       settled = true
       clearTimeout(timeout)
+      removeAbortHandler()
       callback()
     }
+    const stopProcess = (error) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timeout)
+      removeAbortHandler()
+      proc.kill?.('SIGTERM')
+      killTimeout = setTimeout(() => {
+        proc.kill?.('SIGKILL')
+      }, killGraceMs)
+      reject(error)
+    }
+
+    abortHandler = () => stopProcess(cancelledCommandError(command))
+    signal?.addEventListener('abort', abortHandler, { once: true })
+    if (signal?.aborted) stopProcess(cancelledCommandError(command))
 
     proc.stdout?.on('data', (chunk) => {
       stdout = appendCommandOutput(stdout, chunk)
@@ -456,9 +518,9 @@ function parseBoardListJson(value) {
     .filter(Boolean)
 }
 
-export async function listArduinoBoards({ run = runArduinoCli } = {}) {
+export async function listArduinoBoards({ run = runArduinoCli, signal } = {}) {
   try {
-    const result = await run(['board', 'list', '--format', 'json'], { timeoutMs: 10_000 })
+    const result = await run(['board', 'list', '--format', 'json'], { timeoutMs: 10_000, signal })
     return parseBoardListJson(result.stdout || result.stderr)
   } catch {
     return []
@@ -492,10 +554,13 @@ export async function uploadArduinoSketch(
     listPorts = listSerialPorts,
     listBoards = listArduinoBoards,
     resolvePortAlias = resolveSerialByIdPortTarget,
+    signal,
   } = {},
 ) {
   const request = normalizeUploadRequest(input)
-  const [rawPorts, rawBoards] = await Promise.all([listPorts(), listBoards({ run })])
+  throwIfAborted(signal)
+  const [rawPorts, rawBoards] = await Promise.all([listPorts(), listBoards({ run, signal })])
+  throwIfAborted(signal)
   const ports = (Array.isArray(rawPorts) ? rawPorts : []).filter((port) => typeof port === 'string' && isSupportedSerialPort(port))
   const boards = (Array.isArray(rawBoards) ? rawBoards : []).map(normalizeDetectedBoard).filter(Boolean)
   const uploadableBoards = boards.filter((board) => board.address && isSupportedSerialPort(board.address))
@@ -570,12 +635,16 @@ export async function uploadArduinoSketch(
               : null
         )
       : null
-
-  const sketchRoot = await mkdtemp(path.join(os.tmpdir(), 'codex-arduino-'))
-  const sketchDir = path.join(sketchRoot, request.sketchName)
-  const sketchPath = path.join(sketchDir, `${request.sketchName}.ino`)
+  const uploadLockPort = resolvedRequestedPortTarget ?? detectedPort ?? port
+  let releaseUploadLock = () => {}
+  let sketchRoot = null
 
   try {
+    releaseUploadLock = acquireUploadLock(uploadLockPort)
+    sketchRoot = await mkdtemp(path.join(os.tmpdir(), 'codex-arduino-'))
+    const sketchDir = path.join(sketchRoot, request.sketchName)
+    const sketchPath = path.join(sketchDir, `${request.sketchName}.ino`)
+
     await mkdir(sketchDir, { recursive: true })
     await writeFile(sketchPath, request.sketch, { flag: 'wx' })
 
@@ -589,7 +658,8 @@ export async function uploadArduinoSketch(
     }
     let compile
     try {
-      compile = await run(['compile', '--fqbn', fqbn, sketchDir])
+      throwIfAborted(signal)
+      compile = await run(['compile', '--fqbn', fqbn, sketchDir], { signal })
     } catch (error) {
       throw commandPhaseError(error, 'compile', commandContext)
     }
@@ -597,12 +667,14 @@ export async function uploadArduinoSketch(
     let upload
     let uploadPort = port
     try {
-      upload = await run(['upload', '-p', port, '--fqbn', fqbn, sketchDir])
+      throwIfAborted(signal)
+      upload = await run(['upload', '-p', port, '--fqbn', fqbn, sketchDir], { signal })
     } catch (error) {
       const primaryUploadError = error
       if (fallbackUploadPort && fallbackUploadPort !== port) {
         try {
-          upload = await run(['upload', '-p', fallbackUploadPort, '--fqbn', fqbn, sketchDir])
+          throwIfAborted(signal)
+          upload = await run(['upload', '-p', fallbackUploadPort, '--fqbn', fqbn, sketchDir], { signal })
           uploadPort = fallbackUploadPort
         } catch (fallbackError) {
           throw commandPhaseError(fallbackError, 'upload', {
@@ -655,6 +727,7 @@ export async function uploadArduinoSketch(
             : `Uploaded custom sketch to ${targetLabel} on ${uploadPort}.`,
     }
   } finally {
-    await rm(sketchRoot, { recursive: true, force: true })
+    releaseUploadLock()
+    if (sketchRoot) await rm(sketchRoot, { recursive: true, force: true })
   }
 }
